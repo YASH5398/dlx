@@ -6,6 +6,7 @@ import { db } from '../../firebase';
 import { ref, onValue } from 'firebase/database';
 import { useNavigate } from 'react-router-dom';
 import ServiceRequestModal from '../../components/ServiceRequestModal';
+import DashboardCard from '../../components/DashboardCard';
 
 // Service interface
 interface Service {
@@ -25,7 +26,7 @@ export default function DashboardHome() {
   const { totalEarnings, activeReferrals, tier } = useReferral();
   const navigate = useNavigate();
   const [ordersCount, setOrdersCount] = useState(0);
-  const [progress, setProgress] = useState(45); // Mock progress
+  const [progress, setProgress] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedService, setSelectedService] = useState<string | null>(null);
@@ -42,7 +43,7 @@ export default function DashboardHome() {
     {
       id: '1',
       name: 'Crypto Token Creation',
-      description: 'Launch your own cryptocurrency with smart contracts.',
+      description: 'Launch your own cryptocurrency with smart contracts, custom tokenomics, and secure blockchain integration.',
       startingPrice: '$2,999',
       icon: '🪙',
       gradient: 'from-orange-500 to-yellow-600',
@@ -52,7 +53,7 @@ export default function DashboardHome() {
     {
       id: '2',
       name: 'Website Development',
-      description: 'Professional web development services including modern design.',
+      description: 'Professional web development services including modern responsive websites and web...',
       startingPrice: '$1,499',
       icon: '🌐',
       gradient: 'from-purple-500 to-indigo-600',
@@ -62,7 +63,7 @@ export default function DashboardHome() {
     {
       id: '3',
       name: 'Chatbot Development',
-      description: 'AI-powered chatbots for customer service, lead generation, and...',
+      description: 'AI-powered chatbots for customer service, lead generation, and automated support systems.',
       startingPrice: '$999',
       icon: '💬',
       gradient: 'from-cyan-500 to-teal-600',
@@ -72,7 +73,7 @@ export default function DashboardHome() {
     {
       id: '4',
       name: 'MLM Plan Development',
-      description: 'Complete MLM software with compensation plans.',
+      description: 'Complete MLM software with multiple compensation plans, genealogy tree, and commission tracking.',
       startingPrice: '$3,999',
       icon: '📊',
       gradient: 'from-pink-500 to-rose-600',
@@ -82,7 +83,7 @@ export default function DashboardHome() {
     {
       id: '5',
       name: 'Mobile App Development',
-      description: 'Native and cross-platform mobile applications.',
+      description: 'Native and cross-platform mobile applications with modern UI/UX and high performance.',
       startingPrice: '$4,999',
       icon: '📱',
       gradient: 'from-blue-500 to-indigo-600',
@@ -92,7 +93,7 @@ export default function DashboardHome() {
     {
       id: '6',
       name: 'Business Automation',
-      description: 'Automate your business processes and workflows.',
+      description: 'Automate your business processes and workflows with custom integration and smart automation.',
       startingPrice: '$1,999',
       icon: '⚙️',
       gradient: 'from-emerald-500 to-green-600',
@@ -102,7 +103,7 @@ export default function DashboardHome() {
     {
       id: '7',
       name: 'Telegram Bot',
-      description: 'Custom Telegram bots with advanced features.',
+      description: 'Custom Telegram bots with advanced features, payment integration, and user management.',
       startingPrice: '$799',
       icon: '🤖',
       gradient: 'from-sky-500 to-blue-600',
@@ -112,7 +113,7 @@ export default function DashboardHome() {
     {
       id: '8',
       name: 'Crypto Audit',
-      description: 'Comprehensive smart contract security audits.',
+      description: 'Comprehensive smart contract security audits with vulnerability assessment and detailed reports.',
       startingPrice: '$2,499',
       icon: '🔍',
       gradient: 'from-red-500 to-orange-600',
@@ -136,6 +137,29 @@ export default function DashboardHome() {
     return () => unsub();
   }, [user?.id]);
 
+  // Compute progress towards next level based on referrals and orders
+  useEffect(() => {
+    const r = activeReferrals || 0;
+    const o = ordersCount || 0;
+
+    // Targets vary by tier: Starter -> Silver, Silver -> Gold
+    const targets = tier === 1
+      ? { referrals: 5, orders: 5 }
+      : tier === 2
+      ? { referrals: 20, orders: 30 }
+      : { referrals: 0, orders: 0 };
+
+    if (tier >= 3) {
+      setProgress(100);
+      return;
+    }
+
+    const rPct = targets.referrals > 0 ? Math.min(1, r / targets.referrals) : 0;
+    const oPct = targets.orders > 0 ? Math.min(1, o / targets.orders) : 0;
+    const pct = Math.min(100, ((rPct + oPct) / 2) * 100);
+    setProgress(Number(pct.toFixed(1)));
+  }, [activeReferrals, ordersCount, tier]);
+
   const levelLabel = tier === 1 ? 'Starter' : tier === 2 ? 'Silver' : 'Gold';
 
   const handleGetService = (serviceId: string) => {
@@ -144,272 +168,218 @@ export default function DashboardHome() {
     setModalOpen(true);
   };
 
-  const handleJoinAffiliate = (serviceId: string) => {
-    // Navigate to affiliate registration
-    navigate(`/dashboard/affiliate-program?service=${serviceId}`);
-  };
 
   return (
     <>
-      <div className="space-y-8 animate-fade-in">
-        {/* Welcome Hero Section */}
-        <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-600/20 via-purple-600/20 to-pink-600/20 border border-white/10 p-8 backdrop-blur-xl">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/30 rounded-full blur-3xl -z-10" />
-          <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-500/30 rounded-full blur-3xl -z-10" />
+      <div className="relative min-h-screen w-full bg-gradient-to-br from-[#091B4D] via-[#0B235F] to-[#08163C]">
+        <div className="w-full mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6 lg:py-8 space-y-4 sm:space-y-6">
           
-          <div className="relative z-10">
-            <h1 className="text-4xl md:text-5xl font-extrabold mb-3">
-              <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-                Welcome back, {user?.name || 'User'}!
+          {/* Welcome Header Section */}
+          <div className="text-center space-y-1 sm:space-y-2 py-4 sm:py-6">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold">
+              <span className="text-cyan-400">Welcome back, </span>
+              <span className="bg-gradient-to-r from-pink-400 via-purple-400 to-pink-500 bg-clip-text text-transparent">
+                {user?.name?.split(' ')[0] || 'sourav'}
+              </span>
+              <br className="sm:hidden" />
+              <span className="bg-gradient-to-r from-pink-400 via-purple-400 to-pink-500 bg-clip-text text-transparent">
+                {user?.name?.split(' ').slice(1).join(' ') || 'kumar verma'}!
               </span>
             </h1>
-            <p className="text-gray-300 text-lg mb-6">Here's what's happening with your DigiLinex account today.</p>
+            <p className="text-slate-300 text-xs sm:text-sm lg:text-base">
+              Here's what's happening with your <span className="font-semibold">Digilinex</span> account today.
+            </p>
           </div>
-        </section>
 
-        {/* Level & Earnings Stats Section */}
-        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
-          {/* Current Level */}
-          <div className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-500/10 to-purple-600/10 border border-indigo-400/20 p-6 hover:scale-105 transition-all duration-300 hover:shadow-2xl hover:shadow-indigo-500/20">
-            <div className="flex items-start gap-4">
-              <div className="p-3 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg">
-                <span className="text-2xl">⭐</span>
-              </div>
-              <div className="flex-1">
-                <div className="text-sm text-gray-400 mb-1">Current Level</div>
-                <div className="text-2xl font-bold text-white mb-1">{levelLabel}</div>
-                <div className="inline-block px-2 py-1 rounded-lg bg-indigo-500/20 text-indigo-300 text-xs font-medium">
-                  Starter
+          {/* Stats Cards - Mobile Optimized */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 max-w-sm sm:max-w-none mx-auto">
+            
+            {/* Current Level Card */}
+            <div className="relative rounded-2xl sm:rounded-3xl bg-gradient-to-br from-[#1a1f3a] via-[#0f1429] to-[#0a0e1f] border border-blue-500/20 shadow-xl overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5"></div>
+              <div className="relative p-4 sm:p-5 lg:p-6">
+                <div className="flex items-center justify-between mb-3 sm:mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-lg">
+                      <span className="text-xl sm:text-2xl">⭐</span>
+                    </div>
+                    <div>
+                      <p className="text-slate-400 text-xs sm:text-sm">Current Level</p>
+                      <p className="text-sm sm:text-base text-slate-300">Higher level = higher service commission %</p>
+                    </div>
+                  </div>
                 </div>
-                <div className="text-xs text-gray-400 mt-2">Higher level = Higher service commission %</div>
+                <div className="mt-3 sm:mt-4">
+                  <span className="inline-block px-4 sm:px-5 py-1.5 sm:py-2 rounded-full bg-gradient-to-r from-purple-500 to-indigo-600 text-white text-sm sm:text-base font-bold shadow-lg">
+                    {levelLabel}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Total Earnings (DLX) */}
-          <div className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-cyan-500/10 to-blue-600/10 border border-cyan-400/20 p-6 hover:scale-105 transition-all duration-300 hover:shadow-2xl hover:shadow-cyan-500/20">
-            <div className="flex items-start gap-4">
-              <div className="p-3 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg">
-                <span className="text-2xl">💎</span>
-              </div>
-              <div className="flex-1">
-                <div className="text-sm text-gray-400 mb-1">Total Earnings (DLX)</div>
-                <div className="text-2xl font-bold text-white mb-1">{wallet?.dlx?.toFixed(2) || '30.00'} DLX</div>
-                <div className="text-xs text-gray-400 mt-2">Your mined DLX to date</div>
+            {/* Total Earnings Card */}
+            <div className="relative rounded-2xl sm:rounded-3xl bg-gradient-to-br from-[#1a1f3a] via-[#0f1429] to-[#0a0e1f] border border-cyan-500/20 shadow-xl overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-blue-500/5"></div>
+              <div className="relative p-4 sm:p-5 lg:p-6">
+                <div className="flex items-center gap-3 mb-3 sm:mb-4">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg">
+                    <span className="text-xl sm:text-2xl">💎</span>
+                  </div>
+                  <div>
+                    <p className="text-slate-400 text-xs sm:text-sm">Total Earnings (DLX)</p>
+                    <p className="text-xs sm:text-sm text-slate-300">Your mined DLX to date</p>
+                  </div>
+                </div>
+                <div className="mt-3 sm:mt-4">
+                  <p className="text-3xl sm:text-4xl lg:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">
+                    {wallet?.dlx?.toFixed(2) || '30.00'} DLX
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Available Wallet */}
-          <div className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-500/10 to-teal-600/10 border border-emerald-400/20 p-6 hover:scale-105 transition-all duration-300 hover:shadow-2xl hover:shadow-emerald-500/20">
-            <div className="flex items-start gap-4">
-              <div className="p-3 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg">
-                <span className="text-2xl">💼</span>
-              </div>
-              <div className="flex-1">
-                <div className="text-sm text-gray-400 mb-1">Available Wallet</div>
-                <div className="text-2xl font-bold text-white mb-1">{wallet?.usdt?.toFixed(2) || '30.00'} USDT</div>
-                <div className="text-xs text-gray-400 mt-2">₹{wallet?.inr?.toFixed(2) || '80'} INR</div>
-                <div className="text-xs text-gray-400">Real-time balances from your wallet</div>
+            {/* Available Wallet Card */}
+            <div className="relative rounded-2xl sm:rounded-3xl bg-gradient-to-br from-[#1a1f3a] via-[#0f1429] to-[#0a0e1f] border border-pink-500/20 shadow-xl overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-pink-500/5 to-purple-500/5"></div>
+              <div className="relative p-4 sm:p-5 lg:p-6">
+                <div className="flex items-center gap-3 mb-3 sm:mb-4">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center shadow-lg">
+                    <span className="text-xl sm:text-2xl">💼</span>
+                  </div>
+                  <div>
+                    <p className="text-slate-400 text-xs sm:text-sm">Available Wallet</p>
+                    <p className="text-xs sm:text-sm text-slate-300">Real-time balances from your wallet</p>
+                  </div>
+                </div>
+                <div className="mt-3 sm:mt-4 space-y-1">
+                  <p className="text-2xl sm:text-3xl lg:text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-500">
+                    ${wallet?.usdt?.toFixed(2) || '30.00'} USDT
+                  </p>
+                  <p className="text-lg sm:text-xl text-slate-400">
+                    ₹{wallet?.inr?.toFixed(2) || '2,500'} INR
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Level Progress */}
-          <div className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-pink-500/10 to-fuchsia-600/10 border border-pink-400/20 p-6 hover:scale-105 transition-all duration-300 hover:shadow-2xl hover:shadow-pink-500/20">
-            <div className="flex items-start gap-4">
-              <div className="p-3 rounded-xl bg-gradient-to-br from-pink-500 to-fuchsia-600 shadow-lg">
-                <span className="text-2xl">📊</span>
+          {/* Level Progress Card */}
+          <div className="relative rounded-2xl sm:rounded-3xl bg-gradient-to-br from-[#1a1f3a] via-[#0f1429] to-[#0a0e1f] border border-blue-500/20 shadow-xl overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-indigo-500/5"></div>
+            <div className="relative p-4 sm:p-5 lg:p-6">
+              <div className="flex items-center gap-3 mb-3 sm:mb-4">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
+                  <span className="text-xl sm:text-2xl">📈</span>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-xs sm:text-sm">Level Progress</p>
+                  <p className="text-xs sm:text-sm text-slate-300">Complete more referrals or sell more services to level up.</p>
+                </div>
               </div>
-              <div className="flex-1">
-                <div className="text-sm text-gray-400 mb-1">Level Progress</div>
-                <div className="text-2xl font-bold text-white mb-2">{progress}%</div>
-                <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
-                  <div 
-                    className="h-full bg-gradient-to-r from-pink-500 to-fuchsia-600 transition-all duration-500 rounded-full"
+              <div className="mt-2 sm:mt-3">
+                <div className="h-2.5 sm:h-3 rounded-full bg-white/5 border border-white/10 overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-600"
                     style={{ width: `${progress}%` }}
                   />
                 </div>
-                <div className="text-xs text-gray-400 mt-2">Complete more referrals or sell more services to level up.</div>
+                <div className="flex items-center justify-between mt-2 sm:mt-3">
+                  <p className="text-slate-400 text-xs sm:text-sm">Progress to next level</p>
+                  <p className="text-right text-slate-300 text-xs sm:text-sm">{progress.toFixed(1)}%</p>
+                </div>
               </div>
             </div>
           </div>
-        </section>
 
-        {/* Our Services Section */}
-        <section className="space-y-6">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div>
-              <h2 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent mb-2">
-                Our Services
-              </h2>
-              <p className="text-gray-400">Browse our premium services and start earning commissions</p>
-            </div>
-            
-            {/* Search Bar */}
-            <div className="relative w-full md:w-96">
-              <input
-                type="text"
-                placeholder="Search services..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-4 py-3 pl-12 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all"
-              />
-              <svg
-                className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
           </div>
 
-          {/* Services Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredServices.map((service) => (
-              <div
-                key={service.id}
-                className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#0f1629] to-[#0a0f1f] border border-white/10 hover:border-white/20 transition-all duration-300 hover:scale-105 hover:shadow-2xl"
-              >
-                {/* Icon Header */}
-                <div className="p-6 pb-4">
-                  <div className={`inline-flex p-4 rounded-2xl bg-gradient-to-br ${service.gradient} shadow-lg mb-4`}>
-                    <span className="text-3xl">{service.icon}</span>
-                  </div>
-                  
-                  <h3 className="text-xl font-bold text-white mb-2 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-400 group-hover:to-purple-400 group-hover:bg-clip-text transition-all">
-                    {service.name}
-                  </h3>
-                  
-                  <p className="text-sm text-gray-400 mb-4 line-clamp-2">
-                    {service.description}
-                  </p>
-                  
-                  <div className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent mb-4">
-                    {service.startingPrice}
-                  </div>
-
-                  {/* Features */}
-                  <ul className="space-y-2 mb-6">
-                    {service.features.map((feature, idx) => (
-                      <li key={idx} className="flex items-center gap-2 text-sm text-gray-300">
-                        <svg className="w-4 h-4 text-green-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                        <span className="line-clamp-1">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="p-6 pt-0 flex gap-3">
-                  <button
-                    onClick={() => handleGetService(service.id)}
-                    className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold hover:from-cyan-600 hover:to-blue-700 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-cyan-500/50"
-                  >
-                    Get Service
-                  </button>
-                  <button
-                    onClick={() => handleJoinAffiliate(service.id)}
-                    className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-pink-600 text-white font-semibold hover:from-purple-600 hover:to-pink-700 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-purple-500/50"
-                  >
-                    Join Affiliate
-                  </button>
-                </div>
-              </div>
-            ))}
+          {/* Affiliate Partner */}
+          <div className="mt-4 sm:mt-6">
+            <DashboardCard status="not_applied" />
           </div>
-        </section>
 
-        {/* Referral & Earn Section */}
-        <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-purple-600/10 via-pink-600/10 to-red-600/10 border border-purple-400/20 p-8">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl -z-10" />
-          
-          <div className="relative z-10">
-            <div className="flex items-start justify-between flex-wrap gap-6">
-              <div className="flex-1">
-                <h2 className="text-3xl font-bold text-white mb-3">Referral & Earn Program</h2>
-                <p className="text-gray-300 mb-6">Track your 2-level referrals, service commissions, and daily DLX rewards</p>
-                
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-                  <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                    <div className="text-sm text-gray-400 mb-1">Active Referrals</div>
-                    <div className="text-2xl font-bold text-white">{activeReferrals || 0}</div>
-                  </div>
-                  <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                    <div className="text-sm text-gray-400 mb-1">Total Commissions</div>
-                    <div className="text-2xl font-bold text-white">${totalEarnings?.toFixed(2) || '0.00'}</div>
-                  </div>
-                  <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                    <div className="text-sm text-gray-400 mb-1">Daily DLX Rewards</div>
-                    <div className="text-2xl font-bold text-white">+2.5 DLX</div>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => navigate('/dashboard/referrals')}
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-pink-600 text-white font-semibold hover:from-purple-600 hover:to-pink-700 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-purple-500/50"
-                >
-                  <span>Open Tracking Dashboard</span>
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
-                </button>
+          {/* Services Section */}
+          <div className="space-y-4 sm:space-y-5 pt-4 sm:pt-6">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
+              <div>
+                <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white">Our Services</h2>
+                <p className="text-slate-400 text-xs sm:text-sm mt-0.5 sm:mt-1">Browse and request services</p>
               </div>
-
-              <div className="w-full lg:w-auto">
-                <img
-                  src="https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=400&h=300&fit=crop"
-                  alt="Referral"
-                  className="rounded-2xl shadow-2xl w-full lg:w-80 h-64 object-cover"
+              
+              {/* Search Bar */}
+              <div className="relative w-full sm:w-64 lg:w-80">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Search services..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 sm:pl-10 pr-3 sm:pr-4 py-2 sm:py-2.5 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all"
                 />
               </div>
             </div>
+
+            {/* Services Grid - Card Style from Image */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 lg:gap-6">
+              {filteredServices.map((service) => (
+                <div
+                  key={service.id}
+                  className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-[#0f1535] border-2 border-[#1e2d5f] shadow-2xl hover:border-cyan-500/30 transition-all duration-300"
+                >
+                  {/* Gradient Border Effect */}
+                  <div className="absolute inset-0 rounded-2xl sm:rounded-3xl bg-gradient-to-b from-blue-500/10 via-transparent to-transparent pointer-events-none"></div>
+                  
+                  {/* Service Content */}
+                  <div className="relative p-5 sm:p-6 space-y-4">
+                    {/* Icon */}
+                    <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br ${service.gradient} flex items-center justify-center text-3xl sm:text-4xl shadow-lg`}>
+                      {service.icon}
+                    </div>
+                    
+                    {/* Title */}
+                    <h3 className="text-lg sm:text-xl font-bold text-white leading-tight">
+                      {service.name}
+                    </h3>
+
+                    {/* Description */}
+                    <p className="text-sm text-slate-400 leading-relaxed line-clamp-3 min-h-[3.75rem]">
+                      {service.description}
+                    </p>
+
+                    {/* Price */}
+                    <p className="text-xl sm:text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">
+                      Starting at {service.startingPrice}
+                    </p>
+
+                    {/* Features */}
+                    <ul className="space-y-2">
+                      {service.features.map((feature, idx) => (
+                        <li key={idx} className="flex items-start gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 mt-2 flex-shrink-0"></div>
+                          <span className="text-sm text-slate-300 leading-tight">{feature}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="relative px-5 sm:px-6 pb-5 sm:pb-6 space-y-3">
+                    <button
+                      onClick={() => handleGetService(service.id)}
+                      className="w-full px-4 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white text-sm sm:text-base font-bold shadow-lg transition-all duration-200 hover:scale-[1.02]"
+                    >
+                      Get Service
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-        </section>
 
-        {/* Affiliate Partner Info Section */}
-        <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-600/10 via-teal-600/10 to-cyan-600/10 border border-emerald-400/20 p-8">
-          <div className="absolute bottom-0 left-0 w-96 h-96 bg-emerald-500/20 rounded-full blur-3xl -z-10" />
-          
-          <div className="relative z-10">
-            <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold text-white mb-3">Become an Affiliate Partner</h2>
-              <p className="text-gray-300 text-lg">Join our affiliate program and earn up to 30% commission on every sale. Get your unique referral links and start earning today!</p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center mb-8">
-              <div className="p-6 rounded-xl bg-white/5 border border-white/10">
-                <div className="text-4xl font-bold text-white mb-2">20-30%</div>
-                <div className="text-sm text-gray-300">Commission Rate</div>
-              </div>
-              <div className="p-6 rounded-xl bg-white/5 border border-white/10">
-                <div className="text-4xl font-bold text-white mb-2">$0</div>
-                <div className="text-sm text-gray-300">Joining Fee</div>
-              </div>
-              <div className="p-6 rounded-xl bg-white/5 border border-white/10">
-                <div className="text-4xl font-bold text-white mb-2">24/7</div>
-                <div className="text-sm text-gray-300">Support</div>
-              </div>
-            </div>
-
-            <div className="text-center">
-              <button
-                onClick={() => navigate('/dashboard/affiliate-program')}
-                className="inline-flex items-center gap-2 w-full sm:w-auto px-6 md:px-8 py-3 md:py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-base md:text-lg font-semibold hover:from-emerald-600 hover:to-teal-700 transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-emerald-500/50"
-              >
-                <span>Join Affiliate Program</span>
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                </svg>
-              </button>
-            </div>
-          </div>
-        </section>
+        </div>
       </div>
+
       {selectedService && (
         <ServiceRequestModal
           open={modalOpen}
