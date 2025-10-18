@@ -42,6 +42,16 @@ function writeJSON(key: string, value: any) {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
+function dispatchWalletNotification(type: 'wallet' | 'transaction' | 'mining', message: string, meta?: Record<string, any>) {
+  try {
+    document.dispatchEvent(
+      new CustomEvent('notifications:add', {
+        detail: { type, message, meta },
+      })
+    );
+  } catch {}
+}
+
 export function getBalances(): WalletBalances {
   const balances = readJSON<WalletBalances>(BAL_KEY, DEFAULT_BALANCES);
   // Merge in DLX from mining if present
@@ -66,6 +76,19 @@ export function addTx(tx: WalletTx) {
   list.unshift(tx);
   writeJSON(TX_KEY, list);
   document.dispatchEvent(new CustomEvent('wallet:update'));
+  // Push a notification describing the transaction
+  let msg = '';
+  if (tx.type === 'deposit') {
+    msg = `Deposited ${tx.amount} ${tx.currency} to ${(tx.meta?.target ?? 'wallet')}`;
+  } else if (tx.type === 'withdraw') {
+    msg = `Withdrew ${tx.amount} ${tx.currency} from ${(tx.meta?.from ?? 'wallet')}`;
+  } else if (tx.type === 'swap') {
+    const rate = tx.meta?.rate ? ` at ${tx.meta.rate}` : '';
+    msg = `Swapped ${tx.meta?.dlxSpent ?? ''} DLX to ${tx.amount} USDT${rate}`;
+  } else if (tx.type === 'purchase') {
+    msg = `Purchase completed: ${tx.amount} ${tx.currency}`;
+  }
+  if (msg) dispatchWalletNotification('transaction', msg, { tx });
 }
 
 export function onWalletUpdate(handler: () => void) {
@@ -126,8 +149,14 @@ export async function purchase(amount: number, currency: Exclude<Currency, 'DLX'
 }
 
 export function syncMiningBalanceToWallet(dlx: number) {
+  const prev = readJSON<number | null>(DLX_KEY, null);
   writeJSON(DLX_KEY, dlx);
   const balances = getBalances();
   balances.dlx = dlx;
   setBalances(balances);
+  const delta = typeof prev === 'number' ? dlx - prev : dlx;
+  if (delta !== 0) {
+    const direction = delta > 0 ? '+' : '';
+    dispatchWalletNotification('mining', `Mining rewards synced: ${direction}${delta} DLX`, { dlx, prev });
+  }
 }

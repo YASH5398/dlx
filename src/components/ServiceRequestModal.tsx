@@ -206,6 +206,13 @@ export default function ServiceRequestModal({ open, onClose, serviceName }: Prop
         answers,
       });
       await logActivity(user.id, 'service_request_submitted', { id, serviceName });
+      try {
+        document.dispatchEvent(
+          new CustomEvent('notifications:add', {
+            detail: { type: 'service', message: `Service request submitted: ${serviceName}`, meta: { id, serviceName } },
+          })
+        );
+      } catch {}
       await notifyAdminNewServiceRequest({ id, serviceName, userId: user.id, userName: user.name });
       setSubmittedId(id);
       localStorage.removeItem(draftKey);

@@ -40,7 +40,7 @@ export default function AdminLayout() {
     <div className="min-h-screen bg-gradient-to-br from-[#0b1230] via-[#0a0e1f] to-black text-white">
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 h-16 bg-white/5 backdrop-blur-xl border-b border-white/10 shadow-lg shadow-black/20">
-        <div className="h-full flex items-center justify-between px-4 lg:px-6">
+        <div className="h-full flex items-center justify-between px-4 md:px-6">
           {/* Left */}
           <div className="flex items-center gap-4">
             <button
@@ -131,7 +131,7 @@ export default function AdminLayout() {
       </aside>
 
       {/* Main */}
-      <main className={`pt-20 pb-8 transition-all duration-500 ease-in-out ${menuOpen && !isMobile ? 'lg:ml-72' : 'ml-0'} px-4 lg:px-8`}>
+      <main className={`pt-16 pb-6 transition-all duration-500 ease-in-out ${menuOpen && !isMobile ? 'lg:ml-72' : 'ml-0'} px-4 md:px-6 lg:px-8`}>
         <div className="max-w-7xl mx-auto">
           <Outlet />
         </div>

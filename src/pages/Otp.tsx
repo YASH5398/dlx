@@ -1,0 +1,29 @@
+import React, { useState } from 'react';
+import { useUser } from '../context/UserContext';
+import { useI18n } from '../context/I18nContext';
+import Button from '../components/Button';
+
+export default function Otp() {
+  const { verifyMfa } = useUser() as any;
+  const { t } = useI18n();
+  const [code, setCode] = useState('');
+  const [error, setError] = useState('');
+
+  const onVerify = async () => {
+    setError('');
+    const ok = await verifyMfa(code);
+    if (!ok) setError(t('Invalid code'));
+  };
+
+  return (
+    <div className="max-w-md mx-auto p-6">
+      <h1 className="text-xl font-bold">{t('otp_title')}</h1>
+      <p className="text-sm text-gray-300 mt-1">{t('otp_desc')}</p>
+      <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="123456" className="mt-3 w-full rounded-lg bg-white/10 border border-white/15 px-3 py-2 text-white" />
+      {error && <div className="text-rose-400 text-sm mt-2">{error}</div>}
+      <div className="mt-3 flex items-center gap-3">
+        <Button onClick={onVerify}>{t('verify_code')}</Button>
+      </div>
+    </div>
+  );
+}

@@ -40,7 +40,6 @@ export default function Header() {
     { to: '/dashboard/wallet', label: 'Wallet' },
     { to: '/dashboard/support', label: 'Support' },
     { to: '/dashboard/settings', label: 'Settings' },
-    { to: '/dashboard/affiliate-program', label: 'Affiliate Program' },
   ];
 
   const desktopLinkClass = isAuthenticated

@@ -4,7 +4,6 @@ import Header from './components/Header';
 import Footer from './components/Footer';
 import ProtectedRoute from './components/ProtectedRoute';
 import DashboardLayout from './pages/Dashboard/DashboardLayout';
-import AffiliateProgram from './components/AffiliateProgram.jsx';
 
 // Public pages
 import Home from './pages/Home';
@@ -78,7 +77,6 @@ function App() {
         <Route path="/dashboard/settings" element={<Settings />} />
         <Route path="/dashboard/profile" element={<Profile />} />
         <Route path="/dashboard/digital-products" element={<DigitalProducts />} />
-        <Route path="/dashboard/affiliate" element={<AffiliateProgram />} />
       </Route>
 
       {/* Fallback */}

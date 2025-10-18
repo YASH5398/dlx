@@ -1,9 +1,28 @@
-import React from 'react';
-import { Navigate } from 'react-router-dom';
+import React, { ReactNode } from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
 
-export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useUser();
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
+type ProtectedRouteProps = {
+  children: ReactNode;
+};
+
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
+  const { isAuthenticated, initialized, mfaRequired, mfaVerified } = useUser() as any;
+  const location = useLocation();
+
+  // Wait for auth to hydrate before making a redirect decision
+  if (!initialized) {
+    return null; // or a loader component
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+  if (mfaRequired && !mfaVerified && location.pathname !== '/otp') {
+    return <Navigate to="/otp" replace state={{ from: location }} />;
+  }
+
   return <>{children}</>;
-}
+};
+
+export default ProtectedRoute;

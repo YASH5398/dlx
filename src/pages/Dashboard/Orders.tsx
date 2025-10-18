@@ -107,17 +107,23 @@ export default function Orders() {
     if (!user) return;
     const payload = { id: o.id, title: o.title, priceInUsd: o.priceInUsd, priceInInr: o.priceInInr, status: 'refunded' as Status };
     await set(ref(db, `users/${user.id}/orders/${o.id}`), payload);
+    try {
+      document.dispatchEvent(new CustomEvent('notifications:add', { detail: { type: 'order', message: `Order ${o.transactionId} refunded: ${o.title}`, meta: { order: o } } }));
+    } catch {}
   };
   const handleMarkCompleted = async (o: OrderItem) => {
     if (!user) return;
     const payload = { id: o.id, title: o.title, priceInUsd: o.priceInUsd, priceInInr: o.priceInInr, status: 'paid' as Status };
     await set(ref(db, `users/${user.id}/orders/${o.id}`), payload);
+    try {
+      document.dispatchEvent(new CustomEvent('notifications:add', { detail: { type: 'order', message: `Order ${o.transactionId} marked paid: ${o.title}`, meta: { order: o } } }));
+    } catch {}
   };
 
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-600/20 via-purple-600/20 to-pink-600/20 border border-white/10 p-6 backdrop-blur-xl">
+      <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600/20 via-purple-600/20 to-pink-600/20 border border-white/10 p-6 backdrop-blur-xl">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h2 className="text-2xl md:text-3xl font-bold mb-1">

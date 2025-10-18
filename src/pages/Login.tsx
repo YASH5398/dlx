@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
 
@@ -9,7 +9,7 @@ import { useUser } from '../context/UserContext';
  */
 
 const Login: React.FC = () => {
-  const { login, loginWithGoogle, sendPhoneOtp, verifyPhoneOtp, resetPassword } = useUser();
+  const { login, loginWithGoogle, sendPhoneOtp, verifyPhoneOtp, resetPassword, isAuthenticated } = useUser();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -18,6 +18,13 @@ const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPhoneLogin, setShowPhoneLogin] = useState(false);
+
+  // If already authenticated, redirect to dashboard overview
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   const validateEmailLogin = () => {
     if (!email || !password) return 'Email and password required';

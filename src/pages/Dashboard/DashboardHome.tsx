@@ -6,7 +6,6 @@ import { db } from '../../firebase';
 import { ref, onValue } from 'firebase/database';
 import { useNavigate } from 'react-router-dom';
 import ServiceRequestModal from '../../components/ServiceRequestModal';
-import DashboardCard from '../../components/DashboardCard';
 
 // Service interface
 interface Service {
@@ -290,11 +289,6 @@ export default function DashboardHome() {
             </div>
           </div>
 
-          </div>
-
-          {/* Affiliate Partner */}
-          <div className="mt-4 sm:mt-6">
-            <DashboardCard status="not_applied" />
           </div>
 
           {/* Services Section */}

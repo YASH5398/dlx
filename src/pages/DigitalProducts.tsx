@@ -399,7 +399,7 @@ const DigitalProducts: React.FC = () => {
         </div>
       </section>
 
-      <style jsx>{`
+      <style>{`
         .digital-products-container {
           background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 50%, #0f1420 100%);
           min-height: 100vh;

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { db } from '../../firebase';
-import { ref, onValue, update, push } from 'firebase/database';
+import { ref, onValue, update, push, set } from 'firebase/database';
 
 export default function AdminUserDetail() {
   const { uid } = useParams();
@@ -33,12 +33,20 @@ export default function AdminUserDetail() {
     const tier = level === 'Starter' ? 1 : level === 'Silver' ? 2 : 3;
     await update(ref(db, `users/${uid}/referrals`), { tier });
     await update(ref(db, `users/${uid}/wallet`), wallet);
+    try {
+      const listRef = ref(db, `notifications/users/${uid}`);
+      const n1 = push(listRef);
+      await set(n1, { id: n1.key as string, type: 'referral', message: `Referral tier updated to ${level}`, createdAt: Date.now(), read: false });
+      const n2 = push(listRef);
+      await set(n2, { id: n2.key as string, type: 'wallet', message: `Wallet balances updated by admin`, createdAt: Date.now(), read: false });
+    } catch {}
   };
 
   const sendNotification = async () => {
     if (!message.trim()) return;
-    const noteRef = ref(db, `notifications/${uid}`);
-    await push(noteRef, { message, createdAt: Date.now() });
+    const listRef = ref(db, `notifications/users/${uid}`);
+    const newRef = push(listRef);
+    await set(newRef, { id: newRef.key as string, type: 'info', message, createdAt: Date.now(), read: false });
     setMessage('');
   };
 
