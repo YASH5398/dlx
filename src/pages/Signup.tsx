@@ -19,7 +19,7 @@ const Signup: React.FC = () => {
   const [referral, setReferral] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [showPhone, setShowPhone] = useState(false);
+  // const [showPhone, setShowPhone] = useState(false); // moved to dedicated phone signup
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(false);
@@ -90,7 +90,7 @@ const Signup: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950 flex relative overflow-hidden">
+    <div className="min-h-screen w-full bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950 flex relative overflow-x-hidden">
       {/* Animated Background Orbs */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl animate-pulse"></div>
@@ -99,7 +99,7 @@ const Signup: React.FC = () => {
       </div>
 
       {/* Left Panel - Form */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-8 lg:p-12 overflow-y-auto relative z-10">
+      <div className="flex-1 flex items-center justify-center px-4 py-6 sm:px-8 sm:py-8 lg:px-12 lg:py-12 overflow-y-auto relative z-10">
         <div className="w-full max-w-lg">
           {/* Minimal Back Button */}
           <Link 
@@ -146,7 +146,7 @@ const Signup: React.FC = () => {
               </button>
 
               <button 
-                onClick={() => setShowPhone(v => !v)}
+                onClick={() => navigate('/phone-signup')}
                 disabled={loading}
                 className="w-full group flex items-center justify-center gap-3 bg-gradient-to-r from-slate-800 to-slate-700 hover:from-slate-700 hover:to-slate-600 text-white font-semibold py-3.5 px-5 rounded-2xl transition-all duration-300 transform hover:scale-[1.02] hover:shadow-xl border border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
               >
@@ -205,23 +205,7 @@ const Signup: React.FC = () => {
                 />
               </div>
 
-              {/* Phone (Smooth Collapsible) */}
-              <div className={`overflow-hidden transition-all duration-500 ease-in-out ${showPhone ? 'max-h-36 opacity-100' : 'max-h-0 opacity-0'}`}>
-                <label className="block text-sm font-semibold text-slate-300 mb-2.5">Phone Number</label>
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                  placeholder="10-digit number"
-                  className="w-full px-4 py-3.5 bg-slate-800/60 border border-slate-700/70 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all hover:border-slate-600"
-                />
-                <p className="text-xs text-slate-500 mt-2 flex items-center gap-1">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  We'll automatically add +91 country code
-                </p>
-              </div>
+              {/* Phone signup moved to dedicated page: /phone-signup */}
 
               {/* Referral Code */}
               <div>

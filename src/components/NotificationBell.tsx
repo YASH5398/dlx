@@ -83,6 +83,7 @@ function TypeIcon({ type }: { type: string }) {
 export default function NotificationBell() {
   const { notifications, unreadCount, markAsRead, removeNotification } = useNotifications();
   const [open, setOpen] = useState(false);
+  const [closingIds, setClosingIds] = useState<Set<string>>(new Set());
   const [lastOpen, setLastOpen] = useState<number>(Date.now());
   const ref = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
@@ -141,11 +142,13 @@ export default function NotificationBell() {
             ) : (
               notifications.map((n) => (
                 <li key={n.id}>
-                  <button
+                  <div
                     onClick={() => handleClickItem(n.id, n.route)}
-                    className={`w-full flex items-start gap-3 px-3 py-3 text-left transition-colors ${
+                    role="button"
+                    tabIndex={0}
+                    className={`w-full flex items-start gap-3 px-3 py-3 text-left transition-all duration-300 ${
                       n.read ? 'hover:bg-white/5' : 'bg-white/[0.03] hover:bg-white/10'
-                    }`}
+                    } ${closingIds.has(n.id) ? 'opacity-0 translate-y-1' : ''}`}
                   >
                     <div className={`flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 ${n.read ? 'bg-white/5' : 'bg-white/10 ring-1 ring-purple-500/50'}`}>
                       <TypeIcon type={n.type} />
@@ -155,7 +158,11 @@ export default function NotificationBell() {
                       <div className="text-xs text-gray-400 mt-1">{timeAgo(n.createdAt)}</div>
                     </div>
                     <button
-                      onClick={(e) => { e.stopPropagation(); removeNotification(n.id); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setClosingIds((prev) => new Set(prev).add(n.id));
+                        setTimeout(() => removeNotification(n.id), 250);
+                      }}
                       aria-label="Dismiss notification"
                       className="ml-2 shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10 hover:text-white transition-colors"
                     >
@@ -163,7 +170,7 @@ export default function NotificationBell() {
                         <path d="M18 6L6 18M6 6l12 12" />
                       </svg>
                     </button>
-                  </button>
+                  </div>
                 </li>
               ))
             )}

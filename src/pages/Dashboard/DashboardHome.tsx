@@ -94,7 +94,7 @@ export default function DashboardHome() {
     {
       id: '2',
       name: 'Website Development',
-      description: 'Professional web development services including modern responsive websites and web...',
+      description: 'Professional web development services including modern responsive websites and web applications with cutting-edge technologies.',
       startingPrice: '$1,499',
       icon: '🌐',
       gradient: 'from-purple-500 to-indigo-600',
@@ -209,230 +209,359 @@ export default function DashboardHome() {
     setModalOpen(true);
   };
 
-
   return (
     <>
-      <div className="relative min-h-screen w-full bg-gradient-to-br from-[#091B4D] via-[#0B235F] to-[#08163C]">
-        <div className="w-full mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6 lg:py-8 space-y-4 sm:space-y-6">
+      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0f172a]">
+        {/* Animated Background Elements */}
+        <div className="fixed inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-20 left-10 w-72 h-72 bg-blue-600/20 rounded-full mix-blend-soft-light filter blur-3xl opacity-30 animate-blob"></div>
+          <div className="absolute top-40 right-10 w-72 h-72 bg-cyan-600/20 rounded-full mix-blend-soft-light filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
+          <div className="absolute -bottom-8 left-1/2 w-72 h-72 bg-indigo-600/20 rounded-full mix-blend-soft-light filter blur-3xl opacity-30 animate-blob animation-delay-4000"></div>
+        </div>
+
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
           
-          {/* Welcome Header Section */}
-          <div className="text-center space-y-1 sm:space-y-2 py-4 sm:py-6">
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold">
-              <span className="text-cyan-400">Welcome back, </span>
-              <span className="bg-gradient-to-r from-pink-400 via-purple-400 to-pink-500 bg-clip-text text-transparent">
-                {user?.name?.split(' ')[0] || 'sourav'}
-              </span>
-              <br className="sm:hidden" />
-              <span className="bg-gradient-to-r from-pink-400 via-purple-400 to-pink-500 bg-clip-text text-transparent">
-                {user?.name?.split(' ').slice(1).join(' ') || 'kumar verma'}!
-              </span>
-            </h1>
-            <p className="text-slate-300 text-xs sm:text-sm lg:text-base">
-              Here's what's happening with your <span className="font-semibold">Digilinex</span> account today.
-            </p>
+          {/* Welcome Header */}
+          <div className="mb-8 sm:mb-12">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-2">
+                  <span className="text-slate-200">Welcome back, </span>
+                  <span className="bg-gradient-to-r from-cyan-400 via-blue-400 to-indigo-400 bg-clip-text text-transparent">
+                    {user?.name || 'User'}
+                  </span>
+                  <span className="inline-block ml-2">👋</span>
+                </h1>
+                <p className="text-slate-400 text-base sm:text-lg">
+                  Here's your <span className="font-semibold text-cyan-400">Digilinex</span> dashboard overview
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="px-4 py-2 rounded-xl bg-slate-800/60 backdrop-blur-sm shadow-lg border border-slate-700/50">
+                  <p className="text-xs text-slate-400 mb-0.5">Tier Level</p>
+                  <p className="text-lg font-bold bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">
+                    {levelLabel}
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Stats Cards - Mobile Optimized */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 max-w-sm sm:max-w-none mx-auto">
+          {/* Stats Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
             
-            {/* Current Level Card */}
-            <div className="relative rounded-2xl sm:rounded-3xl bg-gradient-to-br from-[#1a1f3a] via-[#0f1429] to-[#0a0e1f] border border-blue-500/20 shadow-xl overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5"></div>
-              <div className="relative p-4 sm:p-5 lg:p-6">
-                <div className="flex items-center justify-between mb-3 sm:mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-lg">
-                      <span className="text-xl sm:text-2xl">⭐</span>
-                    </div>
-                    <div>
-                      <p className="text-slate-400 text-xs sm:text-sm">Current Level</p>
-                      <p className="text-sm sm:text-base text-slate-300">Higher level = higher service commission %</p>
-                    </div>
+            {/* DLX Earnings Card */}
+            <div className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-cyan-500/20 hover:shadow-2xl transition-all duration-300 overflow-hidden border border-slate-700/50 hover:border-cyan-500/50">
+              <div className="absolute inset-0 bg-gradient-to-br from-cyan-600/10 to-blue-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <div className="relative p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/50">
+                    <span className="text-2xl">💎</span>
+                  </div>
+                  <div className="px-3 py-1 rounded-full bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-xs font-semibold">
+                    DLX
                   </div>
                 </div>
-                <div className="mt-3 sm:mt-4">
-                  <span className="inline-block px-4 sm:px-5 py-1.5 sm:py-2 rounded-full bg-gradient-to-r from-purple-500 to-indigo-600 text-white text-sm sm:text-base font-bold shadow-lg">
-                    {levelLabel}
-                  </span>
-                </div>
+                <h3 className="text-sm font-medium text-slate-400 mb-1">Total Earnings</h3>
+                <p className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
+                  {wallet?.dlx?.toFixed(2) || '30.00'}
+                </p>
+                <p className="text-xs text-slate-500 mt-2">DLX Tokens Mined</p>
               </div>
+              <div className="h-1 bg-gradient-to-r from-cyan-500 to-blue-600"></div>
             </div>
 
-            {/* Total Earnings Card */}
-            <div className="relative rounded-2xl sm:rounded-3xl bg-gradient-to-br from-[#1a1f3a] via-[#0f1429] to-[#0a0e1f] border border-cyan-500/20 shadow-xl overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-blue-500/5"></div>
-              <div className="relative p-4 sm:p-5 lg:p-6">
-                <div className="flex items-center gap-3 mb-3 sm:mb-4">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg">
-                    <span className="text-xl sm:text-2xl">💎</span>
+            {/* USDT Balance Card */}
+            <div className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-emerald-500/20 hover:shadow-2xl transition-all duration-300 overflow-hidden border border-slate-700/50 hover:border-emerald-500/50">
+              <div className="absolute inset-0 bg-gradient-to-br from-emerald-600/10 to-green-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <div className="relative p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shadow-lg shadow-emerald-500/50">
+                    <span className="text-2xl">💵</span>
                   </div>
-                  <div>
-                    <p className="text-slate-400 text-xs sm:text-sm">Total Earnings (DLX)</p>
-                    <p className="text-xs sm:text-sm text-slate-300">Your mined DLX to date</p>
+                  <div className="px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-semibold">
+                    USDT
                   </div>
                 </div>
-                <div className="mt-3 sm:mt-4">
-                  <p className="text-3xl sm:text-4xl lg:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">
-                    {wallet?.dlx?.toFixed(2) || '30.00'} DLX
-                  </p>
-                </div>
+                <h3 className="text-sm font-medium text-slate-400 mb-1">USDT Balance</h3>
+                <p className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-green-400 bg-clip-text text-transparent">
+                  ${wallet?.usdt?.toFixed(2) || '30.00'}
+                </p>
+                <p className="text-xs text-slate-500 mt-2">Available in Wallet</p>
               </div>
+              <div className="h-1 bg-gradient-to-r from-emerald-500 to-green-600"></div>
             </div>
 
-            {/* Available Wallet Card */}
-            <div className="relative rounded-2xl sm:rounded-3xl bg-gradient-to-br from-[#1a1f3a] via-[#0f1429] to-[#0a0e1f] border border-pink-500/20 shadow-xl overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-br from-pink-500/5 to-purple-500/5"></div>
-              <div className="relative p-4 sm:p-5 lg:p-6">
-                <div className="flex items-center gap-3 mb-3 sm:mb-4">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center shadow-lg">
-                    <span className="text-xl sm:text-2xl">💼</span>
+            {/* INR Balance Card */}
+            <div className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-orange-500/20 hover:shadow-2xl transition-all duration-300 overflow-hidden border border-slate-700/50 hover:border-orange-500/50">
+              <div className="absolute inset-0 bg-gradient-to-br from-orange-600/10 to-amber-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <div className="relative p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center shadow-lg shadow-orange-500/50">
+                    <span className="text-2xl">💰</span>
                   </div>
-                  <div>
-                    <p className="text-slate-400 text-xs sm:text-sm">Available Wallet</p>
-                    <p className="text-xs sm:text-sm text-slate-300">Real-time balances from your wallet</p>
+                  <div className="px-3 py-1 rounded-full bg-orange-500/20 border border-orange-500/30 text-orange-300 text-xs font-semibold">
+                    INR
                   </div>
                 </div>
-                <div className="mt-3 sm:mt-4 space-y-1">
-                  <p className="text-2xl sm:text-3xl lg:text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-500">
-                    ${wallet?.usdt?.toFixed(2) || '30.00'} USDT
-                  </p>
-                  <p className="text-lg sm:text-xl text-slate-400">
-                    ₹{wallet?.inr?.toFixed(2) || '2,500'} INR
-                  </p>
-                </div>
+                <h3 className="text-sm font-medium text-slate-400 mb-1">INR Balance</h3>
+                <p className="text-3xl font-bold bg-gradient-to-r from-orange-400 to-amber-400 bg-clip-text text-transparent">
+                  ₹{wallet?.inr?.toFixed(2) || '2,500'}
+                </p>
+                <p className="text-xs text-slate-500 mt-2">Available in Wallet</p>
               </div>
+              <div className="h-1 bg-gradient-to-r from-orange-500 to-amber-600"></div>
             </div>
+
+            {/* Active Referrals Card */}
+            <div className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-purple-500/20 hover:shadow-2xl transition-all duration-300 overflow-hidden border border-slate-700/50 hover:border-purple-500/50">
+              <div className="absolute inset-0 bg-gradient-to-br from-purple-600/10 to-pink-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <div className="relative p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-lg shadow-purple-500/50">
+                    <span className="text-2xl">👥</span>
+                  </div>
+                  <div className="px-3 py-1 rounded-full bg-purple-500/20 border border-purple-500/30 text-purple-300 text-xs font-semibold">
+                    Live
+                  </div>
+                </div>
+                <h3 className="text-sm font-medium text-slate-400 mb-1">Active Referrals</h3>
+                <p className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                  {activeReferrals || 0}
+                </p>
+                <p className="text-xs text-slate-500 mt-2">Total Referrals</p>
+              </div>
+              <div className="h-1 bg-gradient-to-r from-purple-500 to-pink-600"></div>
+            </div>
+          </div>
 
           {/* Level Progress Card */}
-          <div className="relative rounded-2xl sm:rounded-3xl bg-gradient-to-br from-[#1a1f3a] via-[#0f1429] to-[#0a0e1f] border border-blue-500/20 shadow-xl overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-indigo-500/5"></div>
-            <div className="relative p-4 sm:p-5 lg:p-6">
-              <div className="flex items-center gap-3 mb-3 sm:mb-4">
-                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
-                  <span className="text-xl sm:text-2xl">📈</span>
+          <div className="mb-8">
+            <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-slate-700/50">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/50">
+                    <span className="text-2xl">📈</span>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-200">Level Progress</h3>
+                    <p className="text-sm text-slate-400">
+                      Complete more referrals or sell services to level up
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-slate-400 text-xs sm:text-sm">Level Progress</p>
-                  <p className="text-xs sm:text-sm text-slate-300">Complete more referrals or sell more services to level up.</p>
+                <div className="text-right">
+                  <p className="text-2xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+                    {progress.toFixed(1)}%
+                  </p>
+                  <p className="text-xs text-slate-500">Progress</p>
                 </div>
               </div>
-              <div className="mt-2 sm:mt-3">
-                <div className="h-2.5 sm:h-3 rounded-full bg-white/5 border border-white/10 overflow-hidden">
+              <div className="relative">
+                <div className="h-4 bg-slate-900/50 rounded-full overflow-hidden shadow-inner border border-slate-700/50">
                   <div
-                    className="h-full bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-600"
+                    className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-full transition-all duration-1000 ease-out relative overflow-hidden shadow-lg shadow-indigo-500/50"
                     style={{ width: `${progress}%` }}
-                  />
-                </div>
-                <div className="flex items-center justify-between mt-2 sm:mt-3">
-                  <p className="text-slate-400 text-xs sm:text-sm">Progress to next level</p>
-                  <p className="text-right text-slate-300 text-xs sm:text-sm">{progress.toFixed(1)}%</p>
+                  >
+                    <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          </div>
-
-          {/* Affiliate Program CTA */}
-          <div className="relative rounded-2xl sm:rounded-3xl bg-gradient-to-br from-[#1a1f3a] via-[#0f1429] to-[#0a0e1f] border border-green-500/20 shadow-xl overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-teal-500/5"></div>
-            <div className="relative p-4 sm:p-5 lg:p-6 flex items-center justify-between gap-4">
-              <div>
-                <h3 className="text-lg sm:text-xl font-bold text-white">Affiliate Program</h3>
-                <p className="text-sm text-slate-300">Refer users and earn commissions on successful conversions.</p>
+          {/* Affiliate Partner CTA */}
+          <div className="mb-8">
+            <div className="relative overflow-hidden bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-600 rounded-2xl shadow-2xl border border-emerald-500/50">
+              {/* Animated Background Pattern */}
+              <div className="absolute inset-0 opacity-20">
+                <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.8),transparent_50%)] animate-pulse"></div>
               </div>
-              <button
-                onClick={() => navigate('/affiliate-program')}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white text-sm sm:text-base font-bold shadow-lg transition-all duration-200"
-              >
-                Join as Affiliate
-              </button>
+              
+              <div className="relative p-6 sm:p-8 lg:p-10">
+                <div className="flex flex-col lg:flex-row items-center gap-6 lg:gap-8">
+                  
+                  {/* Icon Section */}
+                  <div className="flex-shrink-0">
+                    <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-2xl border-2 border-white/30">
+                      <span className="text-5xl sm:text-6xl">🤝</span>
+                    </div>
+                  </div>
+
+                  {/* Content Section */}
+                  <div className="flex-1 text-center lg:text-left">
+                    <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white mb-3">
+                      Become an Affiliate Partner
+                    </h2>
+                    <div className="space-y-2 mb-4">
+                      <p className="text-white/95 text-base sm:text-lg font-medium">
+                        🎯 Earn <span className="font-bold text-yellow-300">30-40% commission</span> on each sale!
+                      </p>
+                      <p className="text-white/90 text-sm sm:text-base">
+                        💰 Sell digital services worth <span className="font-semibold">$400/month</span> (just 3 clients)
+                      </p>
+                      <p className="text-white/90 text-sm sm:text-base">
+                        💵 Easily make <span className="font-bold text-yellow-300">$400-$500 monthly</span>
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-3 justify-center lg:justify-start">
+                      <div className="flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-sm rounded-lg border border-white/30">
+                        <span className="text-lg">✅</span>
+                        <span className="text-white text-sm font-medium">High Commission</span>
+                      </div>
+                      <div className="flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-sm rounded-lg border border-white/30">
+                        <span className="text-lg">⚡</span>
+                        <span className="text-white text-sm font-medium">Fast Payouts</span>
+                      </div>
+                      <div className="flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-sm rounded-lg border border-white/30">
+                        <span className="text-lg">🎁</span>
+                        <span className="text-white text-sm font-medium">Bonus Rewards</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CTA Button */}
+                  <div className="flex-shrink-0">
+                    <button
+                      onClick={() => navigate('/affiliate-program')}
+                      className="group relative px-8 py-4 bg-white text-emerald-600 rounded-xl font-bold text-lg shadow-2xl hover:shadow-emerald-400/50 transition-all duration-300 hover:scale-105 active:scale-95"
+                    >
+                      <span className="relative z-10 flex items-center gap-2">
+                        Join Now
+                        <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                        </svg>
+                      </span>
+                      <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-yellow-400 to-orange-400 opacity-0 group-hover:opacity-20 transition-opacity"></div>
+                    </button>
+                  </div>
+
+                </div>
+              </div>
+
+              {/* Decorative Elements */}
+              <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full blur-3xl"></div>
+              <div className="absolute bottom-0 left-0 w-40 h-40 bg-cyan-300/10 rounded-full blur-3xl"></div>
             </div>
           </div>
 
           {/* Services Section */}
-          <div className="space-y-4 sm:space-y-5 pt-4 sm:pt-6">
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
+          <div className="mb-8">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
               <div>
-                <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white">Our Services</h2>
-                <p className="text-slate-400 text-xs sm:text-sm mt-0.5 sm:mt-1">Browse and request services</p>
+                <h2 className="text-2xl sm:text-3xl font-bold text-slate-200 mb-1">
+                  Our Services
+                </h2>
+                <p className="text-slate-400 text-sm sm:text-base">
+                  Browse and request premium digital services
+                </p>
               </div>
               
               {/* Search Bar */}
-              <div className="relative w-full sm:w-64 lg:w-80">
-                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
+              <div className="relative w-full sm:w-80">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
                 <input
                   type="text"
                   placeholder="Search services..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 sm:pl-10 pr-3 sm:pr-4 py-2 sm:py-2.5 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all"
+                  className="block w-full pl-10 pr-4 py-3 bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all shadow-sm"
                 />
               </div>
             </div>
 
-            {/* Services Grid - Card Style from Image */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 lg:gap-6">
+            {/* Services Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {filteredServices.map((service) => (
                 <div
                   key={service.id}
-                  className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-[#0f1535] border-2 border-[#1e2d5f] shadow-2xl hover:border-cyan-500/30 transition-all duration-300"
+                  className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-slate-700/50 hover:border-cyan-500/50 hover:-translate-y-1"
                 >
-                  {/* Gradient Border Effect */}
-                  <div className="absolute inset-0 rounded-2xl sm:rounded-3xl bg-gradient-to-b from-blue-500/10 via-transparent to-transparent pointer-events-none"></div>
+                  {/* Gradient Overlay on Hover */}
+                  <div className={`absolute inset-0 bg-gradient-to-br ${service.gradient} opacity-0 group-hover:opacity-10 transition-opacity duration-300`}></div>
                   
-                  {/* Service Content */}
-                  <div className="relative p-5 sm:p-6 space-y-4">
+                  <div className="relative p-6">
                     {/* Icon */}
-                    <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br ${service.gradient} flex items-center justify-center text-3xl sm:text-4xl shadow-lg`}>
+                    <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${service.gradient} flex items-center justify-center text-3xl shadow-lg mb-4 group-hover:scale-110 transition-transform duration-300`}>
                       {service.icon}
                     </div>
                     
+                    {/* Category Badge */}
+                    <div className="absolute top-4 right-4">
+                      <span className="px-3 py-1 text-xs font-semibold bg-slate-700/60 backdrop-blur-sm text-slate-300 rounded-full border border-slate-600/50">
+                        {service.category}
+                      </span>
+                    </div>
+
                     {/* Title */}
-                    <h3 className="text-lg sm:text-xl font-bold text-white leading-tight">
+                    <h3 className="text-xl font-bold text-slate-200 mb-2 leading-tight">
                       {service.name}
                     </h3>
 
                     {/* Description */}
-                    <p className="text-sm text-slate-400 leading-relaxed line-clamp-3 min-h-[3.75rem]">
+                    <p className="text-sm text-slate-400 mb-4 line-clamp-3 leading-relaxed">
                       {service.description}
                     </p>
 
                     {/* Price */}
-                    <p className="text-xl sm:text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">
-                      Starting at {service.startingPrice}
-                    </p>
+                    <div className="mb-4">
+                      <p className="text-xs text-slate-500 mb-1">Starting at</p>
+                      <p className={`text-2xl font-bold bg-gradient-to-r ${service.gradient} bg-clip-text text-transparent`}>
+                        {service.startingPrice}
+                      </p>
+                    </div>
 
                     {/* Features */}
-                    <ul className="space-y-2">
-                      {(service.features ?? []).map((feature, idx) => (
-                        <li key={idx} className="flex items-start gap-2">
-                          <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 mt-2 flex-shrink-0"></div>
-                          <span className="text-sm text-slate-300 leading-tight">{feature}</span>
+                    <ul className="space-y-2 mb-6">
+                      {(service.features ?? []).slice(0, 3).map((feature, idx) => (
+                        <li key={idx} className="flex items-start gap-2 text-sm">
+                          <svg className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                          </svg>
+                          <span className="text-slate-300">{feature}</span>
                         </li>
                       ))}
                     </ul>
-                  </div>
 
-                  {/* Action Buttons */}
-                  <div className="relative px-5 sm:px-6 pb-5 sm:pb-6 space-y-3">
+                    {/* CTA Button */}
                     <button
                       onClick={() => handleGetService(service.id)}
-                      className="w-full px-4 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white text-sm sm:text-base font-bold shadow-lg transition-all duration-200 hover:scale-[1.02]"
+                      className={`w-full py-3 rounded-xl bg-gradient-to-r ${service.gradient} text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95`}
                     >
                       Get Service
                     </button>
                   </div>
+
+                  {/* Bottom Accent Line */}
+                  <div className={`h-1 bg-gradient-to-r ${service.gradient}`}></div>
                 </div>
               ))}
             </div>
+
+            {/* No Results Message */}
+            {filteredServices.length === 0 && (
+              <div className="text-center py-16">
+                <div className="w-24 h-24 mx-auto mb-4 rounded-full bg-slate-800/40 backdrop-blur-sm border border-slate-700/50 flex items-center justify-center">
+                  <span className="text-5xl">🔍</span>
+                </div>
+                <h3 className="text-xl font-semibold text-slate-200 mb-2">
+                  No services found
+                </h3>
+                <p className="text-slate-400">
+                  Try adjusting your search terms
+                </p>
+              </div>
+            )}
           </div>
 
         </div>
       </div>
 
+      {/* Service Request Modal */}
       {selectedService && (
         <ServiceRequestModal
           open={modalOpen}
@@ -440,6 +569,25 @@ export default function DashboardHome() {
           serviceName={selectedService}
         />
       )}
+
+      {/* Add custom animation keyframes to your global CSS or Tailwind config */}
+      <style>{`
+        @keyframes blob {
+          0% { transform: translate(0px, 0px) scale(1); }
+          33% { transform: translate(30px, -50px) scale(1.1); }
+          66% { transform: translate(-20px, 20px) scale(0.9); }
+          100% { transform: translate(0px, 0px) scale(1); }
+        }
+        .animate-blob {
+          animation: blob 7s infinite;
+        }
+        .animation-delay-2000 {
+          animation-delay: 2s;
+        }
+        .animation-delay-4000 {
+          animation-delay: 4s;
+        }
+      `}</style>
     </>
   );
 }

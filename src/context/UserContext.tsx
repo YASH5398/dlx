@@ -99,6 +99,27 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     await update(userRef, { profile: data ?? {}, createdAt: Date.now() });
     // seed wallet if not present
     await update(ref(db, `users/${uid}/wallet`), { dlx: 100, usdt: 500, inr: 10000 });
+    // ensure referrals node exists
+    try {
+      const referralsSnap = await get(ref(db, `users/${uid}/referrals`));
+      if (!referralsSnap.exists()) {
+        await set(ref(db, `users/${uid}/referrals`), { total: 0, tier: 1 });
+      }
+    } catch {}
+    // ensure orders collection exists
+    try {
+      const ordersSnap = await get(ref(db, `users/${uid}/orders`));
+      if (!ordersSnap.exists()) {
+        await set(ref(db, `users/${uid}/orders`), {});
+      }
+    } catch {}
+    // ensure wallet transactions list exists
+    try {
+      const txSnap = await get(ref(db, `users/${uid}/wallet/transactions`));
+      if (!txSnap.exists()) {
+        await set(ref(db, `users/${uid}/wallet/transactions`), {});
+      }
+    } catch {}
   };
 
   const login = async (email: string, password: string) => {
@@ -150,7 +171,24 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     await signOut(auth);
     setUser(null);
     setToken(null);
-    try { localStorage.removeItem('dlx-auth'); } catch {}
+    try {
+      localStorage.removeItem('dlx-auth');
+      Object.keys(localStorage).forEach((k) => {
+        if (k.startsWith('firebase:') || k.startsWith('dlx-') || k.toLowerCase().includes('auth') || k.toLowerCase().includes('session')) {
+          try { localStorage.removeItem(k); } catch {}
+        }
+      });
+      Object.keys(sessionStorage).forEach((k) => {
+        try { sessionStorage.removeItem(k); } catch {}
+      });
+    } catch {}
+    if (import.meta.env.DEV) {
+      const raw = localStorage.getItem('dlx-auth');
+      if (raw) {
+        console.warn('Post-logout: dlx-auth still present. Clearing again.', raw);
+        try { localStorage.removeItem('dlx-auth'); } catch {}
+      }
+    }
   };
 
   const resetPassword = async (email: string) => {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
 
 /**
@@ -10,6 +10,8 @@ import { useUser } from '../context/UserContext';
 export default function Header() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const isHome = location.pathname === '/';
   const { isAuthenticated, user, logout } = useUser();
 
   const initials = (user?.name || 'User')
@@ -21,13 +23,6 @@ export default function Header() {
 
   const publicLinks = [
     { to: '/', label: 'Home' },
-    { to: '/exchanges', label: 'Exchanges' },
-    { to: '/pricing', label: 'Pricing' },
-    { to: '/tutorials', label: 'Tutorials' },
-    { to: '/docs', label: 'Docs' },
-    { to: '/blogs', label: 'Blogs' },
-    { to: '/apply', label: 'Apply' },
-    { to: '/digital-products', label: 'Digital Products' },
   ];
 
   const dashboardLinks = [
@@ -73,10 +68,12 @@ export default function Header() {
         {/* Right side: auth / profile */}
         <div className="flex items-center gap-3">
           {!isAuthenticated ? (
-            <>
-              <Link to="/login" className="text-sm font-semibold text-white/90 hover:text-white">Login</Link>
-              <Link to="/signup" className="hidden sm:inline-flex items-center rounded-xl bg-white/10 border border-white/20 px-3 py-2 text-sm font-semibold text-white shadow-[0_0_12px_rgba(255,255,255,0.25)] hover:bg-white/20">Sign Up</Link>
-            </>
+            !isHome ? (
+              <>
+                <Link to="/login" className="text-sm font-semibold text-white/90 hover:text-white">Login</Link>
+                <Link to="/signup" className="hidden sm:inline-flex items-center rounded-xl bg-white/10 border border-white/20 px-3 py-2 text-sm font-semibold text-white shadow-[0_0_12px_rgba(255,255,255,0.25)] hover:bg-white/20">Sign Up</Link>
+              </>
+            ) : null
           ) : (
             <>
               <div className="hidden sm:flex items-center gap-2">
@@ -92,7 +89,7 @@ export default function Header() {
                 className="inline-flex items-center rounded-xl bg-white/10 border border-white/20 px-3 py-2 text-sm font-semibold text-white hover:bg-white/20"
                 onClick={async () => {
                   await logout();
-                  navigate('/');
+                  navigate('/login');
                 }}
               >
                 Logout
@@ -126,16 +123,18 @@ export default function Header() {
               ))}
               {isAuthenticated ? (
                 <button
-                  onClick={async () => { await logout(); setMobileOpen(false); navigate('/'); }}
+                  onClick={async () => { await logout(); setMobileOpen(false); navigate('/login'); }}
                   className="rounded-xl px-3 py-2 bg-red-500 text-white font-semibold"
                 >
                   Logout
                 </button>
               ) : (
-                <div className="flex gap-3 pt-2">
-                  <Link to="/login" onClick={() => setMobileOpen(false)} className="flex-1 text-center rounded-xl bg-white/10 border border-white/20 px-3 py-2 text-sm font-semibold text-white">Login</Link>
-                  <Link to="/signup" onClick={() => setMobileOpen(false)} className="flex-1 text-center rounded-xl bg-white/10 border border-white/20 px-3 py-2 text-sm font-semibold text-white">Sign Up</Link>
-                </div>
+                !isHome ? (
+                  <div className="flex gap-3 pt-2">
+                    <Link to="/login" onClick={() => setMobileOpen(false)} className="flex-1 text-center rounded-xl bg-white/10 border border-white/20 px-3 py-2 text-sm font-semibold text-white">Login</Link>
+                    <Link to="/signup" onClick={() => setMobileOpen(false)} className="flex-1 text-center rounded-xl bg-white/10 border border-white/20 px-3 py-2 text-sm font-semibold text-white">Sign Up</Link>
+                  </div>
+                ) : null
               )}
             </div>
           </div>

@@ -19,7 +19,6 @@ export default function Footer() {
           <h5 className="font-semibold text-white">Quick Links</h5>
           <div className="flex flex-col mt-2 text-sm">
             <Link to="/services" className="hover:underline text-sky-300 hover:text-white">Services</Link>
-            <Link to="/digital-products" className="hover:underline text-sky-300 hover:text-white">Digital Products</Link>
             <Link to="/mining" className="hover:underline text-sky-300 hover:text-white">Mining</Link>
           </div>
         </div>

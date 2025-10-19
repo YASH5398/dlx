@@ -55,7 +55,7 @@ export default function DashboardLayout() {
 
   const handleLogout = () => {
     logout();
-    navigate("/");
+    navigate("/login");
     setMenuOpen(false);
     setProfileDropdownOpen(false);
   };

@@ -16,6 +16,10 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   }
 
   if (!isAuthenticated) {
+    if (import.meta.env.DEV) {
+      const raw = localStorage.getItem('dlx-auth');
+      if (raw) console.warn('ProtectedRoute: unauthenticated but dlx-auth present. Redirecting to /login.', raw);
+    }
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
   if (mfaRequired && !mfaVerified && location.pathname !== '/otp') {
