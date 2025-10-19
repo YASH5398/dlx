@@ -8,6 +8,8 @@ import { useNavigate } from 'react-router-dom';
 import ServiceRequestModal from '../../components/ServiceRequestModal';
 import { getServices, subscribeServices } from '../../utils/services';
 import type { ServiceItem } from '../../utils/services';
+import { restoreDefaultServiceForms } from '../../utils/services';
+import { DEFAULT_SERVICE_FORMS } from '../../utils/serviceFormDefaults';
 
 // Service interface
 interface Service {
@@ -66,6 +68,8 @@ export default function DashboardHome() {
             }))
           );
         }
+        // Restore missing service form configs (idempotent)
+        await restoreDefaultServiceForms(DEFAULT_SERVICE_FORMS);
       } catch {}
       unsub = subscribeServices((items) => {
         if (items && items.length) setServices(items);

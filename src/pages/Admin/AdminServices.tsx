@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { db } from '../../firebase';
-import { ref, onValue } from 'firebase/database';
+import { ref, onValue, off } from 'firebase/database';
+import { updateRequestStatus, updateRequestPrice } from '../../utils/serviceRequests';
 
 type ServiceRequest = {
   id: string;
@@ -11,19 +12,25 @@ type ServiceRequest = {
   createdAt: number;
   steps: { title: string; fields: { name: string; label: string; type: string }[] }[];
   answers: Record<string, any>;
+  status?: 'Pending' | 'Approved' | 'Rejected';
 };
 
 export default function AdminServices() {
   const [requests, setRequests] = useState<Record<string, ServiceRequest>>({});
   const [query, setQuery] = useState('');
   const [svcFilter, setSvcFilter] = useState<string>('all');
+  const [priceUsd, setPriceUsd] = useState<Record<string, string>>({});
+  const [priceInr, setPriceInr] = useState<Record<string, string>>({});
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsub = onValue(ref(db, 'serviceRequests'), (snap) => {
+    const r = ref(db, 'serviceRequests');
+    const handler = (snap: any) => {
       const val = snap.val() || {};
       setRequests(val);
-    });
-    return () => unsub();
+    };
+    onValue(r, handler);
+    return () => off(r, 'value', handler);
   }, []);
 
   const list = useMemo(() => {
@@ -92,7 +99,14 @@ export default function AdminServices() {
             {list.map((r) => (
               <React.Fragment key={r.id}>
                 <tr className="odd:bg-white/[0.03]">
-                  <td className="px-3 py-2 text-sm text-gray-300">{r.id}</td>
+                  <td className="px-3 py-2 text-sm text-gray-300">
+                    <div className="flex items-center gap-2">
+                      <span>{r.id}</span>
+                      <span className={`px-2 py-0.5 rounded text-xs border ${r.status === 'Approved' ? 'bg-green-600/20 border-green-500/30 text-green-300' : r.status === 'Rejected' ? 'bg-red-600/20 border-red-500/30 text-red-300' : 'bg-yellow-600/20 border-yellow-500/30 text-yellow-300'}`}>
+                        {r.status ?? 'Pending'}
+                      </span>
+                    </div>
+                  </td>
                   <td className="px-3 py-2 text-sm">{r.serviceName}</td>
                   <td className="px-3 py-2 text-sm">{r.userName}</td>
                   <td className="px-3 py-2 text-sm text-gray-300">{r.userEmail}</td>
@@ -136,6 +150,68 @@ export default function AdminServices() {
                                 </div>
                               </div>
                             ))}
+                          </div>
+                          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="rounded-lg bg-white/5 border border-white/10 p-3">
+                              <div className="text-sm font-semibold text-white mb-2">Admin Actions</div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                  onClick={async () => {
+                                    setUpdatingId(r.id);
+                                    try { await updateRequestStatus(r.id, 'Approved'); } finally { setUpdatingId(null); }
+                                  }}
+                                  className="px-3 py-1.5 rounded-xl bg-green-600/20 border border-green-500/30 text-green-200 hover:bg-green-600/30"
+                                  disabled={updatingId === r.id}
+                                >Approve</button>
+                                <button
+                                  onClick={async () => {
+                                    setUpdatingId(r.id);
+                                    try { await updateRequestStatus(r.id, 'Rejected'); } finally { setUpdatingId(null); }
+                                  }}
+                                  className="px-3 py-1.5 rounded-xl bg-red-600/20 border border-red-500/30 text-red-200 hover:bg-red-600/30"
+                                  disabled={updatingId === r.id}
+                                >Reject</button>
+                              </div>
+                            </div>
+                            <div className="rounded-lg bg-white/5 border border-white/10 p-3">
+                              <div className="text-sm font-semibold text-white mb-2">Set Price</div>
+                              <div className="flex flex-col gap-2">
+                                <div className="flex items-center gap-2">
+                                  <label className="text-xs text-gray-300 w-28">Price (USD)</label>
+                                  <input
+                                    type="number"
+                                    value={priceUsd[r.id] ?? ''}
+                                    onChange={(e) => setPriceUsd((p) => ({ ...p, [r.id]: e.target.value }))}
+                                    placeholder="e.g. 249"
+                                    className="flex-1 px-3 py-2 rounded-xl bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                                  />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <label className="text-xs text-gray-300 w-28">Price (INR)</label>
+                                  <input
+                                    type="number"
+                                    value={priceInr[r.id] ?? ''}
+                                    onChange={(e) => setPriceInr((p) => ({ ...p, [r.id]: e.target.value }))}
+                                    placeholder="e.g. 19999"
+                                    className="flex-1 px-3 py-2 rounded-xl bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                                  />
+                                </div>
+                                <div>
+                                  <button
+                                    onClick={async () => {
+                                      setUpdatingId(r.id);
+                                      try {
+                                        await updateRequestPrice(r.id, Number(priceUsd[r.id] ?? 0), Number(priceInr[r.id] ?? 0));
+                                      } finally {
+                                        setUpdatingId(null);
+                                      }
+                                    }}
+                                    className="px-3 py-1.5 rounded-xl bg-white/10 border border-white/20 text-white hover:bg-white/20"
+                                    disabled={updatingId === r.id}
+                                  >Save Price</button>
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>

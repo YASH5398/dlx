@@ -1,11 +1,10 @@
-import mongoose from 'mongoose';
+import { Schema, model } from 'mongoose';
 
-const LiveChatSchema = new mongoose.Schema({
-  user_id: { type: String, required: true },
-  agent_id: { type: String, default: null },
-  messages: { type: [mongoose.Schema.Types.Mixed], default: [] },
-  status: { type: String, enum: ['requested', 'active', 'declined', 'closed'], default: 'requested' },
-  started_at: { type: Number, default: () => Date.now() },
+const liveChatSchema = new Schema({
+  userId: { type: String, required: true },
+  agentId: { type: String, default: null },
+  createdAt: { type: Date, default: Date.now },
+  status: { type: String, enum: ['active', 'closed'], default: 'active' },
 });
 
-export default mongoose.model('LiveChat', LiveChatSchema);
+export default model('LiveChat', liveChatSchema);

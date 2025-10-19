@@ -1,14 +1,14 @@
-import mongoose from 'mongoose';
+import { Schema, model } from 'mongoose';
 
-const TicketSchema = new mongoose.Schema({
-  user_id: { type: String, required: true },
-  subject: { type: String, required: true },
-  category: { type: String, required: true },
+const ticketSchema = new Schema({
+  userId: { type: String, required: true },
+  title: { type: String, required: true },
   description: { type: String, required: true },
-  status: { type: String, enum: ['Pending', 'Assigned', 'Closed'], default: 'Pending' },
-  assign_to: { type: String, default: null },
-  file_path: { type: String },
-  created_at: { type: Number, default: () => Date.now() },
+  category: { type: String, enum: ['Technical', 'Payment', 'Other'], required: true },
+  priority: { type: String, enum: ['Low', 'Medium', 'High'], required: true },
+  status: { type: String, enum: ['Open', 'Pending', 'Resolved'], default: 'Open' },
+  createdAt: { type: Date, default: Date.now },
+  updates: [{ date: Date, message: String, adminId: String }],
 });
 
-export default mongoose.model('Ticket', TicketSchema);
+export default model('Ticket', ticketSchema);

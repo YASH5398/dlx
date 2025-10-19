@@ -6,6 +6,15 @@ import ProtectedRoute from './components/ProtectedRoute';
 import DashboardLayout from './pages/Dashboard/DashboardLayout';
 import AffiliateProgram from './pages/AffiliateProgram.jsx';
 import OrderInvoice from './pages/Dashboard/OrderInvoice';
+import AdminLayout from './pages/Admin/AdminLayout';
+import AdminOverview from './pages/Admin/AdminOverview';
+import AdminUsers from './pages/Admin/AdminUsers';
+import AdminUserDetail from './pages/Admin/AdminUserDetail';
+import AdminActivities from './pages/Admin/AdminActivities';
+import AdminServices from './pages/Admin/AdminServices';
+import AdminWallets from './pages/Admin/AdminWallets';
+import AdminSettings from './pages/Admin/AdminSettings';
+import AdminServiceForms from './pages/Admin/AdminServiceForms';
 
 // Public pages
 import Home from './pages/Home';
@@ -81,6 +90,24 @@ function App() {
         <Route path="/settings" element={<SettingsFull />} />
         <Route path="/dashboard/profile" element={<Profile />} />
         <Route path="/dashboard/digital-products" element={<DigitalProducts />} />
+      </Route>
+
+      {/* Admin */}
+      <Route
+        element={
+          <ProtectedRoute>
+            <AdminLayout />
+          </ProtectedRoute>
+        }
+      >
+        <Route path="/admin" element={<AdminOverview />} />
+        <Route path="/admin/users" element={<AdminUsers />} />
+        <Route path="/admin/users/:id" element={<AdminUserDetail />} />
+        <Route path="/admin/activities" element={<AdminActivities />} />
+        <Route path="/admin/services" element={<AdminServices />} />
+        <Route path="/admin/forms" element={<AdminServiceForms />} />
+        <Route path="/admin/wallets" element={<AdminWallets />} />
+        <Route path="/admin/settings" element={<AdminSettings />} />
       </Route>
 
       {/* Fallback */}

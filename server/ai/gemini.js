@@ -1,26 +1,23 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import AIContext from './context.js';
 
-let client = null;
+const apiKey = 'AIzaSyCDu1WN_2bx2BbYWL-Nx2BSpYPbddT-QVg';
+const genAI = new GoogleGenerativeAI(apiKey);
 
-export function getGeminiClient() {
-  if (client) return client;
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error('Missing GEMINI_API_KEY');
-  client = new GoogleGenerativeAI(apiKey);
-  return client;
+async function getAIResponse(query) {
+  const contextResponse = AIContext.getResponse(query);
+  if (contextResponse) return contextResponse;
+
+  try {
+    const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+    const result = await model.generateContent(query);
+    const response = result.response.text();
+    AIContext.addResponse(query, response);
+    return response;
+  } catch (error) {
+    console.error('AI Error:', error);
+    return 'Sorry, I couldn’t process your request. Please raise a ticket or contact a live agent.';
+  }
 }
 
-export async function generateAnswer(userQuestion, siteContext) {
-  const genAI = getGeminiClient();
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-  const systemPrompt = [
-    'You are DigiLinex Support AI. Answer strictly using provided site context.',
-    'If the answer is not present in the context, say: "I can only answer based on DigiLinex.com content. Please rephrase or check FAQs."',
-    'Avoid hallucinations; do not invent facts. Keep responses concise and helpful.',
-  ].join('\n');
-
-  const prompt = `${systemPrompt}\n\nContext:\n${siteContext}\n\nUser Question:\n${userQuestion}`;
-  const result = await model.generateContent(prompt);
-  const text = result?.response?.text?.() || result?.response?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  return text.trim();
-}
+export { getAIResponse as generateAnswer };

@@ -23,9 +23,11 @@ export default function AdminLayout() {
     .toUpperCase();
 
   const topNavItems = [
+    { path: '/admin/overview', label: 'Overview' },
     { path: '/admin/users', label: 'Users' },
     { path: '/admin/activities', label: 'Activities' },
     { path: '/admin/services', label: 'Services' },
+    { path: '/admin/forms', label: 'Service Forms' },
     { path: '/admin/wallets', label: 'Wallets' },
     { path: '/admin/settings', label: 'Settings' },
   ];

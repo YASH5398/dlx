@@ -4,16 +4,16 @@ import { db } from '../../firebase';
 import { off, onValue, push, ref, runTransaction, set } from 'firebase/database';
 import { useUser } from '../../context/UserContext';
 import { useNotifications } from '../../context/NotificationContext';
-import { useReferral } from '../../hooks/useReferral';
 
-type TabType = 'overview' | 'deposit' | 'withdraw' | 'transactions';
-type DepositMethod = 'usdt' | 'inr' | 'crypto';
-type WithdrawMethod = 'bank' | 'usdt' | 'crypto';
+type DepositMethod = 'usdt' | 'inr';
+type WithdrawMethod = 'usdt' | 'inr';
+type Blockchain = 'bep20' | 'trc20';
+type FlowType = 'deposit' | 'withdraw' | 'swap' | null;
 
 interface Transaction {
   id: string;
   date: string;
-  type: 'deposit' | 'withdraw' | 'service' | 'referral' | 'reward' | 'claim';
+  type: 'deposit' | 'withdraw' | 'swap';
   amount: string;
   currency: string;
   status: 'completed' | 'pending' | 'failed';
@@ -22,44 +22,55 @@ interface Transaction {
 }
 
 export default function Wallet() {
-  const { wallet, refresh } = useWallet();
+  const { wallet } = useWallet();
   const { user } = useUser();
   const { addNotification } = useNotifications();
-  const { totalEarnings } = useReferral();
   const uid = user?.id;
-  const [activeTab, setActiveTab] = useState<TabType>('overview');
-  const [depositMethod, setDepositMethod] = useState<DepositMethod>('usdt');
-  const [withdrawMethod, setWithdrawMethod] = useState<WithdrawMethod>('bank');
+  
+  const [activeFlow, setActiveFlow] = useState<FlowType>(null);
+  const [depositStep, setDepositStep] = useState(1);
+  const [withdrawStep, setWithdrawStep] = useState(1);
+  const [swapStep, setSwapStep] = useState(1);
+  const [depositMethod, setDepositMethod] = useState<DepositMethod | null>(null);
+  const [withdrawMethod, setWithdrawMethod] = useState<WithdrawMethod | null>(null);
+  const [blockchain, setBlockchain] = useState<Blockchain | null>(null);
   const [depositAmount, setDepositAmount] = useState('');
   const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [swapAmount, setSwapAmount] = useState('');
+  const [upi, setUpi] = useState('');
+  const [walletAddress, setWalletAddress] = useState('');
+  const [txHash, setTxHash] = useState('');
+  const [txHashFile, setTxHashFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-
-  // Live transactions and claims
+  const [isTransitioning, setIsTransitioning] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [claims, setClaims] = useState<{ id: string; amount: number; createdAt: number }[]>([]);
-  const [visibleCount, setVisibleCount] = useState(5);
+  const [copySuccess, setCopySuccess] = useState(false);
 
-  // DLX -> USD mock rate (replace with API if available)
   const dlxUsdRate = 0.1;
   const dlxUsdValue = useMemo(() => (wallet?.dlx ?? 0) * dlxUsdRate, [wallet?.dlx]);
-  const totalClaimed = useMemo(() => claims.reduce((s, c) => s + (c.amount || 0), 0), [claims]);
+  const swapUsdtValue = useMemo(() => (parseFloat(swapAmount) || 0) * dlxUsdRate, [swapAmount]);
+
+  const depositAddress = {
+    bep20: '0x85fdfd1a83c4bc9a8c11f3b1308ead5d397d41d3',
+    trc20: 'TH1s69X1MqxJJme6BVPU3XFXhk8QwSXa7M'
+  };
 
   useEffect(() => {
     if (!uid) return;
     const rTx = ref(db, `users/${uid}/wallet/transactions`);
-    const rClaims = ref(db, `users/${uid}/mining/claims`);
 
     const unsubTx = onValue(rTx, (snap) => {
       const val = snap.val() || {};
       const arr = Object.values(val) as any[];
       const mapped: Transaction[] = arr
+        .filter((t: any) => ['deposit', 'withdraw', 'swap'].includes(t.type))
         .map((t: any) => ({
           id: t.id,
           date: t.createdAt ? new Date(t.createdAt).toLocaleString() : t.date || '',
-          type: (t.type as Transaction['type']) ?? 'deposit',
+          type: t.type as Transaction['type'],
           amount: (typeof t.amount === 'number' ? t.amount : parseFloat(t.amount || '0')).toFixed(2),
           currency: t.currency ?? 'USDT',
-          status: (t.status as Transaction['status']) ?? 'completed',
+          status: t.status as Transaction['status'] ?? 'completed',
           description: t.description ?? '',
           createdAt: t.createdAt ?? 0,
         }))
@@ -67,72 +78,78 @@ export default function Wallet() {
       setTransactions(mapped);
     });
 
-    const unsubClaims = onValue(rClaims, (snap) => {
-      const val = snap.val() || {};
-      const arr = Object.values(val) as any[];
-      setClaims(
-        arr
-          .map((c: any) => ({ id: c.id, amount: Number(c.amount) || 0, createdAt: c.createdAt || 0 }))
-          .sort((a, b) => b.createdAt - a.createdAt),
-      );
-    });
-
     return () => {
       off(rTx);
-      off(rClaims);
       try { unsubTx(); } catch {}
-      try { unsubClaims(); } catch {}
     };
   }, [uid]);
 
-  const claimTxs: Transaction[] = useMemo(() =>
-    claims.map((c) => ({
-      id: `claim:${c.id}`,
-      date: new Date(c.createdAt).toLocaleString(),
-      type: 'claim',
-      amount: String(c.amount || 0),
-      currency: 'DLX',
-      status: 'completed',
-      description: 'Daily DLX Mining Reward',
-      createdAt: c.createdAt,
-    })),
-  [claims]);
+  const handleFlowChange = (flow: FlowType) => {
+    setIsTransitioning(true);
+    setTimeout(() => {
+      setActiveFlow(flow);
+      setDepositStep(1);
+      setWithdrawStep(1);
+      setSwapStep(1);
+      setDepositMethod(null);
+      setWithdrawMethod(null);
+      setBlockchain(null);
+      setDepositAmount('');
+      setWithdrawAmount('');
+      setSwapAmount('');
+      setUpi('');
+      setWalletAddress('');
+      setTxHash('');
+      setTxHashFile(null);
+      setIsTransitioning(false);
+    }, 500);
+  };
 
-  const mergedTxs = useMemo(() => {
-    const all = [...transactions, ...claimTxs];
-    return all.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
-  }, [transactions, claimTxs]);
-
-  const recent3 = mergedTxs.slice(0, 3);
-  const visibleTxs = mergedTxs.slice(0, visibleCount);
-  const hasMore = mergedTxs.length > visibleCount;
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    });
+  };
 
   const handleDeposit = async () => {
     const amt = parseFloat(depositAmount);
     if (!uid || !amt || amt <= 0) return;
+    
     setIsProcessing(true);
     const now = Date.now();
     const currency = depositMethod === 'inr' ? 'INR' : 'USDT';
-    const description = depositMethod === 'inr' ? 'Deposit via UPI' : 'Deposit via USDT TRC20';
+    const description = depositMethod === 'inr' 
+      ? 'Deposit via UPI' 
+      : `Deposit via ${blockchain?.toUpperCase()}`;
 
     try {
-      const balPath = depositMethod === 'inr' ? `users/${uid}/wallet/inr` : `users/${uid}/wallet/usdt`;
-      await runTransaction(ref(db, balPath), (curr) => (typeof curr === 'number' ? curr : 0) + amt);
-
       const txRef = push(ref(db, `users/${uid}/wallet/transactions`));
       await set(txRef, {
         id: txRef.key,
         type: 'deposit',
         amount: amt,
         currency,
-        status: 'completed',
-        description,
+        status: 'pending',
+        description: `${description} (Admin Verification Pending)`,
         createdAt: now,
       });
-      try { await addNotification({ type: 'transaction', message: `Deposit successful: +${amt} ${currency}` }, true); } catch {}
-      setDepositAmount('');
+      
+      try { 
+        await addNotification({ 
+          type: 'transaction', 
+          message: `Deposit submitted: ${amt} ${currency} (Awaiting verification)` 
+        }, true); 
+      } catch {}
+      
+      handleFlowChange(null);
     } catch (e: any) {
-      try { await addNotification({ type: 'error', message: e?.message || 'Deposit failed. Please try again.' }, false); } catch {}
+      try { 
+        await addNotification({ 
+          type: 'error', 
+          message: e?.message || 'Deposit submission failed.' 
+        }, false); 
+      } catch {}
     } finally {
       setIsProcessing(false);
     }
@@ -141,10 +158,13 @@ export default function Wallet() {
   const handleWithdraw = async () => {
     const amt = parseFloat(withdrawAmount);
     if (!uid || !amt || amt <= 0) return;
+    
     setIsProcessing(true);
     const now = Date.now();
-    const currency = 'USDT';
-    const description = withdrawMethod === 'bank' ? 'Withdrawal to Bank Account' : withdrawMethod === 'usdt' ? 'Withdrawal to USDT Wallet' : 'Withdrawal to Crypto Wallet';
+    const currency = withdrawMethod === 'inr' ? 'INR' : 'USDT';
+    const description = withdrawMethod === 'inr' 
+      ? 'Withdrawal to UPI' 
+      : `Withdrawal to ${blockchain?.toUpperCase()}`;
 
     try {
       const txRef = push(ref(db, `users/${uid}/wallet/transactions`));
@@ -154,13 +174,72 @@ export default function Wallet() {
         amount: amt,
         currency,
         status: 'pending',
-        description,
+        description: `${description} (Admin Verification Pending)`,
         createdAt: now,
       });
-      try { await addNotification({ type: 'transaction', message: `Withdrawal requested: -${amt} ${currency}` }, true); } catch {}
-      setWithdrawAmount('');
+      
+      try { 
+        await addNotification({ 
+          type: 'transaction', 
+          message: `Withdrawal requested: ${amt} ${currency} (Awaiting verification)` 
+        }, true); 
+      } catch {}
+      
+      handleFlowChange(null);
     } catch (e: any) {
-      try { await addNotification({ type: 'error', message: e?.message || 'Withdrawal request failed.' }, false); } catch {}
+      try { 
+        await addNotification({ 
+          type: 'error', 
+          message: e?.message || 'Withdrawal request failed.' 
+        }, false); 
+      } catch {}
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleSwap = async () => {
+    const dlxAmount = parseFloat(swapAmount);
+    if (!uid || !dlxAmount || dlxAmount < 50 || dlxAmount > wallet.dlx) return;
+    
+    setIsProcessing(true);
+    const now = Date.now();
+    const usdtAmount = dlxAmount * dlxUsdRate;
+
+    try {
+      await runTransaction(ref(db, `users/${uid}/wallet/dlx`), (curr) => 
+        (typeof curr === 'number' ? curr : 0) - dlxAmount
+      );
+      await runTransaction(ref(db, `users/${uid}/wallet/usdt`), (curr) => 
+        (typeof curr === 'number' ? curr : 0) + usdtAmount
+      );
+
+      const txRef = push(ref(db, `users/${uid}/wallet/transactions`));
+      await set(txRef, {
+        id: txRef.key,
+        type: 'swap',
+        amount: usdtAmount.toFixed(2),
+        currency: 'USDT',
+        status: 'pending',
+        description: `Swapped ${dlxAmount.toFixed(2)} DLX to ${usdtAmount.toFixed(2)} USDT (Admin Verification Pending)`,
+        createdAt: now,
+      });
+      
+      try { 
+        await addNotification({ 
+          type: 'transaction', 
+          message: `Swap submitted: ${dlxAmount.toFixed(2)} DLX to ${usdtAmount.toFixed(2)} USDT (Awaiting verification)` 
+        }, true); 
+      } catch {}
+      
+      handleFlowChange(null);
+    } catch (e: any) {
+      try { 
+        await addNotification({ 
+          type: 'error', 
+          message: e?.message || 'Swap failed.' 
+        }, false); 
+      } catch {}
     } finally {
       setIsProcessing(false);
     }
@@ -168,10 +247,10 @@ export default function Wallet() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'completed': return 'text-emerald-400 bg-emerald-500/20';
-      case 'pending': return 'text-amber-400 bg-amber-500/20';
-      case 'failed': return 'text-red-400 bg-red-500/20';
-      default: return 'text-slate-400 bg-slate-500/20';
+      case 'completed': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+      case 'pending': return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
+      case 'failed': return 'bg-rose-500/20 text-rose-400 border-rose-500/30';
+      default: return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
     }
   };
 
@@ -179,41 +258,25 @@ export default function Wallet() {
     switch (type) {
       case 'deposit':
         return (
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
+          <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center">
             <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m0 0l-4-4m4 4l4-4" />
             </svg>
           </div>
         );
       case 'withdraw':
         return (
-          <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center flex-shrink-0">
-            <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+          <div className="w-10 h-10 rounded-full bg-rose-500/20 flex items-center justify-center">
+            <svg className="w-5 h-5 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 20V4m0 0l4 4m-4-4l-4 4" />
             </svg>
           </div>
         );
-      case 'service':
+      case 'swap':
         return (
-          <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center flex-shrink-0">
-            <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-            </svg>
-          </div>
-        );
-      case 'referral':
-        return (
-          <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center flex-shrink-0">
-            <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
-          </div>
-        );
-      case 'reward':
-        return (
-          <div className="w-10 h-10 rounded-xl bg-yellow-500/10 flex items-center justify-center flex-shrink-0">
-            <svg className="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
+          <div className="w-10 h-10 rounded-full bg-violet-500/20 flex items-center justify-center">
+            <svg className="w-5 h-5 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
             </svg>
           </div>
         );
@@ -222,539 +285,1171 @@ export default function Wallet() {
     }
   };
 
-  const tabs = [
-    { id: 'overview', label: 'Overview', icon: '📊' },
-    { id: 'deposit', label: 'Deposit', icon: '💳' },
-    { id: 'withdraw', label: 'Withdraw', icon: '💰' },
-    { id: 'transactions', label: 'History', icon: '📜' },
-  ];
+  const ProgressBar = ({ currentStep, totalSteps }: { currentStep: number; totalSteps: number }) => (
+    <div className="w-full mb-8">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-sm font-medium text-slate-400">Step {currentStep} of {totalSteps}</span>
+        <span className="text-sm font-medium text-slate-400">{Math.round((currentStep / totalSteps) * 100)}%</span>
+      </div>
+      <div className="flex gap-2">
+        {Array.from({ length: totalSteps }).map((_, idx) => (
+          <div
+            key={idx}
+            className={`h-2 flex-1 rounded-full transition-all duration-500 ${
+              idx < currentStep
+                ? 'bg-gradient-to-r from-violet-500 to-fuchsia-500'
+                : 'bg-slate-700'
+            }`}
+          />
+        ))}
+      </div>
+    </div>
+  );
 
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-950 text-white">
-      <div className="container mx-auto px-4 py-6 sm:py-8 lg:py-10 max-w-7xl">
+  const renderMainPage = () => (
+    <div className={`min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white transition-opacity duration-500 ${isTransitioning ? 'opacity-0' : 'opacity-100'}`}>
+      <div className="container mx-auto px-4 py-8 max-w-lg">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 sm:mb-8">
-          <div>
-            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">Your Wallet</h1>
-            <p className="text-gray-400 text-sm sm:text-base mt-1">Manage your balances, deposits, and withdrawals</p>
+        <div className="mb-8 text-center">
+          <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-violet-400 via-fuchsia-400 to-pink-400 bg-clip-text text-transparent">
+            My Wallet
+          </h1>
+          <p className="text-slate-400">Manage your digital assets securely</p>
+        </div>
+
+        {/* Wallet Cards */}
+        <div className="space-y-4 mb-8">
+          {/* Main Wallet */}
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-violet-500/10 via-fuchsia-500/10 to-pink-500/10 border border-violet-500/20 backdrop-blur-xl p-6 shadow-2xl">
+            <div className="absolute top-0 right-0 w-40 h-40 bg-violet-500/20 rounded-full blur-3xl -z-10" />
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-white">Main Wallet</h3>
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center shadow-lg">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                </svg>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-300">USDT</span>
+                <span className="text-2xl font-bold text-white">{wallet.usdt.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-300">INR</span>
+                <span className="text-2xl font-bold text-white">₹{wallet.inr.toFixed(2)}</span>
+              </div>
+            </div>
           </div>
+
+          {/* Purchase Wallet */}
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-cyan-500/10 via-blue-500/10 to-indigo-500/10 border border-cyan-500/20 backdrop-blur-xl p-6 shadow-2xl">
+            <div className="absolute bottom-0 left-0 w-40 h-40 bg-cyan-500/20 rounded-full blur-3xl -z-10" />
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-white">Purchase Wallet</h3>
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center shadow-lg">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-300">USDT Value</span>
+                <span className="text-2xl font-bold text-white">{dlxUsdValue.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-300">DLX</span>
+                <span className="text-2xl font-bold text-white">{wallet.dlx.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="grid grid-cols-3 gap-4 mb-8">
           <button
-            onClick={refresh}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm font-medium transition-all duration-300 shadow-md hover:shadow-lg"
+            onClick={() => handleFlowChange('deposit')}
+            className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 p-4 shadow-lg hover:shadow-emerald-500/50 transition-all duration-300 hover:scale-105"
           >
-            <svg className="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+            <svg className="w-8 h-8 text-white mx-auto mb-2 relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m0 0l-4-4m4 4l4-4" />
             </svg>
-            Refresh
+            <span className="text-white font-semibold text-sm relative z-10">Deposit</span>
+          </button>
+          
+          <button
+            onClick={() => handleFlowChange('withdraw')}
+            className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-rose-500 to-pink-500 p-4 shadow-lg hover:shadow-rose-500/50 transition-all duration-300 hover:scale-105"
+          >
+            <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+            <svg className="w-8 h-8 text-white mx-auto mb-2 relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 20V4m0 0l4 4m-4-4l-4 4" />
+            </svg>
+            <span className="text-white font-semibold text-sm relative z-10">Withdraw</span>
+          </button>
+          
+          <button
+            onClick={() => handleFlowChange('swap')}
+            className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 p-4 shadow-lg hover:shadow-violet-500/50 transition-all duration-300 hover:scale-105"
+          >
+            <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+            <svg className="w-8 h-8 text-white mx-auto mb-2 relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+            </svg>
+            <span className="text-white font-semibold text-sm relative z-10">Swap</span>
           </button>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex overflow-x-auto gap-2 mb-6 sm:mb-8 scrollbar-hide">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as TabType)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
-                activeTab === tab.id
-                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
-                  : 'bg-gray-800/50 text-gray-300 hover:bg-gray-700 hover:text-white'
-              }`}
-            >
-              <span>{tab.icon}</span>
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Overview Tab */}
-        {activeTab === 'overview' && (
-          <div className="space-y-6 sm:space-y-8">
-            {/* Balance Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* DLX Balance */}
-              <div className="bg-gray-800/50 rounded-xl p-5 border border-gray-700/50 shadow-lg hover:shadow-xl transition-shadow duration-300">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-2xl">
-                    💎
-                  </div>
-                  <span className="px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-300 text-xs font-medium">DLX TOKEN</span>
-                </div>
-                <p className="text-gray-400 text-sm mb-1">DLX Balance</p>
-                <p className="text-3xl font-bold text-white">{wallet.dlx.toFixed(2)}</p>
-                <p className="text-cyan-300 text-sm mt-1">≈ ${dlxUsdValue.toFixed(2)} USD</p>
-              </div>
-
-              {/* USDT Balance */}
-              <div className="bg-gray-800/50 rounded-xl p-5 border border-gray-700/50 shadow-lg hover:shadow-xl transition-shadow duration-300">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center text-2xl">
-                    💵
-                  </div>
-                  <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-medium">USDT</span>
-                </div>
-                <p className="text-gray-400 text-sm mb-1">USDT Balance</p>
-                <p className="text-3xl font-bold text-white">{wallet.usdt.toFixed(2)}</p>
-                <p className="text-emerald-300 text-sm mt-1">Tether USD</p>
-              </div>
-
-              {/* INR Balance */}
-              <div className="bg-gray-800/50 rounded-xl p-5 border border-gray-700/50 shadow-lg hover:shadow-xl transition-shadow duration-300">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center text-2xl">
-                    💰
-                  </div>
-                  <span className="px-3 py-1 rounded-full bg-purple-500/20 text-purple-300 text-xs font-medium">INR</span>
-                </div>
-                <p className="text-gray-400 text-sm mb-1">INR Balance</p>
-                <p className="text-3xl font-bold text-white">₹{wallet.inr.toFixed(2)}</p>
-                <p className="text-purple-300 text-sm mt-1">Indian Rupee</p>
-              </div>
-            </div>
-
-            {/* Overview Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-gray-800/50 rounded-xl p-5 border border-gray-700/50 shadow-md hover:shadow-lg transition-shadow duration-300">
-                <p className="text-gray-400 text-sm">Total Claimed</p>
-                <p className="text-white font-bold text-2xl mt-1">{totalClaimed.toFixed(0)} DLX</p>
-              </div>
-              <div className="bg-gray-800/50 rounded-xl p-5 border border-gray-700/50 shadow-md hover:shadow-lg transition-shadow duration-300">
-                <p className="text-gray-400 text-sm">Total Commissions</p>
-                <p className="text-white font-bold text-2xl mt-1">${totalEarnings.toFixed(2)} USD</p>
-              </div>
-              <div className="bg-gray-800/50 rounded-xl p-5 border border-gray-700/50 shadow-md hover:shadow-lg transition-shadow duration-300">
-                <p className="text-gray-400 text-sm">Available Balance</p>
-                <p className="text-white font-bold text-2xl mt-1">${wallet.usdt.toFixed(2)} USDT • ₹{wallet.inr.toFixed(2)}</p>
-              </div>
-            </div>
-
-            {/* Quick Actions */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <button
-                onClick={() => setActiveTab('deposit')}
-                className="group bg-gray-800/50 rounded-xl p-5 hover:bg-gray-700/70 transition-all duration-300 shadow-md hover:shadow-lg border border-gray-700/50"
-              >
-                <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform duration-300">
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                </div>
-                <p className="text-white font-semibold text-lg">Deposit Funds</p>
-                <p className="text-gray-400 text-sm mt-1">Add money to wallet</p>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('withdraw')}
-                className="group bg-gray-800/50 rounded-xl p-5 hover:bg-gray-700/70 transition-all duration-300 shadow-md hover:shadow-lg border border-gray-700/50"
-              >
-                <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform duration-300">
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-                  </svg>
-                </div>
-                <p className="text-white font-semibold text-lg">Withdraw Funds</p>
-                <p className="text-gray-400 text-sm mt-1">Transfer to account</p>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('transactions')}
-                className="group bg-gray-800/50 rounded-xl p-5 hover:bg-gray-700/70 transition-all duration-300 shadow-md hover:shadow-lg border border-gray-700/50"
-              >
-                <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform duration-300">
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                  </svg>
-                </div>
-                <p className="text-white font-semibold text-lg">View History</p>
-                <p className="text-gray-400 text-sm mt-1">All transactions</p>
-              </button>
-            </div>
-
-            {/* Recent Activity */}
-            <div className="bg-gray-800/50 rounded-xl p-5 border border-gray-700/50 shadow-md">
-              <div className="flex items-center justify-between mb-5">
-                <h3 className="text-xl font-bold text-white">Recent Activity</h3>
-                <button
-                  onClick={() => setActiveTab('transactions')}
-                  className="text-sm text-blue-400 hover:text-blue-300 font-medium transition-colors duration-300"
-                >
-                  View All →
-                </button>
-              </div>
-              <div className="space-y-3">
-                {recent3.map((tx) => (
-                  <div key={tx.id} className="flex items-center gap-3 p-4 rounded-lg bg-gray-900/50 hover:bg-gray-900/70 transition-all duration-300 shadow-sm">
-                    {getTypeIcon(tx.type)}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-3 mb-2">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-white font-semibold text-sm truncate">{tx.description}</p>
-                          <div className="flex items-center gap-2 text-xs text-gray-400 mt-1">
-                            <span className="flex items-center gap-1">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                              </svg>
-                              {tx.date}
-                            </span>
-                            <span className="capitalize px-2 py-0.5 rounded bg-gray-900/50 text-xs">{tx.type}</span>
-                          </div>
-                        </div>
-                        <div className="text-right flex-shrink-0">
-                          <p className={`text-sm font-bold ${tx.type === 'withdraw' || tx.type === 'service' ? 'text-red-400' : 'text-emerald-400'}`}>
-                            {tx.type === 'withdraw' || tx.type === 'service' ? '-' : '+'}{tx.amount}
-                          </p>
-                          <p className="text-gray-500 text-xs">{tx.currency}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className={`inline-block px-2 py-0.5 rounded-md text-xs font-medium ${getStatusColor(tx.status)}`}>
-                          {tx.status.toUpperCase()}
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <button className="text-xs text-blue-400 hover:text-blue-300 font-medium transition-colors duration-300">
-                            Details
-                          </button>
-                          {tx.status === 'completed' && (
-                            <>
-                              <span className="text-gray-700">•</span>
-                              <button className="text-xs text-gray-400 hover:text-white font-medium transition-colors duration-300">
-                                Receipt
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Deposit Tab */}
-        {activeTab === 'deposit' && (
-          <div className="max-w-2xl mx-auto">
-            <div className="bg-gray-800/50 rounded-xl p-6 space-y-6 border border-gray-700/50 shadow-lg">
-              <h3 className="text-2xl font-bold text-white">Deposit Funds</h3>
-              {/* Method Selection */}
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-3">Select Method</label>
-                <div className="grid grid-cols-3 gap-3">
-                  <button
-                    onClick={() => setDepositMethod('usdt')}
-                    className={`p-4 rounded-lg transition-all duration-300 shadow-md hover:shadow-lg ${
-                      depositMethod === 'usdt' ? 'bg-gradient-to-br from-blue-600/30 to-cyan-600/30 ring-2 ring-blue-500' : 'bg-gray-900/50 hover:bg-gray-900/70'
-                    }`}
-                  >
-                    <div className="text-3xl mb-2">💵</div>
-                    <p className="text-white font-semibold text-sm">USDT</p>
-                    <p className="text-gray-400 text-xs mt-1 hidden sm:block">TRC20 / ERC20</p>
-                  </button>
-                  <button
-                    onClick={() => setDepositMethod('inr')}
-                    className={`p-4 rounded-lg transition-all duration-300 shadow-md hover:shadow-lg ${
-                      depositMethod === 'inr' ? 'bg-gradient-to-br from-purple-600/30 to-pink-600/30 ring-2 ring-purple-500' : 'bg-gray-900/50 hover:bg-gray-900/70'
-                    }`}
-                  >
-                    <div className="text-3xl mb-2">🇮🇳</div>
-                    <p className="text-white font-semibold text-sm">INR</p>
-                    <p className="text-gray-400 text-xs mt-1 hidden sm:block">UPI / Bank</p>
-                  </button>
-                  <button
-                    onClick={() => setDepositMethod('crypto')}
-                    className={`p-4 rounded-lg transition-all duration-300 shadow-md hover:shadow-lg ${
-                      depositMethod === 'crypto' ? 'bg-gradient-to-br from-orange-600/30 to-yellow-600/30 ring-2 ring-orange-500' : 'bg-gray-900/50 hover:bg-gray-900/70'
-                    }`}
-                  >
-                    <div className="text-3xl mb-2">₿</div>
-                    <p className="text-white font-semibold text-sm">Crypto</p>
-                    <p className="text-gray-400 text-xs mt-1 hidden sm:block">BTC / ETH</p>
-                  </button>
-                </div>
-              </div>
-              {/* Amount Input */}
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-3">Enter Amount</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    placeholder="0.00"
-                    value={depositAmount}
-                    onChange={(e) => setDepositAmount(e.target.value)}
-                    className="w-full px-4 py-3 rounded-lg bg-gray-900/50 text-white text-xl font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all duration-300"
-                  />
-                  <div className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 font-medium text-sm">{depositMethod.toUpperCase()}</div>
-                </div>
-                <div className="flex flex-wrap gap-2 mt-3">
-                  {[10, 50, 100, 500].map((amount) => (
-                    <button
-                      key={amount}
-                      onClick={() => setDepositAmount(amount.toString())}
-                      className="px-3 py-1.5 rounded-lg bg-gray-900/50 text-gray-300 text-sm hover:bg-gray-900/70 transition-all duration-300"
-                    >
-                      +{amount}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {/* Instructions */}
-              <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                <div className="flex gap-3">
-                  <svg className="w-5 h-5 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <div>
-                    <p className="text-white font-semibold text-sm mb-2">Deposit Instructions</p>
-                    <ul className="text-gray-300 text-xs space-y-1">
-                      <li>• Minimum deposit: $10 / ₹500</li>
-                      <li>• Deposits credited within 5-10 minutes</li>
-                      <li>• Double-check wallet address before sending</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-              {/* Submit Button */}
-              <button
-                onClick={handleDeposit}
-                disabled={!depositAmount || parseFloat(depositAmount) <= 0 || isProcessing}
-                className={`w-full py-3 rounded-lg font-semibold text-base transition-all duration-300 shadow-md ${
-                  !depositAmount || parseFloat(depositAmount) <= 0 || isProcessing
-                    ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 hover:shadow-lg'
-                }`}
-              >
-                {isProcessing ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    Processing...
-                  </span>
-                ) : (
-                  'Proceed to Deposit'
-                )}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Withdraw Tab */}
-        {activeTab === 'withdraw' && (
-          <div className="max-w-2xl mx-auto">
-            <div className="bg-gray-800/50 rounded-xl p-6 space-y-6 border border-gray-700/50 shadow-lg">
-              <h3 className="text-2xl font-bold text-white">Withdraw Funds</h3>
-              {/* Method Selection */}
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-3">Select Method</label>
-                <div className="grid grid-cols-3 gap-3">
-                  <button
-                    onClick={() => setWithdrawMethod('bank')}
-                    className={`p-4 rounded-lg transition-all duration-300 shadow-md hover:shadow-lg ${
-                      withdrawMethod === 'bank' ? 'bg-gradient-to-br from-blue-600/30 to-cyan-600/30 ring-2 ring-blue-500' : 'bg-gray-900/50 hover:bg-gray-900/70'
-                    }`}
-                  >
-                    <div className="text-3xl mb-2">🏦</div>
-                    <p className="text-white font-semibold text-sm">Bank</p>
-                    <p className="text-gray-400 text-xs mt-1 hidden sm:block">Direct transfer</p>
-                  </button>
-                  <button
-                    onClick={() => setWithdrawMethod('usdt')}
-                    className={`p-4 rounded-lg transition-all duration-300 shadow-md hover:shadow-lg ${
-                      withdrawMethod === 'usdt' ? 'bg-gradient-to-br from-purple-600/30 to-pink-600/30 ring-2 ring-purple-500' : 'bg-gray-900/50 hover:bg-gray-900/70'
-                    }`}
-                  >
-                    <div className="text-3xl mb-2">💵</div>
-                    <p className="text-white font-semibold text-sm">USDT</p>
-                    <p className="text-gray-400 text-xs mt-1 hidden sm:block">TRC20 / ERC20</p>
-                  </button>
-                  <button
-                    onClick={() => setWithdrawMethod('crypto')}
-                    className={`p-4 rounded-lg transition-all duration-300 shadow-md hover:shadow-lg ${
-                      withdrawMethod === 'crypto' ? 'bg-gradient-to-br from-orange-600/30 to-yellow-600/30 ring-2 ring-orange-500' : 'bg-gray-900/50 hover:bg-gray-900/70'
-                    }`}
-                  >
-                    <div className="text-3xl mb-2">₿</div>
-                    <p className="text-white font-semibold text-sm">Crypto</p>
-                    <p className="text-gray-400 text-xs mt-1 hidden sm:block">BTC / ETH</p>
-                  </button>
-                </div>
-              </div>
-              {/* Available Balance */}
-              <div className="p-5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                <p className="text-gray-400 text-sm mb-1">Available Balance</p>
-                <p className="text-2xl font-bold text-white">${wallet.usdt.toFixed(2)} USDT</p>
-              </div>
-              {/* Amount Input */}
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-3">Enter Amount</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    placeholder="0.00"
-                    value={withdrawAmount}
-                    onChange={(e) => setWithdrawAmount(e.target.value)}
-                    className="w-full px-4 py-3 rounded-lg bg-gray-900/50 text-white text-xl font-bold focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all duration-300 pr-16"
-                  />
-                  <button
-                    onClick={() => setWithdrawAmount(wallet.usdt.toString())}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 px-3 py-1 rounded-md bg-purple-500/20 text-purple-300 text-xs font-medium hover:bg-purple-500/30 transition-all duration-300"
-                  >
-                    MAX
-                  </button>
-                </div>
-              </div>
-              {/* Wallet Address / Account Details */}
-              {withdrawMethod === 'bank' ? (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">Account Number</label>
-                    <input
-                      type="text"
-                      placeholder="Enter account number"
-                      className="w-full px-4 py-3 rounded-lg bg-gray-900/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all duration-300"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">IFSC Code</label>
-                    <input
-                      type="text"
-                      placeholder="Enter IFSC code"
-                      className="w-full px-4 py-3 rounded-lg bg-gray-900/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all duration-300"
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Wallet Address</label>
-                  <input
-                    type="text"
-                    placeholder="Enter wallet address"
-                    className="w-full px-4 py-3 rounded-lg bg-gray-900/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all duration-300"
-                  />
-                </div>
-              )}
-              {/* Warning */}
-              <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                <div className="flex gap-3">
-                  <svg className="w-5 h-5 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                  <div>
-                    <p className="text-white font-semibold text-sm mb-2">Important Notes</p>
-                    <ul className="text-gray-300 text-xs space-y-1">
-                      <li>• Minimum withdrawal: $20 / ₹1000</li>
-                      <li>• Processed within 24-48 hours</li>
-                      <li>• Verify account details before submitting</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-              {/* Submit Button */}
-              <button
-                onClick={handleWithdraw}
-                disabled={!withdrawAmount || parseFloat(withdrawAmount) <= 0 || isProcessing}
-                className={`w-full py-3 rounded-lg font-semibold text-base transition-all duration-300 shadow-md ${
-                  !withdrawAmount || parseFloat(withdrawAmount) <= 0 || isProcessing
-                    ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700 hover:shadow-lg'
-                }`}
-              >
-                {isProcessing ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    Processing...
-                  </span>
-                ) : (
-                  'Request Withdrawal'
-                )}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Transactions Tab */}
-        {activeTab === 'transactions' && (
-          <div className="bg-gray-800/50 rounded-xl border border-gray-700/50 shadow-lg overflow-hidden">
-            <div className="p-5 border-b border-gray-700/50">
-              <h3 className="text-2xl font-bold text-white">Transaction History</h3>
-              <p className="text-gray-400 text-sm mt-1">View all your wallet transactions</p>
-            </div>
-            <div className="divide-y divide-gray-700/50">
-              {visibleTxs.map((tx) => (
-                <div key={tx.id} className="p-4 hover:bg-gray-900/30 transition-all duration-300">
-                  <div className="flex items-start gap-3">
-                    {getTypeIcon(tx.type)}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-3 mb-2">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-white font-semibold text-sm truncate">{tx.description}</p>
-                          <div className="flex items-center gap-2 text-xs text-gray-400 mt-1">
-                            <span className="flex items-center gap-1">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                              </svg>
-                              {tx.date}
-                            </span>
-                            <span className="capitalize px-2 py-0.5 rounded bg-gray-900/50 text-xs">{tx.type}</span>
-                          </div>
-                        </div>
-                        <div className="text-right flex-shrink-0">
-                          <p className={`text-sm font-bold ${tx.type === 'withdraw' || tx.type === 'service' ? 'text-red-400' : 'text-emerald-400'}`}>
-                            {tx.type === 'withdraw' || tx.type === 'service' ? '-' : '+'}{tx.amount}
-                          </p>
-                          <p className="text-gray-500 text-xs">{tx.currency}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className={`inline-block px-2 py-0.5 rounded-md text-xs font-medium ${getStatusColor(tx.status)}`}>
-                          {tx.status.toUpperCase()}
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <button className="text-xs text-blue-400 hover:text-blue-300 font-medium transition-colors duration-300">
-                            Details
-                          </button>
-                          {tx.status === 'completed' && (
-                            <>
-                              <span className="text-gray-700">•</span>
-                              <button className="text-xs text-gray-400 hover:text-white font-medium transition-colors duration-300">
-                                Receipt
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="p-4 flex justify-center border-t border-gray-700/50">
-              {hasMore ? (
-                <button onClick={() => setVisibleCount((v) => v + 5)} className="px-5 py-2 rounded-lg bg-gray-900/50 text-white text-sm font-medium hover:bg-gray-900/70 transition-all duration-300 shadow-md">
-                  Load More Transactions
-                </button>
-              ) : (
-                <span className="text-gray-400 text-sm">No more transactions</span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Auto-update Notice */}
-        <div className="mt-6 rounded-lg bg-blue-500/10 p-4 border border-blue-500/20 shadow-md">
-          <div className="flex items-center gap-3">
-            <svg className="w-5 h-5 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        {/* Recent Transactions */}
+        <div className="rounded-2xl bg-slate-800/50 border border-slate-700/50 backdrop-blur-xl p-6 shadow-2xl">
+          <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <svg className="w-6 h-6 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
             </svg>
-            <p className="text-sm text-gray-300">Balances and transactions update live. Click "Refresh" for manual sync.</p>
+            Recent Transactions
+          </h3>
+          <div className="space-y-3">
+            {transactions.length === 0 ? (
+              <div className="text-center py-8">
+                <svg className="w-16 h-16 text-slate-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                </svg>
+                <p className="text-slate-400">No transactions yet</p>
+              </div>
+            ) : (
+              transactions.slice(0, 5).map((tx) => (
+                <div key={tx.id} className="flex items-center gap-4 p-4 rounded-xl bg-slate-700/30 hover:bg-slate-700/50 border border-slate-600/30 transition-all duration-200">
+                  {getTypeIcon(tx.type)}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <p className="text-white font-medium text-sm truncate">{tx.description}</p>
+                      <p className={`text-sm font-bold whitespace-nowrap ${tx.type === 'withdraw' ? 'text-rose-400' : 'text-emerald-400'}`}>
+                        {tx.type === 'withdraw' ? '-' : '+'}{tx.amount} {tx.currency}
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-slate-400">{tx.date}</span>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(tx.status)}`}>
+                        {tx.status.toUpperCase()}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
     </div>
+  );
+
+  const renderDepositFlow = () => {
+    const getTotalSteps = () => {
+      if (depositMethod === 'inr') return 3;
+      if (depositMethod === 'usdt') return 5;
+      return 5;
+    };
+
+    return (
+      <div className={`min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white transition-opacity duration-500 ${isTransitioning ? 'opacity-0' : 'opacity-100'}`}>
+        <div className="container mx-auto px-4 py-8 max-w-lg min-h-screen flex flex-col">
+          {/* Header */}
+          <div className="mb-6">
+            <button
+              onClick={() => depositStep === 1 ? handleFlowChange(null) : setDepositStep(depositStep - 1)}
+              className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors mb-4"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              <span>Back</span>
+            </button>
+            <h2 className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
+              Deposit Funds
+            </h2>
+          </div>
+
+          <ProgressBar currentStep={depositStep} totalSteps={getTotalSteps()} />
+
+          <div className="flex-1 flex flex-col">
+            {/* Step 1: Select Deposit Method */}
+            {depositStep === 1 && (
+              <div className="space-y-6 animate-fadeIn">
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Select Deposit Method</h3>
+                  <p className="text-slate-400 text-sm">Choose how you want to deposit funds</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <button
+                    onClick={() => {
+                      setDepositMethod('usdt');
+                      setDepositStep(2);
+                    }}
+                    className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-500/20 to-yellow-500/20 border-2 border-amber-500/30 hover:border-amber-500 p-8 transition-all duration-300 hover:scale-105"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-br from-amber-500/0 to-yellow-500/0 group-hover:from-amber-500/10 group-hover:to-yellow-500/10 transition-all duration-300" />
+                    <div className="text-6xl mb-4">💵</div>
+                    <p className="text-white font-bold text-lg">USDT</p>
+                    <p className="text-slate-400 text-xs mt-1">Cryptocurrency</p>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setDepositMethod('inr');
+                      setDepositStep(2);
+                    }}
+                    className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-500/20 to-indigo-500/20 border-2 border-blue-500/30 hover:border-blue-500 p-8 transition-all duration-300 hover:scale-105"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-br from-blue-500/0 to-indigo-500/0 group-hover:from-blue-500/10 group-hover:to-indigo-500/10 transition-all duration-300" />
+                    <div className="text-6xl mb-4">🇮🇳</div>
+                    <p className="text-white font-bold text-lg">INR</p>
+                    <p className="text-slate-400 text-xs mt-1">Indian Rupee</p>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Select Blockchain (USDT) or Enter Amount (INR) */}
+            {depositStep === 2 && depositMethod === 'usdt' && (
+              <div className="space-y-6 animate-fadeIn">
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Select Blockchain Network</h3>
+                  <p className="text-slate-400 text-sm">Choose the network for your deposit</p>
+                </div>
+
+                <div className="space-y-4">
+                  <button
+                    onClick={() => {
+                      setBlockchain('bep20');
+                      setDepositStep(3);
+                    }}
+                    className="group w-full relative overflow-hidden rounded-2xl bg-gradient-to-r from-yellow-500/20 to-amber-500/20 border-2 border-yellow-500/30 hover:border-yellow-500 p-6 transition-all duration-300 hover:scale-102 text-left"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/0 to-amber-500/0 group-hover:from-yellow-500/10 group-hover:to-amber-500/10 transition-all duration-300" />
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-yellow-500 to-amber-500 flex items-center justify-center flex-shrink-0">
+                        <span className="text-2xl">🔗</span>
+                      </div>
+                      <div>
+                        <p className="text-white font-bold text-lg">Binance Smart Chain</p>
+                        <p className="text-slate-400 text-sm">BEP20 Network</p>
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setBlockchain('trc20');
+                      setDepositStep(3);
+                    }}
+                    className="group w-full relative overflow-hidden rounded-2xl bg-gradient-to-r from-red-500/20 to-rose-500/20 border-2 border-red-500/30 hover:border-red-500 p-6 transition-all duration-300 hover:scale-102 text-left"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-red-500/0 to-rose-500/0 group-hover:from-red-500/10 group-hover:to-rose-500/10 transition-all duration-300" />
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-red-500 to-rose-500 flex items-center justify-center flex-shrink-0">
+                        <span className="text-2xl">⚡</span>
+                      </div>
+                      <div>
+                        <p className="text-white font-bold text-lg">TRON Network</p>
+                        <p className="text-slate-400 text-sm">TRC20 Network</p>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {depositStep === 2 && depositMethod === 'inr' && (
+              <div className="space-y-6 animate-fadeIn">
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Enter Deposit Amount</h3>
+                  <p className="text-slate-400 text-sm">How much would you like to deposit?</p>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Amount in INR</label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">₹</span>
+                      <input
+                        type="number"
+                        placeholder="0.00"
+                        value={depositAmount}
+                        onChange={(e) => setDepositAmount(e.target.value)}
+                        className="w-full pl-10 pr-16 py-4 rounded-xl bg-slate-800 border-2 border-slate-700 focus:border-emerald-500 text-white text-lg font-semibold focus:outline-none transition-all"
+                      />
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-medium">INR</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {[500, 1000, 5000, 10000].map((amount) => (
+                      <button
+                        key={amount}
+                        onClick={() => setDepositAmount(amount.toString())}
+                        className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium transition-all"
+                      >
+                        ₹{amount}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setDepositStep(3)}
+                  disabled={!depositAmount || parseFloat(depositAmount) <= 0}
+                  className="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-lg shadow-lg hover:shadow-emerald-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none"
+                >
+                  Continue
+                </button>
+              </div>
+            )}
+
+            {/* Step 3: Enter Amount (USDT) */}
+            {depositStep === 3 && depositMethod === 'usdt' && (
+              <div className="space-y-6 animate-fadeIn">
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Enter Deposit Amount</h3>
+                  <p className="text-slate-400 text-sm">How much USDT would you like to deposit?</p>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Amount in USDT</label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">$</span>
+                      <input
+                        type="number"
+                        placeholder="0.00"
+                        value={depositAmount}
+                        onChange={(e) => setDepositAmount(e.target.value)}
+                        className="w-full pl-10 pr-20 py-4 rounded-xl bg-slate-800 border-2 border-slate-700 focus:border-emerald-500 text-white text-lg font-semibold focus:outline-none transition-all"
+                      />
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-medium">USDT</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {[10, 50, 100, 500].map((amount) => (
+                      <button
+                        key={amount}
+                        onClick={() => setDepositAmount(amount.toString())}
+                        className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium transition-all"
+                      >
+                        ${amount}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setDepositStep(4)}
+                  disabled={!depositAmount || parseFloat(depositAmount) <= 0}
+                  className="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-lg shadow-lg hover:shadow-emerald-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none"
+                >
+                  Continue
+                </button>
+              </div>
+            )}
+
+            {/* Step 3: Confirm Deposit (INR) */}
+            {depositStep === 3 && depositMethod === 'inr' && (
+              <div className="space-y-6 animate-fadeIn">
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Confirm Deposit Details</h3>
+                  <p className="text-slate-400 text-sm">Review and submit your deposit request</p>
+                </div>
+
+                <div className="rounded-2xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-500/30 p-6 space-y-4">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-700">
+                    <span className="text-slate-400">Deposit Amount</span>
+                    <span className="text-white font-bold text-xl">₹{depositAmount}</span>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-emerald-400 text-sm">
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                      <span>UPI Payment: digilinex@axl</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-amber-400 text-sm">
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                      <span>Admin verification required (24-48 hours)</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Your UPI ID *</label>
+                    <input
+                      type="text"
+                      placeholder="yourname@upi"
+                      value={upi}
+                      onChange={(e) => setUpi(e.target.value)}
+                      className="w-full px-4 py-3 rounded-xl bg-slate-800 border-2 border-slate-700 focus:border-blue-500 text-white focus:outline-none transition-all"
+                    />
+                    <p className="text-xs text-slate-400 mt-1">Enter the UPI ID you'll use for payment</p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleDeposit}
+                  disabled={isProcessing || !upi}
+                  className="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-lg shadow-lg hover:shadow-emerald-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none flex items-center justify-center gap-2"
+                >
+                  {isProcessing ? (
+                    <>
+                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Processing...
+                    </>
+                  ) : (
+                    'Submit Deposit Request'
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* Step 4: Show Deposit Address (USDT) */}
+            {depositStep === 4 && depositMethod === 'usdt' && blockchain && (
+              <div className="space-y-6 animate-fadeIn">
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Deposit Address</h3>
+                  <p className="text-slate-400 text-sm">Send USDT to this address on {blockchain.toUpperCase()} network</p>
+                </div>
+
+                <div className="rounded-2xl bg-gradient-to-br from-amber-500/10 to-yellow-500/10 border border-amber-500/30 p-6 space-y-4">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-700">
+                    <span className="text-slate-400">Network</span>
+                    <span className="text-white font-bold">{blockchain.toUpperCase()}</span>
+                  </div>
+                  
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-700">
+                    <span className="text-slate-400">Amount</span>
+                    <span className="text-white font-bold text-xl">{depositAmount} USDT</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Deposit Address</label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={depositAddress[blockchain]}
+                        readOnly
+                        className="w-full pr-12 px-4 py-3 rounded-xl bg-slate-800 border-2 border-slate-700 text-white text-sm font-mono focus:outline-none"
+                      />
+                      <button
+                        onClick={() => copyToClipboard(depositAddress[blockchain])}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg bg-slate-700 hover:bg-slate-600 transition-all"
+                      >
+                        {copySuccess ? (
+                          <svg className="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        ) : (
+                          <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
+                    <div className="flex gap-3">
+                      <svg className="w-6 h-6 text-amber-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      <div className="text-sm text-amber-200">
+                        <p className="font-semibold mb-1">Important</p>
+                        <ul className="space-y-1 text-xs">
+                          <li>• Only send USDT on {blockchain.toUpperCase()} network</li>
+                          <li>• Sending other tokens may result in loss</li>
+                          <li>• Minimum deposit: 10 USDT</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setDepositStep(5)}
+                  className="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-lg shadow-lg hover:shadow-emerald-500/50 transition-all"
+                >
+                  I've Sent the Payment
+                </button>
+              </div>
+            )}
+
+            {/* Step 5: Upload Transaction Hash (USDT) */}
+            {depositStep === 5 && depositMethod === 'usdt' && (
+              <div className="space-y-6 animate-fadeIn">
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Confirm Payment</h3>
+                  <p className="text-slate-400 text-sm">Enter your transaction details for verification</p>
+                </div>
+
+                <div className="rounded-2xl bg-gradient-to-br from-emerald-500/10 to-teal-500/10 border border-emerald-500/30 p-6 space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Transaction Hash *</label>
+                    <textarea
+                      placeholder="Paste your transaction hash here (0x...)"
+                      value={txHash}
+                      onChange={(e) => setTxHash(e.target.value)}
+                      rows={3}
+                      className="w-full px-4 py-3 rounded-xl bg-slate-800 border-2 border-slate-700 focus:border-emerald-500 text-white text-sm font-mono focus:outline-none transition-all resize-none"
+                    />
+                    <p className="text-xs text-slate-400 mt-1">Find this in your wallet's transaction history</p>
+                  </div>
+
+                  <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+                    <div className="flex gap-3">
+                      <svg className="w-6 h-6 text-blue-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                      <div className="text-sm text-blue-200">
+                        <p className="font-semibold mb-1">Verification Process</p>
+                        <p className="text-xs">Your deposit will be verified by our admin team within 24-48 hours. You'll receive a notification once approved.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleDeposit}
+                  disabled={isProcessing || !txHash}
+                  className="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-lg shadow-lg hover:shadow-emerald-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none flex items-center justify-center gap-2"
+                >
+                  {isProcessing ? (
+                    <>
+                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Submitting...
+                    </>
+                  ) : (
+                    'Submit Deposit Request'
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderWithdrawFlow = () => {
+    const getTotalSteps = () => {
+      if (withdrawMethod === 'inr') return 3;
+      if (withdrawMethod === 'usdt') return 4;
+      return 4;
+    };
+
+    return (
+      <div className={`min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white transition-opacity duration-500 ${isTransitioning ? 'opacity-0' : 'opacity-100'}`}>
+        <div className="container mx-auto px-4 py-8 max-w-lg min-h-screen flex flex-col">
+          {/* Header */}
+          <div className="mb-6">
+            <button
+              onClick={() => withdrawStep === 1 ? handleFlowChange(null) : setWithdrawStep(withdrawStep - 1)}
+              className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors mb-4"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              <span>Back</span>
+            </button>
+            <h2 className="text-3xl font-bold bg-gradient-to-r from-rose-400 to-pink-400 bg-clip-text text-transparent">
+              Withdraw Funds
+            </h2>
+          </div>
+
+          <ProgressBar currentStep={withdrawStep} totalSteps={getTotalSteps()} />
+
+          <div className="flex-1 flex flex-col">
+            {/* Step 1: Enter Amount */}
+            {withdrawStep === 1 && (
+              <div className="space-y-6 animate-fadeIn">
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Enter Withdrawal Amount</h3>
+                  <p className="text-slate-400 text-sm">How much would you like to withdraw?</p>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="rounded-xl bg-slate-800/50 border border-slate-700 p-4">
+                    <div className="flex items-center justify-between text-sm mb-2">
+                      <span className="text-slate-400">Available Balance</span>
+                      <span className="text-white font-bold">{wallet.usdt.toFixed(2)} USDT</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Withdrawal Amount</label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">$</span>
+                      <input
+                        type="number"
+                        placeholder="0.00"
+                        value={withdrawAmount}
+                        onChange={(e) => setWithdrawAmount(e.target.value)}
+                        className="w-full pl-10 pr-20 py-4 rounded-xl bg-slate-800 border-2 border-slate-700 focus:border-rose-500 text-white text-lg font-semibold focus:outline-none transition-all"
+                      />
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-medium">USDT</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap gap-2">
+                      {[10, 50, 100].map((amount) => (
+                        <button
+                          key={amount}
+                          onClick={() => setWithdrawAmount(amount.toString())}
+                          className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium transition-all"
+                        >
+                          ${amount}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => setWithdrawAmount(wallet.usdt.toFixed(2))}
+                      className="px-4 py-2 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 text-sm font-medium transition-all"
+                    >
+                      MAX
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setWithdrawStep(2)}
+                  disabled={!withdrawAmount || parseFloat(withdrawAmount) <= 0 || parseFloat(withdrawAmount) > wallet.usdt}
+                  className="w-full py-4 rounded-xl bg-gradient-to-r from-rose-500 to-pink-500 text-white font-bold text-lg shadow-lg hover:shadow-rose-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none"
+                >
+                  Continue
+                </button>
+              </div>
+            )}
+
+            {/* Step 2: Select Withdrawal Method */}
+            {withdrawStep === 2 && (
+              <div className="space-y-6 animate-fadeIn">
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Select Payment Method</h3>
+                  <p className="text-slate-400 text-sm">Choose how you want to receive funds</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <button
+                    onClick={() => {
+                      setWithdrawMethod('usdt');
+                      setWithdrawStep(3);
+                    }}
+                    className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-500/20 to-yellow-500/20 border-2 border-amber-500/30 hover:border-amber-500 p-8 transition-all duration-300 hover:scale-105"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-br from-amber-500/0 to-yellow-500/0 group-hover:from-amber-500/10 group-hover:to-yellow-500/10 transition-all duration-300" />
+                    <div className="text-6xl mb-4">💵</div>
+                    <p className="text-white font-bold text-lg">USDT</p>
+                    <p className="text-slate-400 text-xs mt-1">Cryptocurrency</p>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setWithdrawMethod('inr');
+                      setWithdrawStep(3);
+                    }}
+                    className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-500/20 to-indigo-500/20 border-2 border-blue-500/30 hover:border-blue-500 p-8 transition-all duration-300 hover:scale-105"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-br from-blue-500/0 to-indigo-500/0 group-hover:from-blue-500/10 group-hover:to-indigo-500/10 transition-all duration-300" />
+                    <div className="text-6xl mb-4">🇮🇳</div>
+                    <p className="text-white font-bold text-lg">INR</p>
+                    <p className="text-slate-400 text-xs mt-1">Indian Rupee</p>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 3: Select Blockchain & Enter Address (USDT) */}
+            {withdrawStep === 3 && withdrawMethod === 'usdt' && !blockchain && (
+              <div className="space-y-6 animate-fadeIn">
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Select Blockchain Network</h3>
+                  <p className="text-slate-400 text-sm">Choose the network for your withdrawal</p>
+                </div>
+
+                <div className="space-y-4">
+                  <button
+                    onClick={() => setBlockchain('bep20')}
+                    className="group w-full relative overflow-hidden rounded-2xl bg-gradient-to-r from-yellow-500/20 to-amber-500/20 border-2 border-yellow-500/30 hover:border-yellow-500 p-6 transition-all duration-300 hover:scale-102 text-left"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/0 to-amber-500/0 group-hover:from-yellow-500/10 group-hover:to-amber-500/10 transition-all duration-300" />
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-yellow-500 to-amber-500 flex items-center justify-center flex-shrink-0">
+                        <span className="text-2xl">🔗</span>
+                      </div>
+                      <div>
+                        <p className="text-white font-bold text-lg">Binance Smart Chain</p>
+                        <p className="text-slate-400 text-sm">BEP20 Network</p>
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => setBlockchain('trc20')}
+                    className="group w-full relative overflow-hidden rounded-2xl bg-gradient-to-r from-red-500/20 to-rose-500/20 border-2 border-red-500/30 hover:border-red-500 p-6 transition-all duration-300 hover:scale-102 text-left"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-red-500/0 to-rose-500/0 group-hover:from-red-500/10 group-hover:to-rose-500/10 transition-all duration-300" />
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-red-500 to-rose-500 flex items-center justify-center flex-shrink-0">
+                        <span className="text-2xl">⚡</span>
+                      </div>
+                      <div>
+                        <p className="text-white font-bold text-lg">TRON Network</p>
+                        <p className="text-slate-400 text-sm">TRC20 Network</p>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {withdrawStep === 3 && withdrawMethod === 'usdt' && blockchain && (
+              <div className="space-y-6 animate-fadeIn">
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Enter Wallet Address</h3>
+                  <p className="text-slate-400 text-sm">Provide your {blockchain.toUpperCase()} wallet address</p>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="rounded-xl bg-slate-800/50 border border-slate-700 p-4 space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-400">Network</span>
+                      <span className="text-white font-bold">{blockchain.toUpperCase()}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-400">Amount</span>
+                      <span className="text-white font-bold">{withdrawAmount} USDT</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Wallet Address *</label>
+                    <textarea
+                      placeholder={`Enter your ${blockchain.toUpperCase()} wallet address`}
+                      value={walletAddress}
+                      onChange={(e) => setWalletAddress(e.target.value)}
+                      rows={3}
+                      className="w-full px-4 py-3 rounded-xl bg-slate-800 border-2 border-slate-700 focus:border-rose-500 text-white text-sm font-mono focus:outline-none transition-all resize-none"
+                    />
+                  </div>
+
+                  <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
+                    <div className="flex gap-3">
+                      <svg className="w-6 h-6 text-amber-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      <div className="text-sm text-amber-200">
+                        <p className="font-semibold mb-1">Important</p>
+                        <ul className="space-y-1 text-xs">
+                          <li>• Double-check your wallet address</li>
+                          <li>• Ensure it matches {blockchain.toUpperCase()} network</li>
+                          <li>• Wrong address = permanent loss of funds</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setWithdrawStep(4)}
+                  disabled={!walletAddress}
+                  className="w-full py-4 rounded-xl bg-gradient-to-r from-rose-500 to-pink-500 text-white font-bold text-lg shadow-lg hover:shadow-rose-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none"
+                >
+                  Continue
+                </button>
+              </div>
+            )}
+
+            {/* Step 3: Enter UPI (INR) */}
+            {withdrawStep === 3 && withdrawMethod === 'inr' && (
+              <div className="space-y-6 animate-fadeIn">
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Enter UPI Details</h3>
+                  <p className="text-slate-400 text-sm">Provide your UPI ID for withdrawal</p>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="rounded-xl bg-slate-800/50 border border-slate-700 p-4">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-400">Withdrawal Amount</span>
+                      <span className="text-white font-bold">₹{(parseFloat(withdrawAmount) * 80).toFixed(2)}</span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">Approx. conversion rate: 1 USDT ≈ ₹80</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">UPI ID *</label>
+                    <input
+                      type="text"
+                      placeholder="yourname@upi"
+                      value={upi}
+                      onChange={(e) => setUpi(e.target.value)}
+                      className="w-full px-4 py-3 rounded-xl bg-slate-800 border-2 border-slate-700 focus:border-rose-500 text-white focus:outline-none transition-all"
+                    />
+                    <p className="text-xs text-slate-400 mt-1">Enter your UPI ID to receive payment</p>
+                  </div>
+
+                  <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+                    <div className="flex gap-3">
+                      <svg className="w-6 h-6 text-blue-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                      <div className="text-sm text-blue-200">
+                        <p className="font-semibold mb-1">Verification Process</p>
+                        <p className="text-xs">Your withdrawal will be verified by our admin team within 24-48 hours. Funds will be sent to your UPI ID once approved.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleWithdraw}
+                  disabled={isProcessing || !upi}
+                  className="w-full py-4 rounded-xl bg-gradient-to-r from-rose-500 to-pink-500 text-white font-bold text-lg shadow-lg hover:shadow-rose-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none flex items-center justify-center gap-2"
+                >
+                  {isProcessing ? (
+                    <>
+                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Processing...
+                    </>
+                  ) : (
+                    'Submit Withdrawal Request'
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* Step 4: Confirm (USDT) */}
+            {withdrawStep === 4 && withdrawMethod === 'usdt' && (
+              <div className="space-y-6 animate-fadeIn">
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Confirm Withdrawal</h3>
+                  <p className="text-slate-400 text-sm">Review your withdrawal details</p>
+                </div>
+
+                <div className="rounded-2xl bg-gradient-to-br from-rose-500/10 to-pink-500/10 border border-rose-500/30 p-6 space-y-4">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-700">
+                      <span className="text-slate-400">Network</span>
+                      <span className="text-white font-bold">{blockchain?.toUpperCase()}</span>
+                    </div>
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-700">
+                      <span className="text-slate-400">Amount</span>
+                      <span className="text-white font-bold text-xl">{withdrawAmount} USDT</span>
+                    </div>
+                    <div className="pb-3 border-b border-slate-700">
+                      <span className="text-slate-400 text-sm block mb-2">Wallet Address</span>
+                      <span className="text-white text-xs font-mono break-all">{walletAddress}</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
+                    <div className="flex gap-3">
+                      <svg className="w-6 h-6 text-amber-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                      <div className="text-sm text-amber-200">
+                        <p className="font-semibold mb-1">Verification Process</p>
+                        <p className="text-xs">Your withdrawal will be processed within 24-48 hours after admin verification. Please ensure all details are correct.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleWithdraw}
+                  disabled={isProcessing}
+                  className="w-full py-4 rounded-xl bg-gradient-to-r from-rose-500 to-pink-500 text-white font-bold text-lg shadow-lg hover:shadow-rose-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none flex items-center justify-center gap-2"
+                >
+                  {isProcessing ? (
+                    <>
+                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Submitting...
+                    </>
+                  ) : (
+                    'Submit Withdrawal Request'
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderSwapFlow = () => (
+    <div className={`min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white transition-opacity duration-500 ${isTransitioning ? 'opacity-0' : 'opacity-100'}`}>
+      <div className="container mx-auto px-4 py-8 max-w-lg min-h-screen flex flex-col">
+        {/* Header */}
+        <div className="mb-6">
+          <button
+            onClick={() => swapStep === 1 ? handleFlowChange(null) : setSwapStep(swapStep - 1)}
+            className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors mb-4"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            <span>Back</span>
+          </button>
+          <h2 className="text-3xl font-bold bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">
+            DLX to USDT Swap
+          </h2>
+        </div>
+
+        <ProgressBar currentStep={swapStep} totalSteps={3} />
+
+        <div className="flex-1 flex flex-col">
+          {/* Step 1: Enter DLX Amount */}
+          {swapStep === 1 && (
+            <div className="space-y-6 animate-fadeIn">
+              <div>
+                <h3 className="text-xl font-semibold text-white mb-2">Enter Swap Amount</h3>
+                <p className="text-slate-400 text-sm">Convert your DLX tokens to USDT</p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="rounded-xl bg-slate-800/50 border border-slate-700 p-4 space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-400">Available DLX</span>
+                    <span className="text-white font-bold">{wallet.dlx.toFixed(2)} DLX</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-400">USD Value</span>
+                    <span className="text-white font-bold">${dlxUsdValue.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">DLX Amount (Minimum 50 DLX)</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      placeholder="50.00"
+                      value={swapAmount}
+                      onChange={(e) => setSwapAmount(e.target.value)}
+                      className="w-full px-4 pr-16 py-4 rounded-xl bg-slate-800 border-2 border-slate-700 focus:border-violet-500 text-white text-lg font-semibold focus:outline-none transition-all"
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-medium">DLX</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap gap-2">
+                    {[50, 100, 500].map((amount) => (
+                      <button
+                        key={amount}
+                        onClick={() => setSwapAmount(amount.toString())}
+                        disabled={amount > wallet.dlx}
+                        className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {amount} DLX
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setSwapAmount(wallet.dlx.toFixed(2))}
+                    className="px-4 py-2 rounded-lg bg-violet-500/20 hover:bg-violet-500/30 text-violet-400 text-sm font-medium transition-all"
+                  >
+                    MAX
+                  </button>
+                </div>
+
+                {swapAmount && parseFloat(swapAmount) >= 50 && (
+                  <div className="rounded-xl bg-gradient-to-r from-violet-500/10 to-fuchsia-500/10 border border-violet-500/30 p-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-300">You will receive</span>
+                      <span className="text-white font-bold text-xl">{swapUsdtValue.toFixed(2)} USDT</span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-2">Exchange Rate: 1 DLX = 0.1 USDT</p>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={() => setSwapStep(2)}
+                disabled={!swapAmount || parseFloat(swapAmount) < 50 || parseFloat(swapAmount) > wallet.dlx}
+                className="w-full py-4 rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white font-bold text-lg shadow-lg hover:shadow-violet-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none"
+              >
+                Continue
+              </button>
+            </div>
+          )}
+
+          {/* Step 2: Review Swap */}
+          {swapStep === 2 && (
+            <div className="space-y-6 animate-fadeIn">
+              <div>
+                <h3 className="text-xl font-semibold text-white mb-2">Review Swap Details</h3>
+                <p className="text-slate-400 text-sm">Confirm the exchange details</p>
+              </div>
+
+              <div className="space-y-4">
+                {/* Swap Visual */}
+                <div className="rounded-2xl bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10 border border-violet-500/30 p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex-1">
+                      <p className="text-slate-400 text-sm mb-1">From</p>
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center">
+                          <span className="text-white font-bold text-sm">DLX</span>
+                        </div>
+                        <div>
+                          <p className="text-white font-bold text-xl">{swapAmount}</p>
+                          <p className="text-slate-400 text-xs">DLX Tokens</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <svg className="w-8 h-8 text-violet-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+
+                    <div className="flex-1 text-right">
+                      <p className="text-slate-400 text-sm mb-1">To</p>
+                      <div className="flex items-center gap-3 justify-end">
+                        <div>
+                          <p className="text-white font-bold text-xl">{swapUsdtValue.toFixed(2)}</p>
+                          <p className="text-slate-400 text-xs">USDT</p>
+                        </div>
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
+                          <span className="text-white font-bold text-sm">$</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-slate-700/50 space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-400">Exchange Rate</span>
+                      <span className="text-white">1 DLX = 0.1 USDT</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-400">Network Fee</span>
+                      <span className="text-emerald-400 font-medium">FREE</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+                  <div className="flex gap-3">
+                    <svg className="w-6 h-6 text-blue-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                    <div className="text-sm text-blue-200">
+                      <p className="font-semibold mb-1">About DLX Swap</p>
+                      <p className="text-xs">DLX tokens will be converted to USDT and credited to your Purchase Wallet. Admin verification required (24-48 hours).</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setSwapStep(3)}
+                className="w-full py-4 rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white font-bold text-lg shadow-lg hover:shadow-violet-500/50 transition-all"
+              >
+                Continue to Confirm
+              </button>
+            </div>
+          )}
+
+          {/* Step 3: Confirm Swap */}
+          {swapStep === 3 && (
+            <div className="space-y-6 animate-fadeIn">
+              <div>
+                <h3 className="text-xl font-semibold text-white mb-2">Confirm Swap Transaction</h3>
+                <p className="text-slate-400 text-sm">Final confirmation before processing</p>
+              </div>
+
+              <div className="rounded-2xl bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10 border border-violet-500/30 p-6 space-y-4">
+                <div className="text-center pb-4 border-b border-slate-700">
+                  <p className="text-slate-400 text-sm mb-2">You're swapping</p>
+                  <p className="text-white font-bold text-3xl mb-1">{swapAmount} DLX</p>
+                  <p className="text-slate-400 text-sm">for</p>
+                  <p className="text-emerald-400 font-bold text-3xl mt-1">{swapUsdtValue.toFixed(2)} USDT</p>
+                </div>
+
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Current Balance</span>
+                    <span className="text-white">{wallet.dlx.toFixed(2)} DLX</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">After Swap</span>
+                    <span className="text-white">{(wallet.dlx - parseFloat(swapAmount)).toFixed(2)} DLX</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">USDT Credit</span>
+                    <span className="text-emerald-400 font-bold">+{swapUsdtValue.toFixed(2)} USDT</span>
+                  </div>
+                </div>
+
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
+                  <div className="flex gap-3">
+                    <svg className="w-6 h-6 text-amber-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                    <div className="text-sm text-amber-200">
+                      <p className="font-semibold mb-1">Important Notice</p>
+                      <p className="text-xs">This transaction requires admin verification and will be processed within 24-48 hours. Once confirmed, this action cannot be reversed.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={handleSwap}
+                disabled={isProcessing}
+                className="w-full py-4 rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white font-bold text-lg shadow-lg hover:shadow-violet-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none flex items-center justify-center gap-2"
+              >
+                {isProcessing ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Processing Swap...
+                  </>
+                ) : (
+                  'Confirm & Submit Swap'
+                )}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      {activeFlow === null && renderMainPage()}
+      {activeFlow === 'deposit' && renderDepositFlow()}
+      {activeFlow === 'withdraw' && renderWithdrawFlow()}
+      {activeFlow === 'swap' && renderSwapFlow()}
+    </>
   );
 }

@@ -3,9 +3,9 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
 
 /**
- * Signup Page
- * User registration with modern design
- * Dark blue + black gradient theme matching the DigiLinex brand
+ * Signup Page - Premium Enhanced Design
+ * Ultra-modern standalone registration page
+ * No header/footer - Pure focus on signup experience
  */
 
 const Signup: React.FC = () => {
@@ -88,904 +88,424 @@ const Signup: React.FC = () => {
       setLoading(false);
     }
   };
+
   return (
-    <div className="signup-container">
-      {/* Left Side - Form */}
-      <div className="signup-left">
-        <div className="signup-form-wrapper">
-          {/* Back Button */}
-          <Link to="/" className="back-button">
-            <span className="back-arrow">←</span>
-            Back to Home
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950 flex relative overflow-hidden">
+      {/* Animated Background Orbs */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-pink-600/20 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
+        <div className="absolute top-1/2 left-1/2 w-72 h-72 bg-blue-600/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '4s'}}></div>
+      </div>
+
+      {/* Left Panel - Form */}
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-8 lg:p-12 overflow-y-auto relative z-10">
+        <div className="w-full max-w-lg">
+          {/* Minimal Back Button */}
+          <Link 
+            to="/" 
+            className="inline-flex items-center gap-2 text-slate-400 hover:text-white transition-all duration-300 mb-10 group"
+          >
+            <svg className="w-5 h-5 transition-transform group-hover:-translate-x-1.5 duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            <span className="font-semibold tracking-wide">Home</span>
           </Link>
 
-          <div className="form-header">
-            <h2 className="form-title">Create Account</h2>
-            <p className="form-subtitle">Join DigiLinex and start your digital transformation journey</p>
-          </div>
-
-          {/* Social Signup */}
-          <div className="social-signup">
-            <button className="social-btn google" onClick={handleGoogle}>
-              <svg className="social-icon" viewBox="0 0 24 24">
-                <path fill="currentColor" d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"/>
-              </svg>
-              Sign up with Google
-            </button>
-            <button className="social-btn phone" onClick={() => setShowPhone(v => !v)}>
-              <svg className="social-icon" viewBox="0 0 24 24">
-                <path fill="currentColor" d="M6.62 10.79a15.05 15.05 0 006.59 6.59l2.2-2.2a1 1 0 011.05-.24c1.14.38 2.37.59 3.54.59a1 1 0 011 1v3.75a1 1 0 01-1 1C12.39 22.29 1.71 11.61 1.71 2a1 1 0 011-1H6.5a1 1 0 011 1c0 1.17.21 2.4.59 3.54a1 1 0 01-.24 1.05l-2.23 2.2z"/>
-              </svg>
-              Sign up with Phone
-            </button>
-          </div>
-
-          <div className="divider">
-            <span className="divider-text">Or sign up with email</span>
-          </div>
-
-          {error && <div className="error-banner">{error}</div>}
-
-          {/* Signup Form */}
-          <form className="signup-form" onSubmit={handleSignup}>
-            <div className="form-group">
-              <label className="form-label">Name</label>
-              <input 
-                type="text" 
-                className="form-input"
-                placeholder="Your full name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-              />
+          {/* Form Container with Glass Effect */}
+          <div className="bg-slate-900/40 backdrop-blur-2xl border border-slate-700/50 rounded-3xl p-8 sm:p-10 shadow-2xl shadow-purple-900/20">
+            {/* Header */}
+            <div className="mb-8">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl mb-4 shadow-lg shadow-purple-500/50">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                </svg>
+              </div>
+              <h1 className="text-4xl sm:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-300 mb-3">
+                Create Account
+              </h1>
+              <p className="text-slate-400 text-base sm:text-lg leading-relaxed">
+                Join thousands of users transforming their digital presence
+              </p>
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Email Address</label>
-              <input 
-                type="email" 
-                className="form-input"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
+            {/* Social Login Buttons */}
+            <div className="space-y-3 mb-6">
+              <button 
+                onClick={handleGoogle}
+                disabled={loading}
+                className="w-full group relative overflow-hidden flex items-center justify-center gap-3 bg-white hover:bg-gray-50 text-gray-900 font-semibold py-3.5 px-5 rounded-2xl transition-all duration-300 transform hover:scale-[1.02] hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+              >
+                <svg className="w-5 h-5 relative z-10" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                <span className="relative z-10">Continue with Google</span>
+              </button>
+
+              <button 
+                onClick={() => setShowPhone(v => !v)}
+                disabled={loading}
+                className="w-full group flex items-center justify-center gap-3 bg-gradient-to-r from-slate-800 to-slate-700 hover:from-slate-700 hover:to-slate-600 text-white font-semibold py-3.5 px-5 rounded-2xl transition-all duration-300 transform hover:scale-[1.02] hover:shadow-xl border border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                </svg>
+                <span>Sign up with Phone</span>
+              </button>
             </div>
 
-            <div className={`phone-collapse ${showPhone ? 'show' : ''}`}>
-              <div className="form-group">
-                <label className="form-label">Phone Number</label>
-                <input 
-                  type="tel" 
-                  className="form-input"
-                  placeholder="Enter 10-digit number (no country code)"
+            {/* Elegant Divider */}
+            <div className="relative my-8">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-slate-700"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-4 bg-slate-900/40 text-slate-400 font-medium">Or continue with email</span>
+              </div>
+            </div>
+
+            {/* Error Banner with Icon */}
+            {error && (
+              <div className="mb-6 p-4 bg-red-500/10 border border-red-500/40 rounded-2xl text-red-400 text-sm flex items-start gap-3 animate-shake">
+                <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>{error}</span>
+              </div>
+            )}
+
+            {/* Signup Form */}
+            <form onSubmit={handleSignup} className="space-y-5">
+              {/* Name */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-300 mb-2.5">Full Name</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Enter your full name"
+                  className="w-full px-4 py-3.5 bg-slate-800/60 border border-slate-700/70 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all hover:border-slate-600"
+                  required
+                />
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-300 mb-2.5">Email Address</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  className="w-full px-4 py-3.5 bg-slate-800/60 border border-slate-700/70 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all hover:border-slate-600"
+                  required
+                />
+              </div>
+
+              {/* Phone (Smooth Collapsible) */}
+              <div className={`overflow-hidden transition-all duration-500 ease-in-out ${showPhone ? 'max-h-36 opacity-100' : 'max-h-0 opacity-0'}`}>
+                <label className="block text-sm font-semibold text-slate-300 mb-2.5">Phone Number</label>
+                <input
+                  type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="10-digit number"
+                  className="w-full px-4 py-3.5 bg-slate-800/60 border border-slate-700/70 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all hover:border-slate-600"
                 />
-                <small className="input-help">We’ll add +91 automatically.</small>
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Referral Code (optional)</label>
-              <input 
-                type="text" 
-                className="form-input"
-                placeholder="Enter referral code"
-                value={referral}
-                onChange={(e) => setReferral(e.target.value)}
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Password</label>
-              <div className="password-wrapper">
-                <input 
-                  type={showPassword ? "text" : "password"} 
-                  className="form-input"
-                  placeholder="Enter your password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-                <button type="button" className="password-toggle" onClick={() => setShowPassword(v => !v)} aria-label={showPassword ? 'Hide password' : 'Show password'}>
-                  <svg className="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                <p className="text-xs text-slate-500 mt-2 flex items-center gap-1">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                </button>
+                  We'll automatically add +91 country code
+                </p>
               </div>
-              <div className="password-strength">
-                <div className="strength-bar">
-                  <div className={`strength-fill ${strength}`}></div>
+
+              {/* Referral Code */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-300 mb-2.5">
+                  Referral Code 
+                  <span className="text-slate-500 font-normal ml-1.5">(Optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={referral}
+                  onChange={(e) => setReferral(e.target.value)}
+                  placeholder="Enter referral code"
+                  className="w-full px-4 py-3.5 bg-slate-800/60 border border-slate-700/70 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all hover:border-slate-600"
+                />
+              </div>
+
+              {/* Password */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-300 mb-2.5">Password</label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Create a strong password"
+                    className="w-full px-4 py-3.5 bg-slate-800/60 border border-slate-700/70 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all hover:border-slate-600 pr-12"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(v => !v)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-slate-700/50"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      {showPassword ? (
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                      ) : (
+                        <>
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </>
+                      )}
+                    </svg>
+                  </button>
                 </div>
-                <span className="strength-text">{strength === 'weak' ? 'Weak - Add numbers and symbols' : strength === 'medium' ? 'Medium - Add uppercase and symbols' : 'Strong password'}</span>
+                {/* Enhanced Password Strength */}
+                {password && (
+                  <div className="mt-3 space-y-2">
+                    <div className="h-2 w-full bg-slate-700/50 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full transition-all duration-500 ease-out ${
+                          strength === 'weak' ? 'w-1/3 bg-gradient-to-r from-red-500 to-red-600' :
+                          strength === 'medium' ? 'w-2/3 bg-gradient-to-r from-yellow-500 to-orange-500' :
+                          'w-full bg-gradient-to-r from-green-500 to-emerald-500'
+                        }`}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${
+                        strength === 'weak' ? 'bg-red-500' :
+                        strength === 'medium' ? 'bg-yellow-500' :
+                        'bg-green-500'
+                      }`}></div>
+                      <p className={`text-xs font-medium ${
+                        strength === 'weak' ? 'text-red-400' :
+                        strength === 'medium' ? 'text-yellow-400' :
+                        'text-green-400'
+                      }`}>
+                        {strength === 'weak' ? 'Weak - Add numbers and symbols' :
+                         strength === 'medium' ? 'Medium - Add uppercase and symbols' :
+                         'Strong password! Perfect.'}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
 
-            <div className="form-group">
-              <label className="form-label">Confirm Password</label>
-              <div className="password-wrapper">
-                <input 
-                  type={showConfirmPassword ? "text" : "password"} 
-                  className="form-input"
-                  placeholder="Re-enter your password"
-                  value={confirm}
-                  onChange={(e) => setConfirm(e.target.value)}
-                  required
-                />
-                <button type="button" className="password-toggle" onClick={() => setShowConfirmPassword(v => !v)} aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}>
-                  <svg className="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                </button>
+              {/* Confirm Password */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-300 mb-2.5">Confirm Password</label>
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={confirm}
+                    onChange={(e) => setConfirm(e.target.value)}
+                    placeholder="Re-enter your password"
+                    className="w-full px-4 py-3.5 bg-slate-800/60 border border-slate-700/70 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all hover:border-slate-600 pr-12"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(v => !v)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-slate-700/50"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      {showConfirmPassword ? (
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                      ) : (
+                        <>
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </>
+                      )}
+                    </svg>
+                  </button>
+                </div>
               </div>
-            </div>
 
-            <label className="checkbox-wrapper">
-              <input type="checkbox" className="checkbox-input" checked={agreeTerms} onChange={(e) => setAgreeTerms(e.target.checked)} />
-              <span className="checkbox-label">
-                I agree to the <a href="#" className="link">Terms of Service</a> and <a href="#" className="link">Privacy Policy</a>
-              </span>
-            </label>
+              {/* Checkboxes with better styling */}
+              <div className="space-y-3 pt-2">
+                <label className="flex items-start gap-3 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={agreeTerms}
+                    onChange={(e) => setAgreeTerms(e.target.checked)}
+                    className="mt-1 w-5 h-5 rounded-lg border-slate-600 bg-slate-800 text-purple-600 focus:ring-2 focus:ring-purple-500 focus:ring-offset-0 focus:ring-offset-slate-900 cursor-pointer transition-all"
+                  />
+                  <span className="text-sm text-slate-400 group-hover:text-slate-300 leading-relaxed">
+                    I agree to the{' '}
+                    <a href="#" className="text-purple-400 hover:text-purple-300 underline underline-offset-2 font-medium">Terms of Service</a>
+                    {' '}and{' '}
+                    <a href="#" className="text-purple-400 hover:text-purple-300 underline underline-offset-2 font-medium">Privacy Policy</a>
+                  </span>
+                </label>
 
-            <label className="checkbox-wrapper">
-              <input type="checkbox" className="checkbox-input" checked={subscribe} onChange={(e) => setSubscribe(e.target.checked)} />
-              <span className="checkbox-label">
-                Send me updates, newsletters, and promotional content
-              </span>
-            </label>
+                <label className="flex items-start gap-3 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={subscribe}
+                    onChange={(e) => setSubscribe(e.target.checked)}
+                    className="mt-1 w-5 h-5 rounded-lg border-slate-600 bg-slate-800 text-purple-600 focus:ring-2 focus:ring-purple-500 focus:ring-offset-0 focus:ring-offset-slate-900 cursor-pointer transition-all"
+                  />
+                  <span className="text-sm text-slate-400 group-hover:text-slate-300 leading-relaxed">
+                    Send me updates, newsletters, and promotional content
+                  </span>
+                </label>
+              </div>
 
-            <button type="submit" className="btn-signup" disabled={loading}>
-              {loading ? 'Creating...' : 'Create Account'}
-            </button>
-          </form>
+              {/* Enhanced Submit Button */}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full relative overflow-hidden bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 bg-size-200 bg-pos-0 hover:bg-pos-100 text-white font-bold py-4 px-6 rounded-2xl transition-all duration-500 transform hover:scale-[1.02] hover:shadow-2xl hover:shadow-purple-500/50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 shadow-lg shadow-purple-500/30 mt-8 group"
+              >
+                {loading ? (
+                  <span className="flex items-center justify-center gap-3">
+                    <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Creating Your Account...
+                  </span>
+                ) : (
+                  <span className="flex items-center justify-center gap-2">
+                    Create Account
+                    <svg className="w-5 h-5 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  </span>
+                )}
+              </button>
+            </form>
 
-          {/* Login Link */}
-          <div className="login-prompt">
-            <span className="prompt-text">Already have an account? </span>
-            <Link to="/login" className="login-link">Sign in</Link>
+            {/* Login Link */}
+            <p className="text-center text-slate-400 mt-8 text-sm">
+              Already have an account?{' '}
+              <Link to="/login" className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 hover:from-purple-300 hover:to-pink-300 font-bold transition-all">
+                Sign in →
+              </Link>
+            </p>
           </div>
         </div>
       </div>
 
-      {/* Right Side - Benefits & Branding */}
-      <div className="signup-right">
-        <div className="benefits-content">
-          <div className="logo-section">
-            <div className="logo-icon">DL</div>
-            <h1 className="brand-name">DigiLinex</h1>
-          </div>
-
-          <h2 className="benefits-title">Why Join DigiLinex?</h2>
-
-          <div className="benefits-list">
-            <div className="benefit-card">
-              <div className="benefit-icon">🚀</div>
-              <div className="benefit-content">
-                <h3 className="benefit-title">Fast Setup</h3>
-                <p className="benefit-description">
-                  Get started in minutes with our streamlined onboarding process
-                </p>
-              </div>
-            </div>
-
-            <div className="benefit-card">
-              <div className="benefit-icon">🔒</div>
-              <div className="benefit-content">
-                <h3 className="benefit-title">Secure Platform</h3>
-                <p className="benefit-description">
-                  Enterprise-grade security to protect your data and privacy
-                </p>
-              </div>
-            </div>
-
-            <div className="benefit-card">
-              <div className="benefit-icon">💡</div>
-              <div className="benefit-content">
-                <h3 className="benefit-title">Expert Support</h3>
-                <p className="benefit-description">
-                  24/7 customer support from our team of specialists
-                </p>
-              </div>
-            </div>
-
-            <div className="benefit-card">
-              <div className="benefit-icon">📊</div>
-              <div className="benefit-content">
-                <h3 className="benefit-title">Analytics Dashboard</h3>
-                <p className="benefit-description">
-                  Track your progress with comprehensive analytics tools
-                </p>
-              </div>
-            </div>
-
-            <div className="benefit-card">
-              <div className="benefit-icon">🌐</div>
-              <div className="benefit-content">
-                <h3 className="benefit-title">Global Reach</h3>
-                <p className="benefit-description">
-                  Access to worldwide markets and opportunities
-                </p>
-              </div>
-            </div>
-
-            <div className="benefit-card">
-              <div className="benefit-icon">⚡</div>
-              <div className="benefit-content">
-                <h3 className="benefit-title">High Performance</h3>
-                <p className="benefit-description">
-                  Lightning-fast infrastructure with 99.9% uptime
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Testimonial */}
-          <div className="testimonial-card">
-            <div className="quote-icon">"</div>
-            <p className="testimonial-text">
-              DigiLinex transformed our business operations. The platform is intuitive, 
-              powerful, and their support team is exceptional.
-            </p>
-            <div className="testimonial-author">
-              <div className="author-avatar">JD</div>
-              <div className="author-info">
-                <div className="author-name">Jane Doe</div>
-                <div className="author-title">CEO, TechStart Inc.</div>
-              </div>
-            </div>
-          </div>
+      {/* Right Panel - Premium Benefits Showcase */}
+      <div className="hidden lg:flex flex-1 bg-gradient-to-br from-purple-950 via-pink-950 to-purple-950 p-12 items-center justify-center relative overflow-hidden">
+        {/* Animated Background Elements */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute top-1/4 left-1/4 w-[30rem] h-[30rem] bg-purple-500/20 rounded-full blur-3xl animate-pulse"></div>
+          <div className="absolute bottom-1/4 right-1/4 w-[30rem] h-[30rem] bg-pink-500/20 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
+          <div className="absolute top-1/2 right-1/3 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '4s'}}></div>
         </div>
 
-        {/* Floating Elements */}
-        <div className="floating-shapes">
-          <div className="shape shape-1"></div>
-          <div className="shape shape-2"></div>
-          <div className="shape shape-3"></div>
+        <div className="relative z-10 max-w-xl">
+          {/* Premium Logo */}
+          <div className="flex items-center gap-4 mb-10">
+            <div className="w-16 h-16 bg-gradient-to-br from-white to-purple-100 rounded-3xl flex items-center justify-center text-2xl font-black text-purple-700 shadow-2xl shadow-purple-500/30 transform rotate-3">
+              DL
+            </div>
+            <div>
+              <span className="text-4xl font-black text-white tracking-tight">DigiLinex</span>
+              <p className="text-purple-300 text-sm font-medium">Digital Excellence Platform</p>
+            </div>
+          </div>
+
+          <h2 className="text-5xl font-black text-white mb-3 leading-tight">
+            Why Join <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">DigiLinex</span>?
+          </h2>
+          <p className="text-purple-200 text-lg mb-10 leading-relaxed">
+            Experience the future of digital transformation with cutting-edge tools and expert guidance
+          </p>
+
+          {/* Enhanced Benefits Grid */}
+          <div className="grid grid-cols-2 gap-5 mb-10">
+            {[
+              { icon: '🚀', title: 'Fast Setup', desc: 'Launch in minutes, not hours', gradient: 'from-blue-500 to-cyan-500' },
+              { icon: '🔒', title: 'Secure Platform', desc: 'Bank-grade encryption', gradient: 'from-green-500 to-emerald-500' },
+              { icon: '💡', title: 'Expert Support', desc: '24/7 live assistance', gradient: 'from-yellow-500 to-orange-500' },
+              { icon: '📊', title: 'Analytics', desc: 'Real-time insights', gradient: 'from-purple-500 to-pink-500' },
+              { icon: '🌐', title: 'Global Reach', desc: '150+ countries', gradient: 'from-red-500 to-pink-500' },
+              { icon: '⚡', title: 'Performance', desc: '99.99% uptime', gradient: 'from-indigo-500 to-purple-500' },
+            ].map((benefit, idx) => (
+              <div key={idx} className="group bg-white/5 backdrop-blur-md rounded-3xl p-5 hover:bg-white/10 transition-all duration-300 transform hover:scale-105 hover:-rotate-1 border border-white/10 hover:border-white/20">
+                <div className={`inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br ${benefit.gradient} rounded-2xl mb-3 text-2xl shadow-lg transform group-hover:scale-110 transition-transform duration-300`}>
+                  {benefit.icon}
+                </div>
+                <h3 className="text-white font-bold text-lg mb-1">{benefit.title}</h3>
+                <p className="text-purple-200 text-sm leading-relaxed">{benefit.desc}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Premium Testimonial */}
+          <div className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md rounded-3xl p-7 border border-white/20 shadow-2xl">
+            <div className="flex items-start gap-5">
+              <div className="w-14 h-14 bg-gradient-to-br from-purple-400 to-pink-400 rounded-2xl flex items-center justify-center text-white font-bold text-lg flex-shrink-0 shadow-lg">
+                JD
+              </div>
+              <div className="flex-1">
+                <div className="flex gap-1 mb-3">
+                  {[...Array(5)].map((_, i) => (
+                    <svg key={i} className="w-5 h-5 text-yellow-400 fill-current" viewBox="0 0 20 20">
+                      <path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/>
+                    </svg>
+                  ))}
+                </div>
+                <p className="text-white text-base leading-relaxed mb-4 italic">
+                  "DigiLinex completely transformed how we operate. The platform is incredibly intuitive, powerful, and their support team goes above and beyond."
+                </p>
+                <div>
+                  <div className="text-white font-bold text-base">Jane Doe</div>
+                  <div className="text-purple-300 text-sm">CEO, TechStart Inc.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Trust Indicators */}
+          <div className="mt-10 flex items-center justify-center gap-8 text-center">
+            <div>
+              <div className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">10K+</div>
+              <div className="text-purple-300 text-sm font-medium">Active Users</div>
+            </div>
+            <div className="w-px h-12 bg-white/20"></div>
+            <div>
+              <div className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">4.9★</div>
+              <div className="text-purple-300 text-sm font-medium">User Rating</div>
+            </div>
+            <div className="w-px h-12 bg-white/20"></div>
+            <div>
+              <div className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">150+</div>
+              <div className="text-purple-300 text-sm font-medium">Countries</div>
+            </div>
+          </div>
         </div>
       </div>
 
       <style>{`
-        .signup-container {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          min-height: 100vh;
-          background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 50%, #0f1420 100%);
-        }
-
-        /* Left Side - Form */
-        .signup-left {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 2rem;
-          overflow-y: auto;
-          background: linear-gradient(135deg, #0f1420 0%, #1a1f3a 100%);
-        }
-
-+        .input-help {
-+          display: block;
-+          color: #64748b;
-+          font-size: 0.85rem;
-+          margin-top: 0.5rem;
-+        }
-+
-+        /* Hide sections not in reference design */
-        .account-type-options { display: none; }
-+
-        .signup-form-wrapper {
-          width: 100%;
-          max-width: 550px;
-          background: rgba(30, 41, 59, 0.6);
-          backdrop-filter: blur(10px);
-          border-radius: 24px;
-          padding: 3rem;
-          border: 1px solid rgba(100, 116, 139, 0.2);
-          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-        }
-
-        .back-button {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.5rem;
-          color: #94a3b8;
-          text-decoration: none;
-          font-weight: 600;
-          margin-bottom: 2rem;
-          transition: all 0.3s ease;
-        }
-
-        .back-button:hover {
-          color: #667eea;
-          gap: 0.75rem;
-        }
-
-        .back-arrow {
-          font-size: 1.2rem;
-        }
-
-        .form-header {
-          margin-bottom: 2rem;
-        }
-
-        .form-title {
-          font-size: 2.5rem;
-          font-weight: 800;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          margin-bottom: 0.5rem;
-        }
-
-        .form-subtitle {
-          color: #94a3b8;
-          font-size: 1.05rem;
-          line-height: 1.5;
-        }
-
-        /* Social Signup */
-        .social-signup {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 1rem;
-          margin-bottom: 1.5rem;
-        }
-
-        .social-btn {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 0.75rem;
-          padding: 0.9rem;
-          background: rgba(100, 116, 139, 0.2);
-          border: 1px solid rgba(100, 116, 139, 0.3);
-          border-radius: 12px;
-          color: #cbd5e1;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.3s ease;
-          font-size: 0.95rem;
-        }
-
-        .social-btn:hover {
-          background: rgba(102, 126, 234, 0.2);
-          border-color: rgba(102, 126, 234, 0.5);
-          transform: translateY(-2px);
-        }
-
-        .social-icon {
-          width: 20px;
-          height: 20px;
-        }
-
-        /* Phone collapse */
-        .phone-collapse {
-          max-height: 0;
-          overflow: hidden;
-          opacity: 0;
-          transform: translateY(-6px);
-          transition: max-height 0.4s ease, opacity 0.3s ease, transform 0.3s ease;
-          margin-bottom: 0;
-        }
-        .phone-collapse.show {
-          max-height: 180px;
-          opacity: 1;
-          transform: translateY(0);
-          margin-bottom: 1rem;
-        }
-
-        /* Divider */
-        .divider {
-          position: relative;
-          text-align: center;
-          margin: 1.5rem 0;
-        }
-
-        .divider::before {
-          content: '';
-          position: absolute;
-          left: 0;
-          top: 50%;
-          width: 100%;
-          height: 1px;
-          background: rgba(100, 116, 139, 0.2);
-        }
-
-        .divider-text {
-          position: relative;
-          background: rgba(30, 41, 59, 0.9);
-          padding: 0 1rem;
-          color: #64748b;
-          font-size: 0.9rem;
-        }
-
-        /* Error banner */
-        .error-banner {
-          background: rgba(248, 113, 113, 0.12);
-          border: 1px solid rgba(248, 113, 113, 0.35);
-          color: #fecaca;
-          padding: 0.75rem 1rem;
-          border-radius: 12px;
-          margin: 0.75rem 0 1rem;
-          animation: shake 0.25s ease-in-out;
-        }
         @keyframes shake {
-          0% { transform: translateX(0); }
-          25% { transform: translateX(-2px); }
-          50% { transform: translateX(2px); }
-          75% { transform: translateX(-2px); }
-          100% { transform: translateX(0); }
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-5px); }
+          75% { transform: translateX(5px); }
         }
-
-        /* Form */
-        .signup-form {
-          margin-bottom: 1rem;
+        .animate-shake {
+          animation: shake 0.3s ease-in-out;
         }
-
-        .form-row {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 1rem;
+        .bg-size-200 {
+          background-size: 200% 100%;
         }
-
-        .form-group {
-          margin-bottom: 1rem;
+        .bg-pos-0 {
+          background-position: 0% 50%;
         }
-
-        .form-label {
-          display: block;
-          color: #cbd5e1;
-          font-weight: 600;
-          margin-bottom: 0.4rem;
-          font-size: 0.95rem;
-        }
-
-        .form-input {
-          width: 100%;
-          padding: 0.85rem 1rem;
-          background: rgba(15, 23, 42, 0.8);
-          border: 1px solid rgba(100, 116, 139, 0.3);
-          border-radius: 12px;
-          color: #ffffff;
-          font-size: 1rem;
-          transition: all 0.3s ease;
-          outline: none;
-        }
-
-        .form-input:focus {
-          border-color: #667eea;
-          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-
-        .form-input::placeholder {
-          color: #64748b;
-        }
-
-        .password-wrapper {
-          position: relative;
-        }
-
-        .password-toggle {
-          position: absolute;
-          right: 1rem;
-          top: 50%;
-          transform: translateY(-50%);
-          background: transparent;
-          border: none;
-          color: #64748b;
-          cursor: pointer;
-          transition: color 0.3s ease;
-        }
-
-        .password-toggle:hover {
-          color: #cbd5e1;
-        }
-
-        .eye-icon {
-          width: 20px;
-          height: 20px;
-        }
-
-        .password-strength {
-          margin-top: 0.5rem;
-        }
-
-        .strength-bar {
-          height: 4px;
-          background: rgba(100, 116, 139, 0.2);
-          border-radius: 2px;
-          overflow: hidden;
-          margin-bottom: 0.5rem;
-        }
-
-        .strength-fill {
-          height: 100%;
-          transition: all 0.3s ease;
-        }
-
-        .strength-fill.weak {
-          width: 33%;
-          background: #f87171;
-        }
-        .strength-fill.medium {
-          width: 66%;
-          background: #f59e0b;
-        }
-        .strength-fill.strong {
-          width: 100%;
-          background: #10b981;
-        }
-
-        .strength-text {
-          color: #94a3b8;
-          font-size: 0.85rem;
-        }
-
-        /* Account Type Options */
-        .account-type-options {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 1rem;
-        }
-
-        .radio-option {
-          cursor: pointer;
-        }
-
-        .radio-option input[type="radio"] {
-          display: none;
-        }
-
-        .radio-content {
-          display: flex;
-          align-items: center;
-          gap: 1rem;
-          padding: 1rem;
-          background: rgba(15, 23, 42, 0.8);
-          border: 2px solid rgba(100, 116, 139, 0.3);
-          border-radius: 12px;
-          transition: all 0.3s ease;
-        }
-
-        .radio-option input[type="radio"]:checked + .radio-content {
-          border-color: #667eea;
-          background: rgba(102, 126, 234, 0.1);
-        }
-
-        .radio-icon {
-          font-size: 2rem;
-        }
-
-        .radio-label {
-          display: flex;
-          flex-direction: column;
-          gap: 0.25rem;
-        }
-
-        .radio-label strong {
-          color: #ffffff;
-          font-size: 0.95rem;
-        }
-
-        .radio-label small {
-          color: #94a3b8;
-          font-size: 0.85rem;
-        }
-
-        .checkbox-wrapper {
-          display: flex;
-          align-items: flex-start;
-          gap: 0.75rem;
-          margin-bottom: 1rem;
-          cursor: pointer;
-        }
-
-        .checkbox-input {
-          width: 18px;
-          height: 18px;
-          cursor: pointer;
-          margin-top: 0.2rem;
-        }
-
-        .checkbox-label {
-          color: #cbd5e1;
-          font-size: 0.95rem;
-          line-height: 1.5;
-        }
-
-        .link {
-          color: #667eea;
-          text-decoration: none;
-          font-weight: 600;
-          transition: color 0.3s ease;
-        }
-
-        .link:hover {
-          color: #764ba2;
-        }
-
-        .btn-signup {
-          width: 100%;
-          padding: 1rem;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          border: none;
-          border-radius: 12px;
-          color: white;
-          font-size: 1.1rem;
-          font-weight: 700;
-          cursor: pointer;
-          transition: all 0.3s ease;
-          box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-          margin-top: 0.5rem;
-        }
-
-        .btn-signup:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 8px 25px rgba(102, 126, 234, 0.5);
-        }
-
-        .login-prompt {
-          text-align: center;
-          margin-top: 1.5rem;
-        }
-
-        .prompt-text {
-          color: #94a3b8;
-          font-size: 0.95rem;
-        }
-
-        .login-link {
-          color: #667eea;
-          text-decoration: none;
-          font-weight: 700;
-          transition: color 0.3s ease;
-        }
-
-        .login-link:hover {
-          color: #764ba2;
-        }
-
-        /* Right Side - Benefits */
-        .signup-right {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 4rem;
-          background: linear-gradient(135deg, #1a1f3a 0%, #0f1420 100%);
-          position: relative;
-          overflow: hidden;
-        }
-
-        .benefits-content {
-          position: relative;
-          z-index: 1;
-          max-width: 600px;
-        }
-
-        .logo-section {
-          display: flex;
-          align-items: center;
-          gap: 1rem;
-          margin-bottom: 3rem;
-        }
-
-        .logo-icon {
-          width: 60px;
-          height: 60px;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          border-radius: 16px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 1.5rem;
-          font-weight: 800;
-          color: white;
-          box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
-        }
-
-        .brand-name {
-          font-size: 2rem;
-          font-weight: 800;
-          color: #ffffff;
-        }
-
-        .benefits-title {
-          font-size: 2.5rem;
-          font-weight: 800;
-          color: #ffffff;
-          margin-bottom: 2rem;
-        }
-
-        .benefits-list {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 1.5rem;
-          margin-bottom: 3rem;
-        }
-
-        .benefit-card {
-          background: rgba(30, 41, 59, 0.6);
-          backdrop-filter: blur(10px);
-          border: 1px solid rgba(100, 116, 139, 0.2);
-          border-radius: 16px;
-          padding: 1.5rem;
-          transition: all 0.3s ease;
-        }
-
-        .benefit-card:hover {
-          transform: translateY(-5px);
-          border-color: rgba(102, 126, 234, 0.5);
-          box-shadow: 0 10px 30px rgba(102, 126, 234, 0.2);
-        }
-
-        .benefit-icon {
-          font-size: 2.5rem;
-          margin-bottom: 1rem;
-        }
-
-        .benefit-title {
-          font-size: 1.2rem;
-          font-weight: 700;
-          color: #ffffff;
-          margin-bottom: 0.5rem;
-        }
-
-        .benefit-description {
-          color: #94a3b8;
-          font-size: 0.95rem;
-          line-height: 1.5;
-        }
-
-        /* Testimonial */
-        .testimonial-card {
-          background: rgba(102, 126, 234, 0.1);
-          border: 1px solid rgba(102, 126, 234, 0.3);
-          border-radius: 16px;
-          padding: 2rem;
-          position: relative;
-        }
-
-        .quote-icon {
-          font-size: 4rem;
-          color: rgba(102, 126, 234, 0.3);
-          line-height: 1;
-          margin-bottom: 1rem;
-        }
-
-        .testimonial-text {
-          color: #cbd5e1;
-          font-size: 1.1rem;
-          line-height: 1.6;
-          margin-bottom: 1.5rem;
-          font-style: italic;
-        }
-
-        .testimonial-author {
-          display: flex;
-          align-items: center;
-          gap: 1rem;
-        }
-
-        .author-avatar {
-          width: 50px;
-          height: 50px;
-          border-radius: 50%;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-weight: 700;
-          color: white;
-        }
-
-        .author-name {
-          font-weight: 700;
-          color: #ffffff;
-          font-size: 1.05rem;
-        }
-
-        .author-title {
-          color: #94a3b8;
-          font-size: 0.9rem;
-        }
-
-        /* Floating Shapes */
-        .floating-shapes {
-          position: absolute;
-          width: 100%;
-          height: 100%;
-          top: 0;
-          left: 0;
-        }
-
-        .shape {
-          position: absolute;
-          border-radius: 50%;
-          background: rgba(102, 126, 234, 0.1);
-          animation: float 6s ease-in-out infinite;
-        }
-
-        .shape-1 {
-          width: 200px;
-          height: 200px;
-          top: 10%;
-          right: 5%;
-          animation-delay: 0s;
-        }
-
-        .shape-2 {
-          width: 150px;
-          height: 150px;
-          bottom: 15%;
-          left: 5%;
-          animation-delay: 2s;
-        }
-
-        .shape-3 {
-          width: 100px;
-          height: 100px;
-          top: 50%;
-          right: 20%;
-          animation-delay: 4s;
-        }
-
-        @keyframes float {
-          0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-30px); }
-        }
-
-        /* Responsive Design */
-        @media (max-width: 1200px) {
-          .signup-container {
-            grid-template-columns: 1fr;
-          }
-
-          .signup-right {
-            display: none;
-          }
-        }
-
-        @media (max-width: 768px) {
-          .signup-left {
-            padding: 1.5rem 1rem;
-          }
-
-          .signup-form-wrapper {
-            padding: 2rem 1.5rem;
-          }
-
-          .form-title {
-            font-size: 2rem;
-          }
-
-          .form-row {
-            grid-template-columns: 1fr;
-          }
-
-          .social-signup {
-            grid-template-columns: 1fr;
-          }
-
-          .account-type-options {
-            grid-template-columns: 1fr;
-          }
-        }
-
-        @media (max-width: 480px) {
-          .signup-form-wrapper {
-            padding: 1.5rem 1rem;
-          }
-
-          .form-title {
-            font-size: 1.8rem;
-          }
-
-          .social-btn {
-            font-size: 0.85rem;
-            padding: 0.75rem;
-          }
+        .bg-pos-100 {
+          background-position: 100% 50%;
         }
       `}</style>
     </div>

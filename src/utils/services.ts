@@ -1,7 +1,7 @@
 import { db } from '../firebase';
 import { ref, get, set, onValue, off, update } from 'firebase/database';
 
-export type FieldType = 'text' | 'textarea' | 'select' | 'number' | 'checkbox' | 'radio';
+export type FieldType = 'text' | 'textarea' | 'select' | 'number' | 'checkbox' | 'radio' | 'email' | 'tel' | 'array';
 
 export interface FieldDef {
   name: string;
@@ -10,6 +10,8 @@ export interface FieldDef {
   required?: boolean;
   placeholder?: string;
   options?: string[];
+  itemType?: Exclude<FieldType, 'array'>;
+  itemLabel?: string;
 }
 
 export interface StepDef {
@@ -165,12 +167,26 @@ function appendExtraStep(base: StepDef[], serviceName: string): StepDef[] {
   return [...base, extraStep];
 }
 
+export async function restoreDefaultServiceForms(defaults: Record<string, StepDef[]>): Promise<void> {
+  for (const [serviceName, steps] of Object.entries(defaults)) {
+    try {
+      const snap = await get(ref(db, `serviceForms/${serviceName}`));
+      const val = snap.val();
+      if (!val || (Array.isArray(val) && val.length === 0)) {
+        await set(ref(db, `serviceForms/${serviceName}`), steps);
+      }
+    } catch (e) {
+      console.warn('Failed to restore form for', serviceName, e);
+    }
+  }
+}
 export async function getServiceFormConfig(serviceName: string): Promise<StepDef[] | null> {
   const snap = await get(ref(db, `serviceForms/${serviceName}`));
   const val = snap.val();
-  if (!val) return null;
-  const steps = val as StepDef[];
-  return appendExtraStep(steps, serviceName);
+  const steps = (val as StepDef[]) || null;
+  // Fall back to predefined defaults when not found (handled by admin setup)
+  if (!steps) return null;
+  return steps;
 }
 
 export async function setServiceFormConfig(serviceName: string, steps: StepDef[]): Promise<void> {
@@ -182,7 +198,7 @@ export function subscribeServiceFormConfig(serviceName: string, cb: (steps: Step
   const handler = (snap: any) => {
     const val = snap.val();
     const steps = val ? (val as StepDef[]) : null;
-    cb(steps ? appendExtraStep(steps, serviceName) : null);
+    cb(steps);
   };
   onValue(r, handler);
   return () => off(r, 'value', handler);

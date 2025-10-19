@@ -5,9 +5,7 @@ import { logActivity } from '../utils/activity';
 import { notifyAdminNewServiceRequest } from '../utils/notifications';
 import { getServiceFormConfig, subscribeServiceFormConfig } from '../utils/services';
 import type { StepDef } from '../utils/services';
-import type { FieldDef, FieldType } from '../utils/services';
-
-// Config: Dynamic forms per service
+import type { FieldDef } from '../utils/services';
 
 type Props = {
   open: boolean;
@@ -24,7 +22,41 @@ export default function ServiceRequestModal({ open, onClose, serviceName }: Prop
   const [submitting, setSubmitting] = useState(false);
   const [submittedId, setSubmittedId] = useState<string | null>(null);
 
-  // Load dynamic form config with realtime updates, fallback to defaults
+  // Define 7-step structure: 1 user info, 5 service-specific, 1 verification
+  const uiSteps = useMemo(() => {
+    const userInfoStep: StepDef = {
+      title: 'Your Information',
+      fields: [
+        { name: 'fullName', label: 'Full Name', type: 'text', required: true },
+        { name: 'phoneNumber', label: 'Phone Number', type: 'tel', required: true },
+        { name: 'emailId', label: 'Email Address', type: 'email', required: true },
+      ],
+    };
+    // Use admin-defined service steps as-is; ensure we have exactly 5 steps
+    const base = Array.isArray(steps) ? [...steps] : [];
+    const serviceSteps: StepDef[] = base.slice(0, 5);
+    while (serviceSteps.length < 5) {
+      const idx = serviceSteps.length + 1;
+      serviceSteps.push({
+        title: `Service Details ${idx}`,
+        fields: [{ name: `additionalNotes${idx}`, label: 'Additional Notes', type: 'textarea' }],
+      });
+    }
+    return [userInfoStep, ...serviceSteps, { title: 'Verify All Details', fields: [] }];
+  }, [steps]);
+
+  // Prefill user info
+  useEffect(() => {
+    if (user) {
+      setAnswers((a) => ({
+        ...a,
+        fullName: a.fullName ?? user.name,
+        emailId: a.emailId ?? user.email,
+      }));
+    }
+  }, [user]);
+
+  // Load dynamic form config with realtime updates
   useEffect(() => {
     let unsub: (() => void) | null = null;
     const init = async () => {
@@ -32,8 +64,6 @@ export default function ServiceRequestModal({ open, onClose, serviceName }: Prop
       if (cfg && Array.isArray(cfg) && cfg.length) {
         setSteps(cfg);
       } else {
-        // Optionally, handle the case where no config is found for the service
-        // For now, we'll just set an empty array or show an error
         setSteps([]);
       }
       unsub = subscribeServiceFormConfig(serviceName, (next) => {
@@ -47,7 +77,10 @@ export default function ServiceRequestModal({ open, onClose, serviceName }: Prop
   }, [serviceName]);
 
   // Draft autosave
-  const draftKey = useMemo(() => user ? `serviceFormDraft:${user.id}:${serviceName}` : `serviceFormDraft::${serviceName}`, [user?.id, serviceName]);
+  const draftKey = useMemo(() => 
+    user ? `serviceFormDraft:${user.id}:${serviceName}` : `serviceFormDraft::${serviceName}`, 
+    [user?.id, serviceName]
+  );
   useEffect(() => {
     try {
       const raw = localStorage.getItem(draftKey);
@@ -62,17 +95,38 @@ export default function ServiceRequestModal({ open, onClose, serviceName }: Prop
     localStorage.setItem(draftKey, JSON.stringify({ stepIndex, answers }));
   }, [stepIndex, answers, draftKey]);
 
-  const totalSteps = steps.length;
+  const totalSteps = uiSteps.length;
   const progressPct = Math.round(((stepIndex + 1) / Math.max(1, totalSteps)) * 100);
 
   const validateCurrentStep = (): boolean => {
-    const current = steps[stepIndex];
+    const current = uiSteps[stepIndex];
     if (!current) return false;
+    if (current.title === 'Verify All Details') {
+      setErrors({});
+      return true;
+    }
     const nextErrors: Record<string, string> = {};
     for (const f of current.fields) {
       const val = answers[f.name];
-      if (f.required && (val === undefined || val === '' || (f.type === 'number' && (val === null || Number.isNaN(Number(val)))))) {
+      if (f.required && (val === undefined || val === '' || 
+        (f.type === 'number' && (val === null || Number.isNaN(Number(val)))) || 
+        (f.type === 'checkbox' && (!Array.isArray(val) || (val as any[]).length === 0)) ||
+        (f.type === 'array' && (!Array.isArray(val) || (val as any[]).filter(Boolean).length === 0))
+      )) {
         nextErrors[f.name] = 'This field is required';
+      }
+      // Require companion detail when 'Other' is selected
+      if (f.type === 'select' && val === 'Other' && f.required) {
+        const otherVal = answers[`${f.name}__other`];
+        if (!otherVal || String(otherVal).trim() === '') {
+          nextErrors[`${f.name}__other`] = 'Please specify other';
+        }
+      }
+      if (f.type === 'email' && val && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
+        nextErrors[f.name] = 'Invalid email address';
+      }
+      if (f.type === 'tel' && val && !/^\+?[\d\s-]{10,}$/.test(val)) {
+        nextErrors[f.name] = 'Invalid phone number';
       }
     }
     setErrors(nextErrors);
@@ -85,6 +139,10 @@ export default function ServiceRequestModal({ open, onClose, serviceName }: Prop
   };
   const handlePrev = () => setStepIndex((i) => Math.max(i - 1, 0));
 
+  const handleEditStep = (index: number) => {
+    setStepIndex(index);
+  };
+
   const handleSubmit = async () => {
     if (!validateCurrentStep() || !user) return;
     try {
@@ -94,7 +152,7 @@ export default function ServiceRequestModal({ open, onClose, serviceName }: Prop
         userName: user.name,
         userEmail: user.email,
         serviceName,
-        steps,
+        steps: uiSteps,
         answers,
       });
       await logActivity(user.id, 'service_request_submitted', { id, serviceName });
@@ -118,87 +176,234 @@ export default function ServiceRequestModal({ open, onClose, serviceName }: Prop
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto scroll-smooth">
       {/* Overlay */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div 
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm" 
+        onClick={onClose} 
+      />
 
       {/* Modal */}
-      <div className="absolute inset-x-0 top-10 mx-auto w-[95%] max-w-2xl rounded-2xl bg-gradient-to-br from-blue-600/20 via-purple-600/20 to-pink-600/20 border border-white/10 p-6 shadow-2xl animate-fade-in">
+      <div className="relative w-full max-w-md sm:max-w-lg md:max-w-2xl rounded-2xl bg-gradient-to-br from-blue-600/10 via-purple-600/10 to-pink-600/10 border border-white/20 p-6 shadow-2xl shadow-purple-500/20 backdrop-blur-lg max-h-[85vh] overflow-y-auto scroll-smooth">
         <div className="flex items-start justify-between">
           <div>
-            <h3 className="text-xl md:text-2xl font-bold"><span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400">Request: {serviceName}</span></h3>
+            <h3 className="text-xl md:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400">
+              Request: {serviceName}
+            </h3>
             <p className="text-sm text-gray-300">Step {stepIndex + 1} of {totalSteps}</p>
           </div>
-          <button onClick={onClose} className="rounded-xl px-3 py-2 bg-white/10 border border-white/20 text-white/80 hover:text-white">Close</button>
+          <button 
+            onClick={onClose} 
+            className="rounded-xl px-3 py-2 bg-white/10 border border-white/20 text-white/80 hover:bg-white/20 hover:text-white transition-colors"
+          >
+            Close
+          </button>
         </div>
 
         {/* Progress Bar */}
         <div className="mt-4">
-          <div className="progress-track">
-            <div className="progress-fill" style={{ width: `${progressPct}%` }} />
+          <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 transition-all duration-300" 
+              style={{ width: `${progressPct}%` }} 
+            />
           </div>
-          <div className="mt-1 text-xs text-gray-400">{progressPct}% complete</div>
+          <div className="mt-1 text-xs text-gray-300">{progressPct}% complete</div>
         </div>
 
         {/* Step Content */}
         <div className="mt-6 space-y-4">
-          <h4 className="text-lg font-semibold text-white">{steps[stepIndex]?.title}</h4>
-          {steps[stepIndex]?.fields.map((f) => (
-            <div key={f.name} className="space-y-1">
-              <label className="text-sm text-gray-300">
-                {f.label}{f.required && <span className="text-pink-400"> *</span>}
-              </label>
-              {f.type === 'text' && (
-                <input
-                  type="text"
-                  value={answers[f.name] ?? ''}
-                  placeholder={f.placeholder}
-                  onChange={(e) => setAnswers((a) => ({ ...a, [f.name]: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-xl bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50"
-                />
-              )}
-              {f.type === 'number' && (
-                <input
-                  type="number"
-                  value={answers[f.name] ?? ''}
-                  placeholder={f.placeholder}
-                  onChange={(e) => setAnswers((a) => ({ ...a, [f.name]: Number(e.target.value) }))}
-                  className="w-full px-3 py-2 rounded-xl bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50"
-                />
-              )}
-              {f.type === 'textarea' && (
-                <textarea
-                  value={answers[f.name] ?? ''}
-                  placeholder={f.placeholder}
-                  rows={3}
-                  onChange={(e) => setAnswers((a) => ({ ...a, [f.name]: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-xl bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50"
-                />
-              )}
-              {f.type === 'select' && (
-                <select
-                  value={answers[f.name] ?? ''}
-                  onChange={(e) => setAnswers((a) => ({ ...a, [f.name]: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-xl bg-white/10 border border-white/20 text-white"
-                >
-                  <option value="">Select...</option>
-                  {(f.options || []).map((opt) => (
-                    <option key={opt} value={opt}>{opt}</option>
-                  ))}
-                </select>
-              )}
-              {errors[f.name] && <div className="text-xs text-pink-300">{errors[f.name]}</div>}
+          <h4 className="text-lg font-semibold text-white">{uiSteps[stepIndex]?.title}</h4>
+          {uiSteps[stepIndex]?.title === 'Verify All Details' ? (
+            <div className="space-y-3">
+              {uiSteps.filter((s) => s.title !== 'Verify All Details').map((s, idx) => (
+                <div key={idx} className="rounded-lg bg-white/5 border border-white/10 p-3">
+                  <div className="flex justify-between items-center mb-2">
+                    <div className="text-sm font-semibold text-white">{idx + 1}. {s.title}</div>
+                    <button 
+                      onClick={() => handleEditStep(idx)}
+                      className="text-xs text-blue-400 hover:text-blue-300"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {s.fields.map((f) => (
+                      <div key={f.name} className="text-xs text-gray-300">
+                        <span className="text-gray-400">{f.label}: </span>
+                        <span className="text-white/90 break-all">{Array.isArray(answers[f.name]) ? (answers[f.name] as any[]).filter(Boolean).join(', ') : String(answers[f.name] ?? '')}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
+          ) : (
+            <>
+              {uiSteps[stepIndex]?.fields.map((f) => (
+                <div key={f.name} className="space-y-1">
+                  <label className="text-sm text-gray-200">
+                    {f.label}{f.required && <span className="text-pink-400"> *</span>}
+                  </label>
+                  {f.type === 'text' || f.type === 'email' || f.type === 'tel' ? (
+                    <input
+                      type={f.type}
+                      value={answers[f.name] ?? ''}
+                      placeholder={f.placeholder || `Enter ${f.label}`}
+                      onChange={(e) => setAnswers((a) => ({ ...a, [f.name]: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl bg-white/10 border border-white/20 text-white placeholder-gray-400/70 focus:outline-none focus:ring-2 focus:ring-purple-400/50 focus:border-purple-400/50 hover:bg-white/15 transition-colors"
+                    />
+                  ) : f.type === 'number' ? (
+                    <input
+                      type="number"
+                      value={answers[f.name] ?? ''}
+                      placeholder={f.placeholder || `Enter ${f.label}`}
+                      onChange={(e) => setAnswers((a) => ({ ...a, [f.name]: Number(e.target.value) }))}
+                      className="w-full px-3 py-2 rounded-xl bg-white/10 border border-white/20 text-white placeholder-gray-400/70 focus:outline-none focus:ring-2 focus:ring-purple-400/50 focus:border-purple-400/50 hover:bg-white/15 transition-colors"
+                    />
+                  ) : f.type === 'textarea' ? (
+                    <textarea
+                      value={answers[f.name] ?? ''}
+                      placeholder={f.placeholder || `Enter ${f.label}`}
+                      rows={3}
+                      onChange={(e) => setAnswers((a) => ({ ...a, [f.name]: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl bg-white/10 border border-white/20 text-white placeholder-gray-400/70 focus:outline-none focus:ring-2 focus:ring-purple-400/50 focus:border-purple-400/50 hover:bg-white/15 transition-colors"
+                    />
+                  ) : f.type === 'select' ? (
+                    <>
+                      <select
+                        value={answers[f.name] ?? ''}
+                        onChange={(e) => setAnswers((a) => ({ ...a, [f.name]: e.target.value }))}
+                        className="w-full px-3 py-2 rounded-xl bg-white/10 border border-white/20 text-white placeholder-gray-400/70 focus:outline-none focus:ring-2 focus:ring-purple-400/50 focus:border-purple-400/50 hover:bg-white/15 transition-colors"
+                      >
+                        <option value="" className="bg-gray-800">Select...</option>
+                        {(f.options || []).map((opt) => (
+                          <option key={opt} value={opt} className="bg-gray-800">{opt}</option>
+                        ))}
+                      </select>
+                      {(answers[f.name] ?? '') === 'Other' && (
+                        <input
+                          type="text"
+                          value={answers[`${f.name}__other`] ?? ''}
+                          onChange={(e) => setAnswers((a) => ({ ...a, [`${f.name}__other`]: e.target.value }))}
+                          placeholder={`Specify other for ${f.label}`}
+                          className="mt-2 w-full px-3 py-2 rounded-xl bg-white/10 border border-white/20 text-white placeholder-gray-400/70 focus:outline-none focus:ring-2 focus:ring-purple-400/50 focus:border-purple-400/50 hover:bg-white/15 transition-colors"
+                        />
+                      )}
+                    </>
+                  ) : f.type === 'checkbox' ? (
+                    <div className="flex flex-wrap gap-2">
+                      {(f.options || []).map((opt) => {
+                        const current = Array.isArray(answers[f.name]) ? (answers[f.name] as string[]) : [];
+                        const checked = current.includes(opt);
+                        return (
+                          <label key={opt} className="inline-flex items-center gap-2 px-2 py-1 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                setAnswers((a) => {
+                                  const arr = Array.isArray(a[f.name]) ? (a[f.name] as string[]) : [];
+                                  const next = e.target.checked ? [...arr, opt] : arr.filter((x) => x !== opt);
+                                  return { ...a, [f.name]: next };
+                                });
+                              }}
+                              className="text-purple-400 focus:ring-purple-400/50"
+                            />
+                            <span className="text-sm text-gray-200">{opt}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ) : f.type === 'radio' ? (
+                    <div className="flex flex-wrap gap-2">
+                      {(f.options || []).map((opt) => (
+                        <label key={opt} className="inline-flex items-center gap-2 px-2 py-1 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
+                          <input
+                            type="radio"
+                            name={f.name}
+                            checked={(answers[f.name] ?? '') === opt}
+                            onChange={() => setAnswers((a) => ({ ...a, [f.name]: opt }))}
+                            className="text-purple-400 focus:ring-purple-400/50"
+                          />
+                          <span className="text-sm text-gray-200">{opt}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : f.type === 'array' ? (
+                    <div className="space-y-2">
+                      <div className="flex flex-col gap-2">
+                        {Array.isArray(answers[f.name]) && (answers[f.name] as string[]).length > 0 ? (
+                          (answers[f.name] as string[]).map((val: string, idx: number) => (
+                            <div key={`${f.name}-${idx}`} className="flex items-center gap-2">
+                              <input
+                                type={f.itemType || 'text'}
+                                value={val}
+                                placeholder={f.itemLabel || 'Enter value'}
+                                onChange={(e) => setAnswers((a) => {
+                                  const arr = Array.isArray(a[f.name]) ? [...(a[f.name] as string[])] : [];
+                                  arr[idx] = e.target.value;
+                                  return { ...a, [f.name]: arr };
+                                })}
+                                className="flex-1 px-3 py-2 rounded-xl bg-white/10 border border-white/20 text-white placeholder-gray-400/70 focus:outline-none focus:ring-2 focus:ring-purple-400/50 focus:border-purple-400/50 hover:bg-white/15 transition-colors"
+                              />
+                              <button
+                                onClick={() => setAnswers((a) => {
+                                  const arr = Array.isArray(a[f.name]) ? [...(a[f.name] as string[])] : [];
+                                  arr.splice(idx, 1);
+                                  return { ...a, [f.name]: arr };
+                                })}
+                                className="px-3 py-2 rounded-xl bg-white/10 border border-white/20 text-white hover:bg-white/20"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-xs text-gray-400">No entries added yet.</div>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => setAnswers((a) => {
+                          const arr = Array.isArray(a[f.name]) ? [...(a[f.name] as string[])] : [];
+                          arr.push('');
+                          return { ...a, [f.name]: arr };
+                        })}
+                        className="px-3 py-2 rounded-xl bg-white/10 border border-white/20 text-white hover:bg-white/20"
+                      >
+                        + Add
+                      </button>
+                    </div>
+                  ) : null}
+                  {errors[f.name] && <div className="text-xs text-pink-300">{errors[f.name]}</div>}
+                </div>
+              ))}
+            </>
+          )}
         </div>
 
         {/* Navigation */}
-        <div className="mt-6 flex items-center justify-between">
-          <button onClick={handlePrev} disabled={stepIndex === 0} className="px-4 py-2 rounded-xl bg-white/10 border border-white/20 disabled:opacity-50">Previous</button>
+        <div className="mt-6 flex items-center justify-between sticky bottom-0 bg-gradient-to-br from-blue-600/10 via-purple-600/10 to-pink-600/10 py-4 -mx-6 px-6">
+          <button 
+            onClick={handlePrev} 
+            disabled={stepIndex === 0} 
+            className="px-4 py-2 rounded-xl bg-white/10 border border-white/20 text-white disabled:opacity-50 hover:bg-white/20 transition-colors"
+          >
+            Previous
+          </button>
           {stepIndex < totalSteps - 1 ? (
-            <button onClick={handleNext} className="px-6 py-2 rounded-xl bg-gradient-to-r from-[#0070f3] to-[#00d4ff] text-white shadow-[0_0_16px_rgba(0,212,255,0.25)]">Next</button>
+            <button 
+              onClick={handleNext} 
+              className="px-6 py-2 rounded-xl bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 text-white shadow-[0_0_16px_rgba(0,212,255,0.25)] hover:from-blue-500 hover:via-purple-500 hover:to-pink-500 transition-colors"
+            >
+              Next
+            </button>
           ) : (
-            <button onClick={handleSubmit} disabled={submitting} className="px-6 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white hover:from-emerald-600 hover:to-teal-700 disabled:opacity-50">
+            <button 
+              onClick={handleSubmit} 
+              disabled={submitting} 
+              className="px-6 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white hover:from-emerald-600 hover:to-teal-700 shadow-[0_0_16px_rgba(0,212,255,0.25)] disabled:opacity-50 transition-colors"
+            >
               {submitting ? 'Submitting...' : 'Submit Request'}
             </button>
           )}
@@ -207,10 +412,15 @@ export default function ServiceRequestModal({ open, onClose, serviceName }: Prop
         {/* Confirmation */}
         {submittedId && (
           <div className="mt-6 p-4 rounded-xl bg-white/5 border border-white/10">
-            <p className="text-sm text-gray-300">Your request has been submitted successfully.</p>
-            <p className="text-xs text-gray-400 mt-1">Reference ID: {submittedId}</p>
+            <p className="text-sm text-gray-200">Your request has been submitted successfully.</p>
+            <p className="text-xs text-gray-300 mt-1">Reference ID: {submittedId}</p>
             <div className="mt-3 flex justify-end">
-              <button onClick={onClose} className="px-4 py-2 rounded-xl bg-white/10 border border-white/20">Close</button>
+              <button 
+                onClick={onClose} 
+                className="px-4 py-2 rounded-xl bg-white/10 border border-white/20 text-white hover:bg-white/20 transition-colors"
+              >
+                Close
+              </button>
             </div>
           </div>
         )}

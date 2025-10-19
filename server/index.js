@@ -12,8 +12,8 @@ import Ticket from './models/Ticket.js';
 import LiveChat from './models/LiveChat.js';
 import Message from './models/Message.js';
 import Agent from './models/Agent.js';
-import { getSiteContext, retrieveContext } from './ai/context.js';
-import { getGeminiClient, generateAnswer } from './ai/gemini.js';
+import AIContext from './ai/context.js';
+import { generateAnswer } from './ai/gemini.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,14 +23,14 @@ const server = http.createServer(app);
 
 const io = new SocketIOServer(server, {
   cors: {
-    origin: ['http://localhost:5173'],
+    origin: ['http://localhost:5173', 'http://localhost:5175'],
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true,
   },
 });
 
 // Basic CORS & JSON
-app.use(cors({ origin: ['http://localhost:5173'], credentials: true }));
+app.use(cors({ origin: ['http://localhost:5173', 'http://localhost:5175'], credentials: true }));
 app.use(express.json({ limit: '2mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
@@ -88,6 +88,8 @@ io.on('connection', (socket) => {
     try {
       const site = await getSiteContext();
       const relevant = retrieveContext(site, content);
+      // Record user prompt in history for AI chat
+      await Message.create({ chat_id: `ai:${userId}`, sender_type: 'user', content, timestamp: Date.now() });
       const answer = await generateAnswer(content, relevant);
       const msg = await Message.create({ chat_id: `ai:${userId}`, sender_type: 'AI', content: answer, timestamp: Date.now() });
       socket.emit('ai:response', msg);
@@ -131,11 +133,11 @@ app.post('/api/agents/status', async (req, res) => {
 // Tickets API
 app.post('/api/tickets', upload.single('file'), async (req, res) => {
   try {
-    const { user_id, subject, category, description } = req.body;
+    const { user_id, subject, category, description, priority } = req.body;
     if (!user_id || !subject || !category || !description) return res.status(400).json({ error: 'Missing fields' });
 
     const filePath = req.file ? `/uploads/${req.file.filename}` : undefined;
-    const ticket = await Ticket.create({ user_id, subject, category, description, status: 'Pending', file_path: filePath, created_at: Date.now() });
+    const ticket = await Ticket.create({ user_id, subject, category, description, priority: (priority || 'medium'), status: 'Pending', file_path: filePath, created_at: Date.now() });
     notifyAdmins('ticket:new', { ticket });
     res.json(ticket);
   } catch (e) {
@@ -248,6 +250,22 @@ app.get('/api/messages', async (req, res) => {
     res.json(msgs);
   } catch (e) {
     res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+app.post('/api/ai-chat', async (req, res) => {
+  try {
+    const { prompt, userId } = req.body;
+    if (!prompt) return res.status(400).json({ error: 'Prompt is required' });
+
+    const site = await getSiteContext();
+    const relevant = retrieveContext(site, prompt);
+    const answer = await generateAnswer(prompt, relevant);
+
+    res.json({ reply: answer });
+  } catch (e) {
+    console.error('AI Chat Error:', e);
+    res.status(500).json({ error: 'AI processing failed' });
   }
 });
 

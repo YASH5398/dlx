@@ -167,3 +167,12 @@
   @apply bg-white/5;
 }
 .table-cell { @apply px-4 py-3; }
+
+@keyframes fadeSlide {
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-slide-500 {
+  animation: fadeSlide 0.5s ease-in-out both;
+}

@@ -1,51 +1,36 @@
-import { load as loadCheerio } from 'cheerio';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-let cachedContext = null;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-async function fetchPage(url) {
-  const res = await fetch(url, { headers: { 'User-Agent': 'DLX-SupportBot/1.0' } });
-  if (!res.ok) throw new Error(`Failed to fetch ${url}`);
-  const html = await res.text();
-  const $ = loadCheerio(html);
-  // Remove script/style/nav
-  ['script', 'style', 'nav', 'footer'].forEach((sel) => $(sel).remove());
-  const text = $('body').text().replace(/\s+/g, ' ').trim();
-  return text;
-}
+class AIContext {
+  constructor() {
+    this.context = new Map();
+    this.loadContext();
+  }
 
-export async function getSiteContext() {
-  if (cachedContext) return cachedContext;
-  const base = 'https://digilinex.com';
-  const urls = [
-    base,
-    `${base}/pricing`,
-    `${base}/services`,
-    `${base}/blogs`,
-    `${base}/tutorials`,
-    `${base}/docs`,
-  ];
-  const parts = [];
-  for (const u of urls) {
-    try {
-      const t = await fetchPage(u);
-      parts.push({ url: u, text: t });
-    } catch (e) {
-      // ignore failures for optional pages
+  loadContext() {
+    const contextFile = path.join(__dirname, 'context.json');
+    if (fs.existsSync(contextFile)) {
+      this.context = new Map(Object.entries(JSON.parse(fs.readFileSync(contextFile, 'utf-8'))));
     }
   }
-  cachedContext = parts;
-  return cachedContext;
+
+  saveContext() {
+    const contextFile = path.join(__dirname, 'context.json');
+    fs.writeFileSync(contextFile, JSON.stringify(Object.fromEntries(this.context), null, 2));
+  }
+
+  addResponse(query, response) {
+    this.context.set(query.toLowerCase(), response);
+    this.saveContext();
+  }
+
+  getResponse(query) {
+    return this.context.get(query.toLowerCase()) || null;
+  }
 }
 
-export function retrieveContext(contextParts, query) {
-  // naive relevance: rank by number of overlapping words
-  const q = (query || '').toLowerCase().split(/\W+/).filter(Boolean);
-  const scored = contextParts.map((p) => {
-    const t = p.text.toLowerCase();
-    const score = q.reduce((acc, w) => acc + (t.includes(w) ? 1 : 0), 0);
-    return { ...p, score };
-  });
-  scored.sort((a, b) => b.score - a.score);
-  const top = scored.slice(0, 3).map((p) => `From ${p.url}:\n${p.text.slice(0, 5000)}`);
-  return top.join('\n\n');
-}
+export default new AIContext();
