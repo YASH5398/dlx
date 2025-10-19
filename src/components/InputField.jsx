@@ -1,5 +1,18 @@
 import React from 'react';
 
+/**
+ * @param {{
+ *   label?: any,
+ *   value: any,
+ *   onChange: any,
+ *   type?: string,
+ *   placeholder?: string,
+ *   readOnly?: boolean,
+ *   helper?: any,
+ *   icon?: any,
+ *   className?: string,
+ * }} props
+ */
 export default function InputField({
   label,
   value,

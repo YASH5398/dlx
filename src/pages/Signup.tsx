@@ -26,6 +26,15 @@ const Signup: React.FC = () => {
   const [subscribe, setSubscribe] = useState(false);
   const [strength, setStrength] = useState<'weak' | 'medium' | 'strong'>('weak');
 
+  // Auto-fill referral code from URL query (?ref=DLX1234)
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('ref') || params.get('r');
+      if (code) setReferral(code);
+    } catch {}
+  }, []);
+
   const validate = () => {
     if (!name.trim() || !email || !password || !confirm) return 'Please fill all required fields';
     if (!/^([^\s@]+)@([^\s@]+)\.[^\s@]+$/.test(email)) return 'Enter a valid email address';

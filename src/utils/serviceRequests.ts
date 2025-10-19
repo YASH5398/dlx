@@ -21,6 +21,8 @@ export interface ServiceRequest {
   steps: StepDef[];
   answers: Record<string, any>;
   createdAt: number;
+  orderId?: string;
+  status?: 'Pending' | 'Approved' | 'Rejected';
 }
 
 export async function submitServiceRequest(input: {
@@ -41,9 +43,25 @@ export async function submitServiceRequest(input: {
     steps: input.steps,
     answers: input.answers,
     createdAt: Date.now(),
+    status: 'Pending',
+  };
+  // Create linked order with default pending status
+  const orderId = crypto.randomUUID();
+  req.orderId = orderId;
+  const order = {
+    id: orderId,
+    title: `Service: ${input.serviceName}`,
+    priceInUsd: 0,
+    priceInInr: 0,
+    status: 'pending',
+    orderStatus: 'processing',
+    type: 'Service',
+    purchaseDate: new Date().toISOString(),
+    transactionId: id,
   };
   await set(ref(db, `serviceRequests/${id}`), req);
   await set(ref(db, `users/${input.userId}/serviceRequests/${id}`), req);
+  await set(ref(db, `users/${input.userId}/orders/${orderId}`), order);
   return id;
 }
 

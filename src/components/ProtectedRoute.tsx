@@ -1,4 +1,4 @@
-import React, { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
 
@@ -6,7 +6,7 @@ type ProtectedRouteProps = {
   children: ReactNode;
 };
 
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
+const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const { isAuthenticated, initialized, mfaRequired, mfaVerified } = useUser() as any;
   const location = useLocation();
 

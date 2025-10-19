@@ -1,5 +1,8 @@
 import React from 'react';
 
+/**
+ * @param {{ label: any, checked: any, onChange: any, helper?: any, className?: string }} props
+ */
 export default function ToggleSwitch({ label, checked, onChange, helper, className = '' }) {
   return (
     <div className={`flex items-start justify-between gap-4 ${className}`}>

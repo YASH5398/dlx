@@ -6,6 +6,8 @@ import { db } from '../../firebase';
 import { ref, onValue } from 'firebase/database';
 import { useNavigate } from 'react-router-dom';
 import ServiceRequestModal from '../../components/ServiceRequestModal';
+import { getServices, subscribeServices } from '../../utils/services';
+import type { ServiceItem } from '../../utils/services';
 
 // Service interface
 interface Service {
@@ -14,6 +16,17 @@ interface Service {
   description: string;
   startingPrice: string;
   icon: string;
+  gradient: string;
+  features: string[];
+  category: string;
+}
+
+interface StaticService {
+  id: string;
+  name: string;
+  description: string;
+  startingPrice: string;
+  icon: React.ReactNode;
   gradient: string;
   features: string[];
   category: string;
@@ -29,16 +42,41 @@ export default function DashboardHome() {
   const [searchTerm, setSearchTerm] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedService, setSelectedService] = useState<string | null>(null);
+  const [services, setServices] = useState<ServiceItem[]>([]);
 
-  const nextRewardDate = (() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return d.toLocaleDateString();
-  })();
-  const totalReferrals = activeReferrals || 0;
+  // Load services with backend subscription and fallback to static list
+  useEffect(() => {
+    let unsub: (() => void) | null = null;
+    const load = async () => {
+      try {
+        const list = await getServices();
+        if (list && list.length) {
+          setServices(list);
+        } else {
+          setServices(
+            staticServices.map((s) => ({
+              id: s.id,
+              name: s.name,
+              description: s.description,
+              startingPrice: s.startingPrice,
+              icon: String(s.icon),
+              gradient: s.gradient,
+              features: s.features,
+              category: s.category,
+            }))
+          );
+        }
+      } catch {}
+      unsub = subscribeServices((items) => {
+        if (items && items.length) setServices(items);
+      });
+    };
+    load();
+    return () => { if (unsub) unsub(); };
+  }, []);
 
-  // Services data
-  const services: Service[] = [
+  // Fallback static list (used if backend is empty)
+  const staticServices: StaticService[] = [
     {
       id: '1',
       name: 'Crypto Token Creation',
@@ -291,6 +329,23 @@ export default function DashboardHome() {
 
           </div>
 
+          {/* Affiliate Program CTA */}
+          <div className="relative rounded-2xl sm:rounded-3xl bg-gradient-to-br from-[#1a1f3a] via-[#0f1429] to-[#0a0e1f] border border-green-500/20 shadow-xl overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-teal-500/5"></div>
+            <div className="relative p-4 sm:p-5 lg:p-6 flex items-center justify-between gap-4">
+              <div>
+                <h3 className="text-lg sm:text-xl font-bold text-white">Affiliate Program</h3>
+                <p className="text-sm text-slate-300">Refer users and earn commissions on successful conversions.</p>
+              </div>
+              <button
+                onClick={() => navigate('/affiliate-program')}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white text-sm sm:text-base font-bold shadow-lg transition-all duration-200"
+              >
+                Join as Affiliate
+              </button>
+            </div>
+          </div>
+
           {/* Services Section */}
           <div className="space-y-4 sm:space-y-5 pt-4 sm:pt-6">
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
@@ -348,7 +403,7 @@ export default function DashboardHome() {
 
                     {/* Features */}
                     <ul className="space-y-2">
-                      {service.features.map((feature, idx) => (
+                      {(service.features ?? []).map((feature, idx) => (
                         <li key={idx} className="flex items-start gap-2">
                           <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 mt-2 flex-shrink-0"></div>
                           <span className="text-sm text-slate-300 leading-tight">{feature}</span>

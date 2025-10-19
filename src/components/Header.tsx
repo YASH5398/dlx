@@ -31,15 +31,15 @@ export default function Header() {
   ];
 
   const dashboardLinks = [
-    { to: '/dashboard', label: 'Dashboard' },
-    { to: '/dashboard/commission', label: 'Commission & Rewards' },
-    { to: '/dashboard/orders', label: 'Orders' },
-    { to: '/dashboard/digital-products', label: 'Digital Products' },
-    { to: '/dashboard/mining', label: 'Mining' },
-    { to: '/dashboard/referrals', label: 'Referrals' },
-    { to: '/dashboard/wallet', label: 'Wallet' },
-    { to: '/dashboard/support', label: 'Support' },
-    { to: '/dashboard/settings', label: 'Settings' },
+    { label: "Overview", to: "/dashboard" },
+    { label: "Orders", to: "/orders" },
+    { label: "Mining", to: "/mining" },
+    { label: "Wallet", to: "/wallet" },
+    { label: "Affiliate Program", to: "/affiliate-program" },
+    { label: "Commission", to: "/commission" },
+    { label: "Referrals", to: "/referrals" },
+    { label: "Support", to: "/support" },
+    { label: "Settings", to: "/settings" },
   ];
 
   const desktopLinkClass = isAuthenticated

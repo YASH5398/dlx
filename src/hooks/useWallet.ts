@@ -22,19 +22,6 @@ export function useWallet() {
     return () => unsub();
   }, [user?.id]);
 
-  useEffect(() => {
-    if (!user) return;
-    const walletRef = ref(db, `users/${user.id}/wallet`);
-    const id = setInterval(() => {
-      setWallet((prev) => {
-        const next = { ...prev, dlx: prev.dlx + Math.random() * 2 };
-        update(walletRef, next);
-        return next;
-      });
-    }, 5000);
-    return () => clearInterval(id);
-  }, [user?.id]);
-
   const refresh = () => {
     if (!user) return;
     const walletRef = ref(db, `users/${user.id}/wallet`);

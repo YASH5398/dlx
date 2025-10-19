@@ -4,6 +4,8 @@ import Header from './components/Header';
 import Footer from './components/Footer';
 import ProtectedRoute from './components/ProtectedRoute';
 import DashboardLayout from './pages/Dashboard/DashboardLayout';
+import AffiliateProgram from './pages/AffiliateProgram.jsx';
+import OrderInvoice from './pages/Dashboard/OrderInvoice';
 
 // Public pages
 import Home from './pages/Home';
@@ -22,11 +24,11 @@ import Otp from './pages/Otp';
 import DashboardHome from './pages/Dashboard/DashboardHome';
 import Commission from './pages/Dashboard/Commission';
 import Orders from './pages/Dashboard/Orders';
-import Mining from './pages/Mining';
+import Mining from './pages/Dashboard/Mining';
 import Referrals from './pages/Dashboard/Referrals';
 import Wallet from './pages/Dashboard/Wallet';
 import Support from './pages/Dashboard/Support';
-import Settings from './pages/Dashboard/Settings';
+import SettingsFull from './pages/Dashboard/SettingsFull';
 import Profile from './pages/Dashboard/Profile';
 
 function PublicLayout() {
@@ -68,13 +70,15 @@ function App() {
         }
       >
         <Route path="/dashboard" element={<DashboardHome />} />
-        <Route path="/dashboard/commission" element={<Commission />} />
-        <Route path="/dashboard/orders" element={<Orders />} />
-        <Route path="/dashboard/mining" element={<Mining />} />
-        <Route path="/dashboard/referrals" element={<Referrals />} />
-        <Route path="/dashboard/wallet" element={<Wallet />} />
-        <Route path="/dashboard/support" element={<Support />} />
-        <Route path="/dashboard/settings" element={<Settings />} />
+        <Route path="/commission" element={<Commission />} />
+        <Route path="/orders" element={<Orders />} />
+        <Route path="/orders/:orderId/invoice" element={<OrderInvoice />} />
+        <Route path="/mining" element={<Mining />} />
+        <Route path="/referrals" element={<Referrals />} />
+        <Route path="/wallet" element={<Wallet />} />
+        <Route path="/affiliate-program" element={<AffiliateProgram />} />
+        <Route path="/support" element={<Support />} />
+        <Route path="/settings" element={<SettingsFull />} />
         <Route path="/dashboard/profile" element={<Profile />} />
         <Route path="/dashboard/digital-products" element={<DigitalProducts />} />
       </Route>

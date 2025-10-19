@@ -151,6 +151,7 @@ export default function SettingsFull() {
   };
 
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleteStep, setDeleteStep] = useState<number>(0);
 
   return (
     <div className="max-w-5xl mx-auto px-2 md:px-3 lg:px-4 py-6">
@@ -273,7 +274,7 @@ export default function SettingsFull() {
             <div className="mt-4 flex items-center gap-3 justify-end">
               <Button variant="secondary" onClick={() => setConfirmOpen(false)}>{t('cancel')}</Button>
               {deleteStep < 2 ? (
-                <Button variant="secondary" onClick={() => setDeleteStep((s) => s + 1)} className="text-red-400 border border-red-400/40 hover:bg-red-500/10">{deleteStep === 0 ? t('confirm_yes') : t('confirm_are_you_sure')}</Button>
+                <Button variant="secondary" onClick={() => setDeleteStep((s: number) => s + 1)} className="text-red-400 border border-red-400/40 hover:bg-red-500/10">{deleteStep === 0 ? t('confirm_yes') : t('confirm_are_you_sure')}</Button>
               ) : (
                 <Button variant="secondary" onClick={deleteAccount} className="text-red-400 border border-red-400/40 hover:bg-red-500/10">{t('confirm_delete')}</Button>
               )}

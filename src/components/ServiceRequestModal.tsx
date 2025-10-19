@@ -3,142 +3,11 @@ import { useUser } from '../context/UserContext';
 import { submitServiceRequest } from '../utils/serviceRequests';
 import { logActivity } from '../utils/activity';
 import { notifyAdminNewServiceRequest } from '../utils/notifications';
-
-// Field & step types
-type FieldType = 'text' | 'textarea' | 'select' | 'number' | 'checkbox';
-interface FieldDef {
-  name: string;
-  label: string;
-  type: FieldType;
-  required?: boolean;
-  placeholder?: string;
-  options?: string[]; // for select
-}
-interface StepDef {
-  title: string;
-  fields: FieldDef[];
-}
+import { getServiceFormConfig, subscribeServiceFormConfig } from '../utils/services';
+import type { StepDef } from '../utils/services';
+import type { FieldDef, FieldType } from '../utils/services';
 
 // Config: Dynamic forms per service
-const SERVICE_FORMS: Record<string, StepDef[]> = {
-  'Mobile App Development': [
-    {
-      title: 'App Basics',
-      fields: [
-        { name: 'appName', label: 'App Name', type: 'text', required: true, placeholder: 'e.g., DigiPay' },
-        { name: 'platform', label: 'Platform', type: 'select', required: true, options: ['iOS', 'Android', 'Both'] },
-        { name: 'coreFeatures', label: 'Core Features', type: 'textarea', required: true, placeholder: 'Login, Payments, Notifications...' },
-      ],
-    },
-    {
-      title: 'Backend & Framework',
-      fields: [
-        { name: 'needBackend', label: 'Need Backend?', type: 'select', required: true, options: ['Yes', 'No', 'Unsure'] },
-        { name: 'preferredFramework', label: 'Preferred Framework', type: 'select', options: ['React Native', 'Flutter', 'Swift/Kotlin', 'No Preference'], required: true },
-      ],
-    },
-    {
-      title: 'Tech & Budget',
-      fields: [
-        { name: 'techStack', label: 'Tech Stack', type: 'textarea', placeholder: 'Auth, DB, APIs, CI/CD...' },
-        { name: 'budgetUsd', label: 'Budget (USD)', type: 'number', required: true, placeholder: 'e.g., 5000' },
-      ],
-    },
-    {
-      title: 'Confirm & Summary',
-      fields: [
-        { name: 'timeline', label: 'Target Timeline (weeks)', type: 'number', placeholder: 'e.g., 6' },
-        { name: 'notes', label: 'Additional Notes', type: 'textarea', placeholder: 'Any constraints or references' },
-      ],
-    },
-  ],
-  'Website Development': [
-    {
-      title: 'Project Overview',
-      fields: [
-        { name: 'siteType', label: 'Site Type', type: 'select', required: true, options: ['Landing Page', 'Corporate', 'E-commerce', 'Web App'] },
-        { name: 'pages', label: 'Key Pages', type: 'textarea', required: true, placeholder: 'Home, About, Services, Contact...' },
-      ],
-    },
-    {
-      title: 'Tech & CMS',
-      fields: [
-        { name: 'framework', label: 'Preferred Stack', type: 'select', options: ['React + Vite', 'Next.js', 'Vue', 'No Preference'], required: true },
-        { name: 'cms', label: 'CMS Needed?', type: 'select', options: ['Headless (Strapi/Sanity)', 'WordPress', 'None'], required: true },
-      ],
-    },
-    {
-      title: 'Design & Budget',
-      fields: [
-        { name: 'designRefs', label: 'Design References', type: 'textarea', placeholder: 'Links or notes' },
-        { name: 'budgetUsd', label: 'Budget (USD)', type: 'number', required: true, placeholder: 'e.g., 3000' },
-      ],
-    },
-    {
-      title: 'Confirm & Summary',
-      fields: [
-        { name: 'timeline', label: 'Target Timeline (weeks)', type: 'number', placeholder: 'e.g., 4' },
-        { name: 'notes', label: 'Additional Notes', type: 'textarea', placeholder: 'Any constraints or references' },
-      ],
-    },
-  ],
-  'Graphic Design': [
-    {
-      title: 'Requirements',
-      fields: [
-        { name: 'scope', label: 'Design Scope', type: 'select', options: ['Logo', 'Brand Kit', 'Banners', 'Social Media'], required: true },
-        { name: 'style', label: 'Style Preferences', type: 'textarea', placeholder: 'Minimal, bold, modern...' },
-      ],
-    },
-    {
-      title: 'Assets & Budget',
-      fields: [
-        { name: 'assets', label: 'Existing Assets', type: 'textarea', placeholder: 'Logos, colors, fonts' },
-        { name: 'budgetUsd', label: 'Budget (USD)', type: 'number', required: true },
-      ],
-    },
-    {
-      title: 'Confirm',
-      fields: [
-        { name: 'timeline', label: 'Target Timeline (weeks)', type: 'number' },
-        { name: 'notes', label: 'Additional Notes', type: 'textarea' },
-      ],
-    },
-  ],
-  'Marketing Services': [
-    {
-      title: 'Goal & Channels',
-      fields: [
-        { name: 'goal', label: 'Primary Goal', type: 'select', options: ['Leads', 'Sales', 'Brand Awareness'], required: true },
-        { name: 'channels', label: 'Channels', type: 'textarea', placeholder: 'SEO, PPC, Social, Email' },
-      ],
-    },
-    {
-      title: 'Budget & Timeline',
-      fields: [
-        { name: 'budgetUsd', label: 'Budget (USD)', type: 'number', required: true },
-        { name: 'timeline', label: 'Target Timeline (weeks)', type: 'number' },
-      ],
-    },
-    {
-      title: 'Confirm',
-      fields: [
-        { name: 'notes', label: 'Additional Notes', type: 'textarea' },
-      ],
-    },
-  ],
-};
-
-// Fallback generic form for other services
-function getFormSteps(serviceName: string): StepDef[] {
-  if (SERVICE_FORMS[serviceName]) return SERVICE_FORMS[serviceName];
-  return [
-    { title: 'Overview', fields: [ { name: 'summary', label: 'Brief Summary', type: 'textarea', required: true } ] },
-    { title: 'Scope', fields: [ { name: 'deliverables', label: 'Deliverables', type: 'textarea', required: true } ] },
-    { title: 'Budget & Timeline', fields: [ { name: 'budgetUsd', label: 'Budget (USD)', type: 'number', required: true }, { name: 'timeline', label: 'Target Timeline (weeks)', type: 'number' } ] },
-    { title: 'Confirm', fields: [ { name: 'notes', label: 'Additional Notes', type: 'textarea' } ] },
-  ];
-}
 
 type Props = {
   open: boolean;
@@ -148,12 +17,34 @@ type Props = {
 
 export default function ServiceRequestModal({ open, onClose, serviceName }: Props) {
   const { user } = useUser();
-  const steps = useMemo(() => getFormSteps(serviceName), [serviceName]);
+  const [steps, setSteps] = useState<StepDef[]>([]);
   const [stepIndex, setStepIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submittedId, setSubmittedId] = useState<string | null>(null);
+
+  // Load dynamic form config with realtime updates, fallback to defaults
+  useEffect(() => {
+    let unsub: (() => void) | null = null;
+    const init = async () => {
+      const cfg = await getServiceFormConfig(serviceName);
+      if (cfg && Array.isArray(cfg) && cfg.length) {
+        setSteps(cfg);
+      } else {
+        // Optionally, handle the case where no config is found for the service
+        // For now, we'll just set an empty array or show an error
+        setSteps([]);
+      }
+      unsub = subscribeServiceFormConfig(serviceName, (next) => {
+        if (next && next.length) {
+          setSteps(next);
+        }
+      });
+    };
+    init();
+    return () => { if (unsub) try { unsub(); } catch {} };
+  }, [serviceName]);
 
   // Draft autosave
   const draftKey = useMemo(() => user ? `serviceFormDraft:${user.id}:${serviceName}` : `serviceFormDraft::${serviceName}`, [user?.id, serviceName]);
@@ -172,10 +63,11 @@ export default function ServiceRequestModal({ open, onClose, serviceName }: Prop
   }, [stepIndex, answers, draftKey]);
 
   const totalSteps = steps.length;
-  const progressPct = Math.round(((stepIndex + 1) / totalSteps) * 100);
+  const progressPct = Math.round(((stepIndex + 1) / Math.max(1, totalSteps)) * 100);
 
   const validateCurrentStep = (): boolean => {
     const current = steps[stepIndex];
+    if (!current) return false;
     const nextErrors: Record<string, string> = {};
     for (const f of current.fields) {
       const val = answers[f.name];
@@ -250,8 +142,8 @@ export default function ServiceRequestModal({ open, onClose, serviceName }: Prop
 
         {/* Step Content */}
         <div className="mt-6 space-y-4">
-          <h4 className="text-lg font-semibold text-white">{steps[stepIndex].title}</h4>
-          {steps[stepIndex].fields.map((f) => (
+          <h4 className="text-lg font-semibold text-white">{steps[stepIndex]?.title}</h4>
+          {steps[stepIndex]?.fields.map((f) => (
             <div key={f.name} className="space-y-1">
               <label className="text-sm text-gray-300">
                 {f.label}{f.required && <span className="text-pink-400"> *</span>}
