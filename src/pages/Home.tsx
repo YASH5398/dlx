@@ -5,6 +5,7 @@ import {
   Rocket, Target, DollarSign, Gift, MessageCircle, ChevronRight
 } from "lucide-react";
 import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion";
+import { useNavigate } from 'react-router-dom';
 
 // ============================================================================
 // ERROR BOUNDARY
@@ -64,6 +65,7 @@ const FloatingParticles = () => {
 // HEADER COMPONENT
 // ============================================================================
 const Header = () => {
+  const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -124,6 +126,7 @@ const Header = () => {
               className="px-5 py-2.5 text-white text-sm font-medium bg-white/10 rounded-xl hover:bg-white/20 transition-all duration-300 backdrop-blur-lg"
               whileHover={{ scale: 1.05, boxShadow: "0 5px 20px rgba(255,255,255,0.2)" }}
               whileTap={{ scale: 0.95 }}
+              onClick={() => navigate('/login')}
             >
               Login
             </motion.button>
@@ -131,6 +134,7 @@ const Header = () => {
               className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white text-sm font-semibold rounded-xl hover:shadow-2xl transition-all duration-300 relative overflow-hidden group"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
+              onClick={() => navigate('/signup')}
             >
               <span className="relative z-10">Get Started</span>
               <motion.div
@@ -179,12 +183,14 @@ const Header = () => {
                   <motion.button
                     className="px-5 py-2.5 text-white text-sm font-medium bg-white/10 rounded-xl"
                     whileTap={{ scale: 0.95 }}
+                    onClick={() => navigate('/login')}
                   >
                     Login
                   </motion.button>
                   <motion.button
                     className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white text-sm font-semibold rounded-xl"
                     whileTap={{ scale: 0.95 }}
+                    onClick={() => navigate('/signup')}
                   >
                     Get Started
                   </motion.button>
@@ -202,6 +208,7 @@ const Header = () => {
 // HERO SECTION
 // ============================================================================
 const HeroSection = () => {
+  const navigate = useNavigate();
   const [typedText, setTypedText] = useState("");
   const fullText = "Digital Reality";
   
@@ -298,6 +305,7 @@ const HeroSection = () => {
                 className="group px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white text-base font-semibold rounded-xl hover:shadow-2xl transition-all flex items-center justify-center gap-2 relative overflow-hidden"
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
+                onClick={() => navigate('/signup')}
               >
                 <span className="relative z-10 flex items-center gap-2">
                   Start Your Project

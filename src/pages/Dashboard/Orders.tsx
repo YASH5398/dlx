@@ -1,11 +1,9 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { db } from '../../firebase';
-import { ref, onValue, update, off, runTransaction, set } from 'firebase/database';
+import { firestore } from '../../firebase';
+import { collection, query, where, onSnapshot, doc, updateDoc, runTransaction } from 'firebase/firestore';
 import { useUser } from '../../context/UserContext';
 import { useNavigate } from 'react-router-dom';
-import { getOrders } from '../../utils/api';
 import { io } from 'socket.io-client';
-import { purchase, getBalances } from '../../utils/wallet';
 import { notifyAdminPayment } from '../../utils/notifications';
 import { 
   ShoppingBagIcon, 
@@ -92,7 +90,7 @@ const orderStatusBadge = (s?: OrderStatus) => {
     completed: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50',
     cancelled: 'bg-red-500/20 text-red-400 border-red-500/50',
   };
-  return styles[s || ''] || 'bg-gray-500/20 text-gray-400 border-gray-500/50';
+  return styles[s || 'processing'] || 'bg-gray-500/20 text-gray-400 border-gray-500/50';
 };
 
 export default function Orders() {
@@ -122,31 +120,79 @@ export default function Orders() {
   const [payCurrency, setPayCurrency] = useState<'USDT' | 'INR'>('USDT');
   const [usePurchase, setUsePurchase] = useState<boolean>(true);
   const [isPaying, setIsPaying] = useState<boolean>(false);
-  const balances = getBalances();
 
-  // Fetch orders
+
+  // Fetch orders (Firestore)
   useEffect(() => {
     if (!user?.id) return;
     setLoading(true);
     setError(null);
-    getOrders(user.id)
-      .then((list) => {
-        setOrders(list as OrderItem[]);
+
+    const q = query(collection(firestore, 'orders'), where('userId', '==', user.id));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const list: OrderItem[] = [];
+        snap.forEach((docSnap) => {
+          const d: any = docSnap.data();
+          const ts =
+            d?.timestamp?.toMillis?.() ??
+            (typeof d?.timestamp === 'number' ? d.timestamp : Date.now());
+          const priceInUsd = Number(d?.amountUsd ?? d?.priceInUsd ?? 0);
+          const priceInInr = Number(d?.amountInr ?? d?.priceInInr ?? 0);
+          const statusRaw = String(d?.status ?? 'Completed');
+          const status: Status =
+            statusRaw.toLowerCase() === 'completed'
+              ? 'paid'
+              : statusRaw.toLowerCase() === 'refunded'
+              ? 'refunded'
+              : statusRaw.toLowerCase() === 'pending'
+              ? 'pending'
+              : statusRaw.toLowerCase() === 'failed'
+              ? 'failed'
+              : 'paid';
+          const orderStatus: OrderStatus = status === 'paid' ? 'completed' : 'processing';
+
+          list.push({
+            id: docSnap.id,
+            title: d?.productTitle ?? d?.title ?? 'Order',
+            priceInUsd,
+            priceInInr,
+            status,
+            orderStatus,
+            type: (d?.type as any) ?? 'Digital',
+            purchaseDate: new Date(ts).toISOString(),
+            method: d?.paymentMode ?? d?.method,
+            transactionId: d?.transactionId,
+            buyer: d?.buyer ?? (d?.userId === user.id ? 'You' : d?.userName),
+            downloadUrl: d?.downloadUrl ?? null,
+            features: d?.features ?? [],
+            steps: d?.steps ?? [],
+            updates: d?.updates ?? [],
+            release: d?.release ?? undefined,
+            chatId: d?.chatId ?? null,
+          });
+        });
+        list.sort(
+          (a, b) =>
+            new Date(b.purchaseDate || 0).getTime() -
+            new Date(a.purchaseDate || 0).getTime()
+        );
+        setOrders(list);
         setLoading(false);
-      })
-      .catch((err) => {
-        console.error('Orders fetch failed', err);
+      },
+      (err) => {
+        console.error('Orders load failed', err);
         setError('Unable to load orders. Please try again.');
         setLoading(false);
-      });
+      }
+    );
 
-    const ordersRef = ref(db, `users/${user.id}/orders`);
-    const unsub = onValue(ordersRef, (snap) => {
-      const val = snap.val() || {};
-      const list: OrderItem[] = Object.keys(val).map((id) => ({ ...(val[id] as OrderItem), id }));
-      setOrders(list);
-    });
-    return () => off(ordersRef);
+    return () => {
+      try {
+        unsub();
+      } catch {}
+    };
   }, [user?.id]);
 
   // Setup chat
@@ -198,7 +244,7 @@ export default function Orders() {
       if (chat?._id) {
         setChatId(chat._id);
         socket?.emit('chat:join', { chatId: chat._id });
-        await update(ref(db, `users/${user.id}/orders/${selected.id}`), { chatId: chat._id });
+        await updateDoc(doc(firestore, 'orders', selected.id), { chatId: chat._id });
         setMessages([]);
       }
     } finally {
@@ -217,16 +263,52 @@ export default function Orders() {
     setIsPaying(true);
     try {
       const amount = payCurrency === 'USDT' ? (selected.priceInUsd || 0) : (selected.priceInInr || 0);
-      const key = payCurrency === 'USDT' ? 'usdt' : 'inr';
-      const half = amount / 2;
-      const useFromPurchaseAmt = usePurchase ? Math.min(balances.purchase[key], half) : 0;
-      const useFromMainAmt = amount - useFromPurchaseAmt;
-      
-      const balPath = ref(db, `users/${user.id}/wallet/${key}`);
-      await runTransaction(balPath, (curr) => (typeof curr === 'number' ? curr : 0) - useFromMainAmt);
-      await purchase(amount, payCurrency as any);
-      await update(ref(db, `users/${user.id}/orders/${selected.id}`), { status: 'paid', method: payCurrency });
-      
+      const walletRef = doc(firestore, 'wallets', user.id);
+      const orderRef = doc(firestore, 'orders', selected.id);
+
+      await runTransaction(firestore, async (tx) => {
+        const walletSnap = await tx.get(walletRef);
+        if (!walletSnap.exists()) throw new Error('Wallet not found');
+
+        const w: any = walletSnap.data();
+
+        if (payCurrency === 'USDT') {
+          const main = Number(w?.mainUsdt ?? 0);
+          const purchase = Number(w?.purchaseUsdt ?? 0);
+
+          if (usePurchase) {
+            const half = Number((amount / 2).toFixed(2));
+            if (purchase < half || main < half) {
+              throw new Error('Insufficient USDT in wallets for split.');
+            }
+            tx.update(walletRef, { mainUsdt: main - half, purchaseUsdt: purchase - half });
+          } else {
+            if (main < amount) {
+              throw new Error('Insufficient USDT in Main Wallet.');
+            }
+            tx.update(walletRef, { mainUsdt: Number((main - amount).toFixed(2)) });
+          }
+        } else {
+          const main = Number(w?.mainInr ?? 0);
+          const purchase = Number(w?.purchaseInr ?? 0);
+
+          if (usePurchase) {
+            const half = Math.floor(amount / 2);
+            if (purchase < half || main < half) {
+              throw new Error('Insufficient INR in wallets for split.');
+            }
+            tx.update(walletRef, { mainInr: main - half, purchaseInr: purchase - half });
+          } else {
+            if (main < amount) {
+              throw new Error('Insufficient INR in Main Wallet.');
+            }
+            tx.update(walletRef, { mainInr: main - amount });
+          }
+        }
+
+        tx.update(orderRef, { status: 'Completed', paymentMode: payCurrency });
+      });
+
       try {
         const nid = crypto.randomUUID();
         await notifyAdminPayment({
@@ -237,23 +319,23 @@ export default function Orders() {
           method: payCurrency
         });
       } catch {}
-      
+
       setSelected({ ...selected, status: 'paid', method: payCurrency });
     } catch (e) {
       console.error(e);
     } finally {
       setIsPaying(false);
     }
-  }, [user?.id, selected, payCurrency, usePurchase, balances]);
+  }, [user?.id, selected, payCurrency, usePurchase]);
 
   const handleRefund = async (o: OrderItem) => {
     if (!user?.id) return;
-    await update(ref(db, `users/${user.id}/orders/${o.id}`), { status: 'refunded' as Status });
+    await updateDoc(doc(firestore, 'orders', o.id), { status: 'Refunded' });
   };
 
   const handleMarkPaid = async (o: OrderItem) => {
     if (!user?.id) return;
-    await update(ref(db, `users/${user.id}/orders/${o.id}`), { status: 'paid' as Status });
+    await updateDoc(doc(firestore, 'orders', o.id), { status: 'Completed' });
   };
 
   // Filtered orders

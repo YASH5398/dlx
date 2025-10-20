@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useUser } from '../context/UserContext';
-import { db } from '../firebase';
-import { ref, onValue } from 'firebase/database';
+import { firestore } from '../firebase';
+import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
 
 export type EarningsPoint = { t: number; usd: number };
 export type ReferralHistoryItem = {
@@ -13,7 +13,6 @@ export type ReferralHistoryItem = {
 };
 
 function computeTierByCount(count: number) {
-  // thresholds inspired by Home.tsx example
   if (count >= 31) return { tier: 3, rate: 30, level: 'Gold' };
   if (count >= 16) return { tier: 2, rate: 28, level: 'Silver' };
   if (count >= 6) return { tier: 2, rate: 25, level: 'Silver' };
@@ -41,41 +40,55 @@ export function useReferral() {
     return `${base}/signup?ref=${referralCode}`;
   }, [referralCode]);
 
-  // Subscribe to all users, derive referred users and commissions
   useEffect(() => {
-    if (!user) return;
-    const unsub = onValue(ref(db, 'users'), (snap) => {
-      const all = (snap.val() || {}) as Record<string, any>;
-      const referredEntries = Object.entries(all).filter(([uid, u]) => (u?.profile?.referralCode || '').toUpperCase() === referralCode);
+    if (!user?.id) return;
 
-      const count = referredEntries.length;
+    const refDoc = doc(firestore, 'referrals', user.id);
+    const unsubRefDoc = onSnapshot(refDoc, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data() as any;
+        setActiveReferrals(Number(data.activeReferrals || 0));
+        setTotalEarnings(Number(data.totalEarningsUsd || 0));
+        const t = Number(data.tier || 1);
+        const r = Number(data.rate || 20);
+        const lv = (data.level || 'Starter') as 'Starter' | 'Silver' | 'Gold';
+        setTier(t);
+        setRate(r);
+        setLevel(lv);
+        const hist = (data.history || []) as ReferralHistoryItem[];
+        setHistory(Array.isArray(hist) ? hist.map((h) => ({ ...h, commissionUsd: Number(h.commissionUsd || 0), date: Number(h.date || 0) })) : []);
+      }
+    });
+
+    const ordersQ = query(collection(firestore, 'orders'), where('affiliateId', '==', user.id));
+    const unsubOrders = onSnapshot(ordersQ, (snap) => {
+      const rows: ReferralHistoryItem[] = [];
+      const userIds = new Set<string>();
+      let total = 0;
+      snap.forEach((docSnap) => {
+        const d = docSnap.data() as any;
+        const status: 'joined' | 'active' | 'refunded' = (d.status === 'Completed') ? 'active' : 'joined';
+        const commissionUsd = Number(((Number(d.amountUsd || 0) * 0.7)).toFixed(2));
+        total += status === 'active' ? commissionUsd : 0;
+        const ts = d.timestamp?.toMillis ? d.timestamp.toMillis() : Number(d.timestamp || 0);
+        rows.push({ id: docSnap.id, username: d.userName || 'User', date: ts, status, commissionUsd });
+        if (d.userId) userIds.add(String(d.userId));
+      });
+      rows.sort((a, b) => b.date - a.date);
+      const count = userIds.size;
       setActiveReferrals(count);
-
-      // Determine level/tier/rate
       const { tier: t, rate: r, level: lv } = computeTierByCount(count);
       setTier(t);
       setRate(r);
       setLevel(lv as 'Starter' | 'Silver' | 'Gold');
-
-      // Build history and compute total commission
-      let total = 0;
-      const rows: ReferralHistoryItem[] = referredEntries.map(([rid, u]) => {
-        const name = u?.profile?.name || 'User';
-        const createdAt = u?.createdAt || 0;
-        const orders = Object.values(u?.orders || {}) as any[];
-        const validOrders = orders.filter((o) => (o?.status || 'completed') !== 'refunded');
-        const totalUsd = validOrders.reduce((sum, o) => sum + (o?.priceInUsd || 0), 0);
-        const commissionUsd = Number(((totalUsd * r) / 100).toFixed(2));
-        total += commissionUsd;
-        const status: 'joined' | 'active' | 'refunded' = validOrders.length > 0 ? 'active' : 'joined';
-        return { id: rid, username: name, date: createdAt, status, commissionUsd };
-      });
-
-      rows.sort((a, b) => b.date - a.date);
       setHistory(rows);
       setTotalEarnings(Number(total.toFixed(2)));
     });
-    return () => unsub();
+
+    return () => {
+      try { unsubRefDoc(); } catch {}
+      try { unsubOrders(); } catch {}
+    };
   }, [user?.id, referralCode]);
 
   return { referralCode, referralLink, totalEarnings, level, tier, rate, activeReferrals, history };

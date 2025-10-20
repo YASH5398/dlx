@@ -16,6 +16,8 @@ import AdminWallets from './pages/Admin/AdminWallets';
 import AdminSettings from './pages/Admin/AdminSettings';
 import AdminServiceForms from './pages/Admin/AdminServiceForms';
 import Home from './pages/Home';
+import AffiliateProgramInfo from './pages/AffiliateProgramInfo';
+import AffiliateDashboard from './pages/AffiliateDashboard';
 
 // Secret Admin Panel
 import AdminProtectedRoute from './components/AdminProtectedRoute';
@@ -55,7 +57,7 @@ function PublicLayout() {
   const isAuthRoute = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/phone-signup';
   return (
     <div className="min-h-screen flex flex-col">
-      <Header />
+      {!isHome && <Header />}
       <main className="flex-1">
         <Outlet />
       </main>
@@ -96,6 +98,8 @@ function App() {
         <Route path="/referrals" element={<Referrals />} />
         <Route path="/wallet" element={<Wallet />} />
         <Route path="/affiliate-program" element={<AffiliateProgram />} />
+        <Route path="/affiliate-program/info" element={<AffiliateProgramInfo />} />
+        <Route path="/affiliate-dashboard" element={<AffiliateDashboard />} />
         <Route path="/support" element={<Support />} />
         <Route path="/settings" element={<SettingsFull />} />
         <Route path="/dashboard/profile" element={<Profile />} />

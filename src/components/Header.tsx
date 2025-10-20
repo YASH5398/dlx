@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
+import { useAffiliateApproval } from '../hooks/useAffiliateApproval';
 
 /**
  * Header
@@ -13,6 +14,7 @@ export default function Header() {
   const location = useLocation();
   const isHome = location.pathname === '/';
   const { isAuthenticated, user, logout } = useUser();
+  const { approved } = useAffiliateApproval();
 
   const initials = (user?.name || 'User')
     .split(' ')
@@ -30,9 +32,10 @@ export default function Header() {
     { label: "Orders", to: "/orders" },
     { label: "Mining", to: "/mining" },
     { label: "Wallet", to: "/wallet" },
-    { label: "Affiliate Program", to: "/affiliate-program" },
+    { label: approved ? "Affiliate Dashboard" : "Affiliate Program", to: approved ? "/affiliate-dashboard" : "/affiliate-program" },
     { label: "Commission", to: "/commission" },
     { label: "Referrals", to: "/referrals" },
+    { label: "Digital Products", to: "/dashboard/digital-products" },
     { label: "Support", to: "/support" },
     { label: "Settings", to: "/settings" },
   ];

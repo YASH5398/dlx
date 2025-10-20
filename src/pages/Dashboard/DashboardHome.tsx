@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useUser } from '../../context/UserContext';
 import { useWallet } from '../../hooks/useWallet';
 import { useReferral } from '../../hooks/useReferral';
-import { db } from '../../firebase';
-import { ref, onValue } from 'firebase/database';
+import { firestore } from '../../firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import ServiceRequestModal from '../../components/ServiceRequestModal';
 import { getServices, subscribeServices } from '../../utils/services';
@@ -45,6 +45,41 @@ export default function DashboardHome() {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedService, setSelectedService] = useState<string | null>(null);
   const [services, setServices] = useState<ServiceItem[]>([]);
+
+  // Ensure required Firestore docs exist for this user
+  useEffect(() => {
+    if (!user?.id) return;
+    (async () => {
+      try {
+        const { doc, getDoc, setDoc } = await import('firebase/firestore');
+        const uref = doc(firestore, 'users', user.id);
+        const usnap = await getDoc(uref);
+        if (!usnap.exists()) {
+          await setDoc(uref, {
+            name: user.name || 'User',
+            email: user.email || '',
+            referralCount: 0,
+            totalEarningsUsd: 0,
+            joinedAt: Date.now(),
+          });
+        } else {
+          const d: any = usnap.data() || {};
+          const needsPatch = d.name == null || d.email == null || d.joinedAt == null;
+          if (needsPatch) {
+            await setDoc(
+              uref,
+              {
+                name: d.name ?? user.name ?? 'User',
+                email: d.email ?? user.email ?? '',
+                joinedAt: d.joinedAt ?? Date.now(),
+              },
+              { merge: true }
+            );
+          }
+        }
+      } catch {}
+    })();
+  }, [user?.id]);
 
   // Load services with backend subscription and fallback to static list
   useEffect(() => {
@@ -169,13 +204,12 @@ export default function DashboardHome() {
   );
 
   useEffect(() => {
-    if (!user) return;
-    const ordersRef = ref(db, `users/${user.id}/orders`);
-    const unsub = onValue(ordersRef, (snap) => {
-      const val = snap.val() || {};
-      setOrdersCount(Object.keys(val).length);
+    if (!user?.id) return;
+    const q = query(collection(firestore, 'orders'), where('userId', '==', user.id));
+    const unsub = onSnapshot(q, (snap) => {
+      setOrdersCount(snap.size);
     });
-    return () => unsub();
+    return () => { try { unsub(); } catch {} };
   }, [user?.id]);
 
   // Compute progress towards next level based on referrals and orders
@@ -250,7 +284,7 @@ export default function DashboardHome() {
           {/* Stats Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
             
-            {/* DLX Earnings Card */}
+            {/* Earnings Card (USD from referrals) */}
             <div className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-cyan-500/20 hover:shadow-2xl transition-all duration-300 overflow-hidden border border-slate-700/50 hover:border-cyan-500/50">
               <div className="absolute inset-0 bg-gradient-to-br from-cyan-600/10 to-blue-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               <div className="relative p-6">
@@ -259,14 +293,14 @@ export default function DashboardHome() {
                     <span className="text-2xl">💎</span>
                   </div>
                   <div className="px-3 py-1 rounded-full bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-xs font-semibold">
-                    DLX
+                    USD
                   </div>
                 </div>
                 <h3 className="text-sm font-medium text-slate-400 mb-1">Total Earnings</h3>
                 <p className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
-                  {wallet?.dlx?.toFixed(2) || '30.00'}
+                  ${Number(totalEarnings || 0).toFixed(2)}
                 </p>
-                <p className="text-xs text-slate-500 mt-2">DLX Tokens Mined</p>
+                <p className="text-xs text-slate-500 mt-2">Referral Earnings</p>
               </div>
               <div className="h-1 bg-gradient-to-r from-cyan-500 to-blue-600"></div>
             </div>
@@ -285,7 +319,7 @@ export default function DashboardHome() {
                 </div>
                 <h3 className="text-sm font-medium text-slate-400 mb-1">USDT Balance</h3>
                 <p className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-green-400 bg-clip-text text-transparent">
-                  ${wallet?.usdt?.toFixed(2) || '30.00'}
+                  ${Number(wallet?.usdt || 0).toFixed(2)}
                 </p>
                 <p className="text-xs text-slate-500 mt-2">Available in Wallet</p>
               </div>
@@ -306,7 +340,7 @@ export default function DashboardHome() {
                 </div>
                 <h3 className="text-sm font-medium text-slate-400 mb-1">INR Balance</h3>
                 <p className="text-3xl font-bold bg-gradient-to-r from-orange-400 to-amber-400 bg-clip-text text-transparent">
-                  ₹{wallet?.inr?.toFixed(2) || '2,500'}
+                  ₹{Number(wallet?.inr || 0).toFixed(2)}
                 </p>
                 <p className="text-xs text-slate-500 mt-2">Available in Wallet</p>
               </div>
@@ -329,7 +363,7 @@ export default function DashboardHome() {
                 <p className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
                   {activeReferrals || 0}
                 </p>
-                <p className="text-xs text-slate-500 mt-2">Total Referrals</p>
+                <p className="text-xs text-slate-500 mt-2">Total Referrals • Orders: {ordersCount}</p>
               </div>
               <div className="h-1 bg-gradient-to-r from-purple-500 to-pink-600"></div>
             </div>

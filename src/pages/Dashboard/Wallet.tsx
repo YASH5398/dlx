@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useWallet } from '../../hooks/useWallet';
-import { db } from '../../firebase';
-import { off, onValue, push, ref, runTransaction, set } from 'firebase/database';
+import { firestore } from '../../firebase';
+import { doc, collection, onSnapshot, addDoc, query, orderBy } from 'firebase/firestore';
 import { useUser } from '../../context/UserContext';
 import { useNotifications } from '../../context/NotificationContext';
 
@@ -46,6 +46,12 @@ export default function Wallet() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [copySuccess, setCopySuccess] = useState(false);
 
+  // Firestore-streamed wallet breakdown
+  const [mainUsdt, setMainUsdt] = useState(0);
+  const [mainInr, setMainInr] = useState(0);
+  const [purchaseUsdt, setPurchaseUsdt] = useState(0);
+  const [purchaseInr, setPurchaseInr] = useState(0);
+
   const dlxUsdRate = 0.1;
   const dlxUsdValue = useMemo(() => (wallet?.dlx ?? 0) * dlxUsdRate, [wallet?.dlx]);
   const swapUsdtValue = useMemo(() => (parseFloat(swapAmount) || 0) * dlxUsdRate, [swapAmount]);
@@ -55,33 +61,44 @@ export default function Wallet() {
     trc20: 'TH1s69X1MqxJJme6BVPU3XFXhk8QwSXa7M'
   };
 
+  // Stream wallet breakdown from Firestore
   useEffect(() => {
     if (!uid) return;
-    const rTx = ref(db, `users/${uid}/wallet/transactions`);
-
-    const unsubTx = onValue(rTx, (snap) => {
-      const val = snap.val() || {};
-      const arr = Object.values(val) as any[];
-      const mapped: Transaction[] = arr
-        .filter((t: any) => ['deposit', 'withdraw', 'swap'].includes(t.type))
-        .map((t: any) => ({
-          id: t.id,
-          date: t.createdAt ? new Date(t.createdAt).toLocaleString() : t.date || '',
-          type: t.type as Transaction['type'],
-          amount: (typeof t.amount === 'number' ? t.amount : parseFloat(t.amount || '0')).toFixed(2),
-          currency: t.currency ?? 'USDT',
-          status: t.status as Transaction['status'] ?? 'completed',
-          description: t.description ?? '',
-          createdAt: t.createdAt ?? 0,
-        }))
-        .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
-      setTransactions(mapped);
+    const wdoc = doc(firestore, 'wallets', uid);
+    const unsub = onSnapshot(wdoc, (snap) => {
+      const d = (snap.data() as any) || {};
+      setMainUsdt(Number(d.mainUsdt || 0));
+      setMainInr(Number(d.mainInr || 0));
+      setPurchaseUsdt(Number(d.purchaseUsdt || 0));
+      setPurchaseInr(Number(d.purchaseInr || 0));
     });
+    return () => { try { unsub(); } catch {} };
+  }, [uid]);
 
-    return () => {
-      off(rTx);
-      try { unsubTx(); } catch {}
-    };
+  // Stream recent transactions from Firestore
+  useEffect(() => {
+    if (!uid) return;
+    const txQ = query(collection(firestore, 'wallets', uid, 'transactions'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(txQ, (snap) => {
+      const rows: Transaction[] = [];
+      snap.forEach((docSnap) => {
+        const t = docSnap.data() as any;
+        const ts = t.createdAt?.toMillis ? t.createdAt.toMillis() : Number(t.createdAt || 0);
+        rows.push({
+          id: docSnap.id,
+          date: ts ? new Date(ts).toLocaleString() : '',
+          type: t.type as Transaction['type'],
+          amount: (typeof t.amount === 'number' ? t.amount : parseFloat(String(t.amount || '0'))).toFixed(2),
+          currency: t.currency ?? 'USDT',
+          status: (t.status as Transaction['status']) ?? 'pending',
+          description: t.description ?? '',
+          createdAt: ts || 0,
+        });
+      });
+      rows.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+      setTransactions(rows);
+    });
+    return () => { try { unsub(); } catch {} };
   }, [uid]);
 
   const handleFlowChange = (flow: FlowType) => {
@@ -124,9 +141,8 @@ export default function Wallet() {
       : `Deposit via ${blockchain?.toUpperCase()}`;
 
     try {
-      const txRef = push(ref(db, `users/${uid}/wallet/transactions`));
-      await set(txRef, {
-        id: txRef.key,
+      const txCol = collection(firestore, 'wallets', uid, 'transactions');
+      await addDoc(txCol, {
         type: 'deposit',
         amount: amt,
         currency,
@@ -167,9 +183,8 @@ export default function Wallet() {
       : `Withdrawal to ${blockchain?.toUpperCase()}`;
 
     try {
-      const txRef = push(ref(db, `users/${uid}/wallet/transactions`));
-      await set(txRef, {
-        id: txRef.key,
+      const txCol = collection(firestore, 'wallets', uid, 'transactions');
+      await addDoc(txCol, {
         type: 'withdraw',
         amount: amt,
         currency,
@@ -207,18 +222,10 @@ export default function Wallet() {
     const usdtAmount = dlxAmount * dlxUsdRate;
 
     try {
-      await runTransaction(ref(db, `users/${uid}/wallet/dlx`), (curr) => 
-        (typeof curr === 'number' ? curr : 0) - dlxAmount
-      );
-      await runTransaction(ref(db, `users/${uid}/wallet/usdt`), (curr) => 
-        (typeof curr === 'number' ? curr : 0) + usdtAmount
-      );
-
-      const txRef = push(ref(db, `users/${uid}/wallet/transactions`));
-      await set(txRef, {
-        id: txRef.key,
+      const txCol = collection(firestore, 'wallets', uid, 'transactions');
+      await addDoc(txCol, {
         type: 'swap',
-        amount: usdtAmount.toFixed(2),
+        amount: Number(usdtAmount.toFixed(2)),
         currency: 'USDT',
         status: 'pending',
         description: `Swapped ${dlxAmount.toFixed(2)} DLX to ${usdtAmount.toFixed(2)} USDT (Admin Verification Pending)`,
@@ -333,11 +340,11 @@ export default function Wallet() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-slate-300">USDT</span>
-                <span className="text-2xl font-bold text-white">{wallet.usdt.toFixed(2)}</span>
+                <span className="text-2xl font-bold text-white">{mainUsdt.toFixed(2)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-300">INR</span>
-                <span className="text-2xl font-bold text-white">₹{wallet.inr.toFixed(2)}</span>
+                <span className="text-2xl font-bold text-white">₹{mainInr.toFixed(2)}</span>
               </div>
             </div>
           </div>
@@ -355,12 +362,12 @@ export default function Wallet() {
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-slate-300">USDT Value</span>
-                <span className="text-2xl font-bold text-white">{dlxUsdValue.toFixed(2)}</span>
+                <span className="text-slate-300">USDT</span>
+                <span className="text-2xl font-bold text-white">{purchaseUsdt.toFixed(2)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-300">DLX</span>
-                <span className="text-2xl font-bold text-white">{wallet.dlx.toFixed(2)}</span>
+                <span className="text-slate-300">INR</span>
+                <span className="text-2xl font-bold text-white">₹{purchaseInr.toFixed(2)}</span>
               </div>
             </div>
           </div>
@@ -888,7 +895,7 @@ export default function Wallet() {
                   <div className="rounded-xl bg-slate-800/50 border border-slate-700 p-4">
                     <div className="flex items-center justify-between text-sm mb-2">
                       <span className="text-slate-400">Available Balance</span>
-                      <span className="text-white font-bold">{wallet.usdt.toFixed(2)} USDT</span>
+                      <span className="text-white font-bold">{mainUsdt.toFixed(2)} USDT</span>
                     </div>
                   </div>
 

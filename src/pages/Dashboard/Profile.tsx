@@ -8,9 +8,11 @@ import { updateProfile } from 'firebase/auth';
 import { ref, update } from 'firebase/database';
 import { IdentificationIcon, UserCircleIcon, EnvelopeIcon, PhoneIcon, WalletIcon, MapPinIcon, ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
+import { useAffiliateApproval } from '../../hooks/useAffiliateApproval';
 
 export default function ProfileDashboard() {
   const { user } = useUser();
+  const { approved } = useAffiliateApproval();
   const uid = user?.id;
 
   const saved = useMemo(() => {
@@ -190,6 +192,29 @@ export default function ProfileDashboard() {
               <div className="text-sm text-gray-400">Location</div>
               <div className="text-white font-medium">{location || 'Not set'}</div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Affiliate Status */}
+      <div className="bg-white/5 border border-white/10 rounded-xl p-5 mb-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <ClipboardDocumentCheckIcon className="w-5 h-5 text-gray-300" />
+            <div>
+              <div className="text-sm text-gray-400">Affiliate Partner</div>
+              <div className="text-white font-medium">{approved ? 'Approved' : 'Not Approved'}</div>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            {approved ? (
+              <a href="/affiliate-dashboard" className="px-3 py-2 rounded-lg bg-gradient-to-r from-[#0070f3] to-[#00d4ff] text-white">View Dashboard</a>
+            ) : (
+              <>
+                <a href="/affiliate-program" className="px-3 py-2 rounded-lg bg-gradient-to-r from-[#0070f3] to-[#00d4ff] text-white">Apply</a>
+                <a href="/affiliate-program/info" className="px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white">Learn More</a>
+              </>
+            )}
           </div>
         </div>
       </div>

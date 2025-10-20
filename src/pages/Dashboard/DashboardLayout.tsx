@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useUser } from "../../context/UserContext";
 import { HomeIcon, ShoppingCartIcon, CurrencyDollarIcon, WalletIcon, UserGroupIcon, Cog6ToothIcon, LifebuoyIcon, ChartBarIcon, UsersIcon } from '@heroicons/react/24/outline';
 import NotificationBell from '../../components/NotificationBell';
+import { useAffiliateApproval } from '../../hooks/useAffiliateApproval';
 
 const UserAvatar = ({ initials, size = "md" }: { initials: string; size?: 'sm' | 'md' | 'lg' }) => {
   const sizeClasses: Record<'sm' | 'md' | 'lg', string> = {
@@ -23,6 +24,7 @@ export default function DashboardLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const { approved } = useAffiliateApproval();
 
   const initials = (user?.name || "User")
     .split(" ")
@@ -46,9 +48,10 @@ export default function DashboardLayout() {
     { name: "Orders", icon: ShoppingCartIcon, path: "/orders" },
     { name: "Mining", icon: CurrencyDollarIcon, path: "/mining" },
     { name: "Wallet", icon: WalletIcon, path: "/wallet" },
-    { name: "Affiliate Program", icon: UsersIcon, path: "/affiliate-program" },
+    { name: approved ? "Affiliate Dashboard" : "Affiliate Program", icon: UsersIcon, path: approved ? "/affiliate-dashboard" : "/affiliate-program" },
     { name: "Commission", icon: CurrencyDollarIcon, path: "/commission" },
     { name: "Referrals", icon: UserGroupIcon, path: "/referrals" },
+    { name: "Digital Products", icon: ChartBarIcon, path: "/dashboard/digital-products" },
     { name: "Support", icon: LifebuoyIcon, path: "/support" },
     { name: "Settings", icon: Cog6ToothIcon, path: "/settings" },
   ];

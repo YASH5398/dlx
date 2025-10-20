@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { DEFAULT_WALLET } from '../utils/constants';
-import { addOrder, getOrders } from '../utils/api';
-import { db } from '../firebase';
-import { ref, onValue, update } from 'firebase/database';
+import { firestore } from '../firebase';
+import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 import { useUser } from '../context/UserContext';
 
 export type WalletState = { dlx: number; usdt: number; inr: number };
@@ -12,32 +11,48 @@ export function useWallet() {
   const [wallet, setWallet] = useState<WalletState>(DEFAULT_WALLET);
 
   useEffect(() => {
-    if (!user) return;
-    const walletRef = ref(db, `users/${user.id}/wallet`);
-    const unsub = onValue(walletRef, (snap) => {
-      const val = snap.val();
-      if (val) setWallet(val);
-      else update(walletRef, DEFAULT_WALLET);
+    if (!user?.id) return;
+    const walletDoc = doc(firestore, 'wallets', user.id);
+    const unsub = onSnapshot(walletDoc, async (snap) => {
+      if (snap.exists()) {
+        const data = snap.data() as any;
+        const usdt = Number(data.mainUsdt || 0) + Number(data.purchaseUsdt || 0);
+        const inr = Number(data.mainInr || 0) + Number(data.purchaseInr || 0);
+        const dlx = Number(data.dlx || 0);
+        setWallet({ usdt, inr, dlx });
+      } else {
+        try {
+          await setDoc(walletDoc, {
+            mainUsdt: DEFAULT_WALLET.usdt,
+            purchaseUsdt: 0,
+            mainInr: DEFAULT_WALLET.inr,
+            purchaseInr: 0,
+            dlx: DEFAULT_WALLET.dlx,
+            updatedAt: Date.now(),
+          });
+          setWallet(DEFAULT_WALLET);
+        } catch {
+          setWallet(DEFAULT_WALLET);
+        }
+      }
     });
-    return () => unsub();
+    return () => {
+      try { unsub(); } catch {}
+    };
   }, [user?.id]);
 
-  const refresh = () => {
-    if (!user) return;
-    const walletRef = ref(db, `users/${user.id}/wallet`);
-    update(walletRef, wallet);
+  const refresh = async () => {
+    if (!user?.id) return;
+    const walletDoc = doc(firestore, 'wallets', user.id);
+    const snap = await getDoc(walletDoc);
+    if (snap.exists()) {
+      const data = snap.data() as any;
+      const usdt = Number(data.mainUsdt || 0) + Number(data.purchaseUsdt || 0);
+      const inr = Number(data.mainInr || 0) + Number(data.purchaseInr || 0);
+      const dlx = Number(data.dlx || 0);
+      setWallet({ usdt, inr, dlx });
+    }
   };
 
-  const payPartialDLX = (title: string, totalUsd: number, fiat: 'inr' | 'usdt') => {
-    const fifty = totalUsd / 2;
-    setWallet((prev) => {
-      if (prev.dlx < fifty || prev[fiat] < fifty) throw new Error('Insufficient balance');
-      const next = { ...prev, dlx: prev.dlx - fifty, [fiat]: prev[fiat] - fifty } as WalletState;
-      if (user) update(ref(db, `users/${user.id}/wallet`), next);
-      addOrder({ title, priceInUsd: totalUsd, priceInInr: Math.round(totalUsd * 83), status: 'paid' }, user?.id);
-      return next;
-    });
-  };
-
-  return { wallet, refresh, payPartialDLX, orders: getOrders(user?.id) };
+  return { wallet, refresh };
 }

@@ -8,26 +8,21 @@ import { useNotifications } from '../../context/NotificationContext';
 type ClaimRecord = {
   id: string;
   amount: number; // in DLX
-  type: 'self' | 'team';
+  type: 'self' | 'team' | 'telegram' | 'twitter';
   createdAt: number; // epoch ms
   fromUserId?: string;
   fromName?: string;
 };
 
 const COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
-const CLAIM_AMOUNT = 10; // 10 DLX per claim
+const CLAIM_AMOUNT = 10; // 10 DLX per daily claim
+const SOCIAL_CLAIM_AMOUNT = 25; // 25 DLX per social claim
 
 function formatCountdown(ms: number) {
   const total = Math.max(0, Math.floor(ms / 1000));
-  const h = Math.floor(total / 3600)
-    .toString()
-    .padStart(2, '0');
-  const m = Math.floor((total % 3600) / 60)
-    .toString()
-    .padStart(2, '0');
-  const s = Math.floor(total % 60)
-    .toString()
-    .padStart(2, '0');
+  const h = Math.floor(total / 3600).toString().padStart(2, '0');
+  const m = Math.floor((total % 3600) / 60).toString().padStart(2, '0');
+  const s = Math.floor(total % 60).toString().padStart(2, '0');
   return `${h}:${m}:${s}`;
 }
 
@@ -44,6 +39,13 @@ export default function Mining() {
   const [visibleCount, setVisibleCount] = useState(5);
   const [olderVisibleCount, setOlderVisibleCount] = useState(5);
   const [showOlder, setShowOlder] = useState(false);
+  const [telegramClaimed, setTelegramClaimed] = useState(false);
+  const [twitterClaimed, setTwitterClaimed] = useState(false);
+  const [telegramUsername, setTelegramUsername] = useState('');
+  const [twitterUsername, setTwitterUsername] = useState('');
+  const [isSocialClaiming, setIsSocialClaiming] = useState({ telegram: false, twitter: false });
+  const [showTelegramInput, setShowTelegramInput] = useState(false);
+  const [showTwitterInput, setShowTwitterInput] = useState(false);
 
   // Subscriptions
   useEffect(() => {
@@ -52,6 +54,8 @@ export default function Mining() {
     const rLast = ref(db, `users/${uid}/mining/lastClaimAt`);
     const rClaims = ref(db, `users/${uid}/mining/claims`);
     const rTeam = ref(db, `users/${uid}/mining/teamClaims`);
+    const rTelegramClaimed = ref(db, `users/${uid}/mining/telegramClaimed`);
+    const rTwitterClaimed = ref(db, `users/${uid}/mining/twitterClaimed`);
 
     const unsubLast = onValue(rLast, (snap) => setLastClaimAt(snap.val() ?? null));
     const unsubClaims = onValue(rClaims, (snap) => {
@@ -66,14 +70,20 @@ export default function Mining() {
       arr.sort((a, b) => b.createdAt - a.createdAt);
       setTeamClaims(arr);
     });
+    const unsubTelegram = onValue(rTelegramClaimed, (snap) => setTelegramClaimed(snap.val() ?? false));
+    const unsubTwitter = onValue(rTwitterClaimed, (snap) => setTwitterClaimed(snap.val() ?? false));
 
     return () => {
       off(rLast);
       off(rClaims);
       off(rTeam);
+      off(rTelegramClaimed);
+      off(rTwitterClaimed);
       try { unsubLast(); } catch {}
       try { unsubClaims(); } catch {}
       try { unsubTeam(); } catch {}
+      try { unsubTelegram(); } catch {}
+      try { unsubTwitter(); } catch {}
     };
   }, [uid]);
 
@@ -110,26 +120,74 @@ export default function Mining() {
         createdAt: ts,
       };
 
-      // Atomically increment wallet.dlx and set claim + lastClaimAt
       await Promise.all([
         set(idRef, record),
         update(ref(db, `users/${uid}/mining`), { lastClaimAt: ts }),
         runTransaction(ref(db, `users/${uid}/wallet/dlx`), (curr) => (typeof curr === 'number' ? curr : 0) + CLAIM_AMOUNT),
       ]);
 
-      // Notify
       try {
-        await addNotification({ type: 'mining', message: `Claimed ${CLAIM_AMOUNT} DLX. +${CLAIM_AMOUNT} DLX added to wallet.`, route: '/wallet' }, true);
+        await addNotification({ type: 'mining', message: `Mined ${CLAIM_AMOUNT} DLX. +${CLAIM_AMOUNT} DLX added to wallet.`, route: '/wallet' }, true);
       } catch {
-        document.dispatchEvent(new CustomEvent('notifications:add', { detail: { type: 'mining', message: `Claimed ${CLAIM_AMOUNT} DLX. +${CLAIM_AMOUNT} DLX added to wallet.` } }));
+        document.dispatchEvent(new CustomEvent('notifications:add', { detail: { type: 'mining', message: `Mined ${CLAIM_AMOUNT} DLX. +${CLAIM_AMOUNT} DLX added to wallet.` } }));
       }
     } catch (e: any) {
       try {
-        await addNotification({ type: 'error', message: e?.message ?? 'Claim failed. Please try again.' }, false);
+        await addNotification({ type: 'error', message: e?.message ?? 'Mining failed. Please try again.' }, false);
       } catch {}
     } finally {
       setIsClaiming(false);
     }
+  };
+
+  const handleSocialClaim = async (type: 'telegram' | 'twitter', username: string) => {
+    if (!uid || isSocialClaiming[type] || username.trim() === '') return;
+    setIsSocialClaiming((prev) => ({ ...prev, [type]: true }));
+    const ts = Date.now();
+    try {
+      const idRef = push(ref(db, `users/${uid}/mining/claims`));
+      const record: ClaimRecord = {
+        id: idRef.key as string,
+        amount: SOCIAL_CLAIM_AMOUNT,
+        type: type,
+        createdAt: ts,
+      };
+
+      await Promise.all([
+        set(idRef, record),
+        update(ref(db, `users/${uid}/mining`), { [`${type}Claimed`]: true }),
+        runTransaction(ref(db, `users/${uid}/wallet/dlx`), (curr) => (typeof curr === 'number' ? curr : 0) + SOCIAL_CLAIM_AMOUNT),
+        set(ref(db, `users/${uid}/social/${type}Username`), username),
+      ]);
+
+      try {
+        await addNotification({ type: 'mining', message: `Claimed ${SOCIAL_CLAIM_AMOUNT} DLX for ${type.charAt(0).toUpperCase() + type.slice(1)}. +${SOCIAL_CLAIM_AMOUNT} DLX added to wallet.`, route: '/wallet' }, true);
+      } catch {
+        document.dispatchEvent(new CustomEvent('notifications:add', { detail: { type: 'mining', message: `Claimed ${SOCIAL_CLAIM_AMOUNT} DLX for ${type.charAt(0).toUpperCase() + type.slice(1)}. +${SOCIAL_CLAIM_AMOUNT} DLX added to wallet.` } }));
+      }
+
+      if (type === 'telegram') {
+        setTelegramClaimed(true);
+        setShowTelegramInput(false);
+      }
+      if (type === 'twitter') {
+        setTwitterClaimed(true);
+        setShowTwitterInput(false);
+      }
+    } catch (e: any) {
+      try {
+        await addNotification({ type: 'error', message: e?.message ?? 'Social claim failed. Please try again.' }, false);
+      } catch {}
+    } finally {
+      setIsSocialClaiming((prev) => ({ ...prev, [type]: false }));
+    }
+  };
+
+  const handleSocialJoin = (type: 'telegram' | 'twitter') => {
+    const url = type === 'telegram' ? 'https://t.me/digilinex' : 'https://x.com/digilinex?t=kXHRX97aPMrzzETGcN928w&s=09';
+    window.open(url, '_blank', 'noopener,noreferrer');
+    if (type === 'telegram') setShowTelegramInput(true);
+    if (type === 'twitter') setShowTwitterInput(true);
   };
 
   const hasMoreLatest = visibleCount < latest7Days.length;
@@ -147,114 +205,179 @@ export default function Mining() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-b from-gray-900 to-gray-800 text-white flex items-center justify-center p-4 sm:p-6">
-      <div className="w-full max-w-lg mx-auto space-y-6">
+    <div className="min-h-screen w-full bg-gradient-to-b from-blue-900 to-blue-600 text-white flex flex-col items-center justify-start p-4 font-sans">
+      <div className="w-full max-w-md space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Daily Mining</h1>
-            <p className="text-sm text-gray-400 mt-1">Claim 10 DLX every 24 hours</p>
+        <div className="flex items-center justify-center gap-4 py-4">
+          <div className="w-16 h-16 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center shadow-lg">
+            <span className="text-3xl font-bold text-white">DLX</span>
           </div>
-          <div className="rounded-lg bg-gray-700/50 border border-gray-600/30 px-3 py-1.5 text-xs text-gray-300">
-            DLX wallet updates instantly
+          <div className="text-center">
+            <h1 className="text-2xl font-bold">DLX Coin</h1>
+            <p className="text-sm text-gray-300">Speed: 10 DLX / 24h</p>
           </div>
         </div>
 
-        {/* Claim Card */}
-        <div className="rounded-2xl bg-gray-800/50 border border-gray-700/30 backdrop-blur-sm p-6 shadow-lg hover:shadow-xl transition-all duration-300">
-          <div className="text-center space-y-4">
-            <div className="text-sm text-gray-300">
-              {canClaim ? (
-                <span className="text-emerald-400 font-medium">Claim available now</span>
-              ) : (
-                <div className="flex items-center justify-center gap-2">
-                  <span>Next claim in</span>
-                  <span className="font-mono text-cyan-400">{formatCountdown(remainingMs)}</span>
+        {/* Daily Claim Card */}
+        <div className="flex flex-col items-center space-y-4">
+          <div className="relative w-48 h-48 rounded-full bg-blue-800/50 border-8 border-purple-500 flex items-center justify-center shadow-xl animate-pulse">
+            <span className="text-2xl font-mono">
+              {canClaim ? "00:00:00" : formatCountdown(remainingMs)}
+            </span>
+          </div>
+          <button
+            onClick={handleClaim}
+            disabled={!canClaim || isClaiming}
+            className={
+              'w-48 rounded-full py-3 font-bold text-lg transition-all duration-300 ' +
+              (canClaim && !isClaiming
+                ? 'bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-orange-500 hover:to-yellow-400 shadow-orange-500/50'
+                : 'bg-gray-700 text-gray-400 cursor-not-allowed')
+            }
+          >
+            {isClaiming ? 'Mining...' : canClaim ? 'Mine' : 'Locked'}
+          </button>
+          <p className="text-sm text-gray-300">24-hour mining cycle</p>
+        </div>
+
+        {/* Social Rewards Section */}
+        <div className="space-y-4">
+          <h2 className="text-xl font-bold text-center">Boost Your Earnings</h2>
+          <div className="grid grid-cols-2 gap-4">
+            {/* Telegram Card */}
+            <div className="flex flex-col items-center space-y-2">
+              {telegramClaimed ? (
+                <p className="text-green-400 font-bold">Claimed</p>
+              ) : showTelegramInput ? (
+                <div className="w-full space-y-2">
+                  <input
+                    type="text"
+                    placeholder="Telegram Username"
+                    value={telegramUsername}
+                    onChange={(e) => setTelegramUsername(e.target.value)}
+                    className="w-full rounded-full px-4 py-2 bg-blue-800/50 border border-purple-500 text-white placeholder-gray-400 focus:outline-none focus:border-pink-500 text-sm"
+                  />
+                  <button
+                    onClick={() => handleSocialClaim('telegram', telegramUsername)}
+                    disabled={isSocialClaiming.telegram || telegramUsername.trim() === ''}
+                    className={
+                      'w-full rounded-full py-2 font-bold text-sm transition-all duration-300 ' +
+                      (telegramUsername.trim() !== '' && !isSocialClaiming.telegram
+                        ? 'bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-cyan-500 hover:to-blue-500 shadow-cyan-500/50'
+                        : 'bg-gray-700 text-gray-400 cursor-not-allowed')
+                    }
+                  >
+                    {isSocialClaiming.telegram ? 'Claiming...' : 'Claim'}
+                  </button>
                 </div>
+              ) : (
+                <button
+                  onClick={() => handleSocialJoin('telegram')}
+                  className="w-32 rounded-full py-2 bg-gradient-to-r from-blue-500 to-cyan-500 font-bold text-sm hover:from-cyan-500 hover:to-blue-500 shadow-cyan-500/50 transition-all duration-300"
+                >
+                  Telegram Boost
+                </button>
               )}
             </div>
-            <button
-              onClick={handleClaim}
-              disabled={!canClaim || isClaiming}
-              className={
-                'w-full rounded-lg px-6 py-3 font-semibold text-base transition-all duration-200 ' +
-                (canClaim && !isClaiming
-                  ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:from-cyan-600 hover:to-blue-700 shadow-[0_0_20px_rgba(6,182,212,0.3)]'
-                  : 'bg-gray-700/50 text-gray-500 cursor-not-allowed border border-gray-600/30')
-              }
-            >
-              {isClaiming ? 'Claiming...' : canClaim ? 'Claim 10 DLX' : 'Claim Locked'}
-            </button>
-            <p className="text-xs text-gray-400">Cooldown: 24 hours after each claim</p>
+
+            {/* Twitter Card */}
+            <div className="flex flex-col items-center space-y-2">
+              {twitterClaimed ? (
+                <p className="text-green-400 font-bold">Claimed</p>
+              ) : showTwitterInput ? (
+                <div className="w-full space-y-2">
+                  <input
+                    type="text"
+                    placeholder="Twitter Username"
+                    value={twitterUsername}
+                    onChange={(e) => setTwitterUsername(e.target.value)}
+                    className="w-full rounded-full px-4 py-2 bg-blue-800/50 border border-purple-500 text-white placeholder-gray-400 focus:outline-none focus:border-pink-500 text-sm"
+                  />
+                  <button
+                    onClick={() => handleSocialClaim('twitter', twitterUsername)}
+                    disabled={isSocialClaiming.twitter || twitterUsername.trim() === ''}
+                    className={
+                      'w-full rounded-full py-2 font-bold text-sm transition-all duration-300 ' +
+                      (twitterUsername.trim() !== '' && !isSocialClaiming.twitter
+                        ? 'bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-cyan-500 hover:to-blue-500 shadow-cyan-500/50'
+                        : 'bg-gray-700 text-gray-400 cursor-not-allowed')
+                    }
+                  >
+                    {isSocialClaiming.twitter ? 'Claiming...' : 'Claim'}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => handleSocialJoin('twitter')}
+                  className="w-32 rounded-full py-2 bg-gradient-to-r from-blue-500 to-cyan-500 font-bold text-sm hover:from-cyan-500 hover:to-blue-500 shadow-cyan-500/50 transition-all duration-300"
+                >
+                  Twitter Boost
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
         {/* Latest Claims (7 days) */}
-        <div className="rounded-2xl bg-gray-800/50 border border-gray-700/30 backdrop-blur-sm p-6 shadow-lg">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-white">Latest Claims (7 days)</h2>
-            <span className="text-xs text-gray-400">{latest7Days.length} total</span>
-          </div>
+        <div className="space-y-4">
+          <h2 className="text-xl font-bold text-center">Earnings</h2>
           {latest7Days.length === 0 ? (
-            <div className="text-sm text-gray-400 text-center py-4">No claims yet. Make your first claim!</div>
+            <p className="text-center text-gray-300">No earnings yet. Start mining!</p>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {latest7Days.slice(0, visibleCount).map((r) => (
                 <div
                   key={r.id}
-                  className="flex items-center gap-3 p-3 rounded-lg bg-gray-700/30 hover:bg-gray-700/50 transition-all duration-200 border border-gray-600/20"
+                  className="flex items-center justify-between p-3 rounded-lg bg-blue-800/50 border border-purple-500/50"
                 >
-                  <div
-                    className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                      r.type === 'self' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-purple-500/20 text-purple-400'
-                    }`}
-                  >
-                    <span className="text-lg">{r.type === 'self' ? '⛏️' : '👥'}</span>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                      r.type === 'self' ? 'bg-yellow-500/50' :
+                      r.type === 'team' ? 'bg-green-500/50' :
+                      r.type === 'telegram' ? 'bg-blue-500/50' : 'bg-purple-500/50'
+                    }`}>
+                      <svg className="w-5 h-5" fill="none" stroke="white" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={r.type === 'self' ? "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" : r.type === 'team' ? "M17 20h5-20" : "M13 10V3L4 14h7v7l9-11h-7z"} />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="font-medium">{r.type.charAt(0).toUpperCase() + r.type.slice(1)} Mine</p>
+                      <p className="text-xs text-gray-300">{new Date(r.createdAt).toLocaleDateString()}</p>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white truncate">
-                      {r.type === 'self' ? 'You claimed' : `${r.fromName || 'Team member'} claimed`} {r.amount} DLX
-                    </p>
-                    <p className="text-xs text-gray-400">{new Date(r.createdAt).toLocaleString()}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold text-emerald-400">+{r.amount} DLX</p>
-                  </div>
+                  <p className="font-bold text-green-400">+{r.amount}</p>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        {/* Older section */}
+        {/* Older Claims */}
         {showOlder && olderItems.length > 0 && (
-          <div className="rounded-2xl bg-gray-800/50 border border-gray-700/30 backdrop-blur-sm p-6 shadow-lg">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-white">Older Claims</h2>
-              <span className="text-xs text-gray-400">{olderItems.length} records</span>
-            </div>
-            <div className="space-y-3">
+          <div className="space-y-4">
+            <h2 className="text-xl font-bold text-center">Older Earnings</h2>
+            <div className="space-y-2">
               {olderItems.slice(0, olderVisibleCount).map((r) => (
                 <div
                   key={r.id}
-                  className="flex items-center gap-3 p-3 rounded-lg bg-gray-700/30 hover:bg-gray-700/50 transition-all duration-200 border border-gray-600/20"
+                  className="flex items-center justify-between p-3 rounded-lg bg-blue-800/50 border border-purple-500/50"
                 >
-                  <div
-                    className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                      r.type === 'self' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-purple-500/20 text-purple-400'
-                    }`}
-                  >
-                    <span className="text-lg">{r.type === 'self' ? '⛏️' : '👥'}</span>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                      r.type === 'self' ? 'bg-yellow-500/50' :
+                      r.type === 'team' ? 'bg-green-500/50' :
+                      r.type === 'telegram' ? 'bg-blue-500/50' : 'bg-purple-500/50'
+                    }`}>
+                      <svg className="w-5 h-5" fill="none" stroke="white" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={r.type === 'self' ? "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" : r.type === 'team' ? "M17 20h5-20" : "M13 10V3L4 14h7v7l9-11h-7z"} />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="font-medium">{r.type.charAt(0).toUpperCase() + r.type.slice(1)} Mine</p>
+                      <p className="text-xs text-gray-300">{new Date(r.createdAt).toLocaleDateString()}</p>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white truncate">
-                      {r.type === 'self' ? 'You claimed' : `${r.fromName || 'Team member'} claimed`} {r.amount} DLX
-                    </p>
-                    <p className="text-xs text-gray-400">{new Date(r.createdAt).toLocaleString()}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold text-emerald-400">+{r.amount} DLX</p>
-                  </div>
+                  <p className="font-bold text-green-400">+{r.amount}</p>
                 </div>
               ))}
             </div>
@@ -263,14 +386,12 @@ export default function Mining() {
 
         {/* View More */}
         {canViewMore && (
-          <div className="flex justify-center">
-            <button
-              onClick={onViewMore}
-              className="px-6 py-2.5 rounded-lg bg-gray-700/50 border border-gray-600/30 text-gray-300 hover:bg-gray-600/50 hover:text-white transition-all duration-200 text-sm"
-            >
-              View More
-            </button>
-          </div>
+          <button
+            onClick={onViewMore}
+            className="w-full rounded-full py-3 bg-purple-500/50 text-white font-bold hover:bg-purple-600/50 transition-all duration-300"
+          >
+            Load More
+          </button>
         )}
       </div>
     </div>
