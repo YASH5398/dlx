@@ -39,7 +39,7 @@ export default function AffiliateDashboard() {
     }
   };
 
-  const validateSlug = (value) => {
+  const validateSlug = (value: string) => {
     const v = (value || '').trim().toLowerCase();
     if (!v) return 'Slug is required';
     if (v.length < 3 || v.length > 32) return 'Use 3–32 characters';
@@ -65,8 +65,8 @@ export default function AffiliateDashboard() {
       const docRef = doc(firestore, 'affiliates', user.id);
       await setDoc(docRef, { slug: customSlug, ownerId: user.id, updatedAt: Date.now() }, { merge: true });
       toast.success('Referral link updated');
-    } catch (e) {
-      toast.error(e?.message || 'Failed to update link');
+    } catch (e: unknown) {
+      toast.error((e as Error)?.message || 'Failed to update link');
     } finally {
       setSaving(false);
     }
@@ -230,14 +230,11 @@ export default function AffiliateDashboard() {
   );
 }
 
-function StatCard({ label, value, icon }) {
+function StatCard({ label, value, icon }: { label: string; value: number; icon?: React.ReactNode }) {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-md p-4 border border-gray-200 dark:border-gray-700 transition-all duration-300 hover:shadow-lg">
-      <div className="flex items-center gap-2 mb-1">
-        {icon}
-        <div className="text-sm text-gray-500 dark:text-gray-400">{label}</div>
-      </div>
-      <div className="text-lg font-semibold text-indigo-600 dark:text-indigo-400">{Number(value || 0)}</div>
+    <div className="rounded-2xl p-5 bg-white/5 border border-white/10">
+      <div className="text-sm text-gray-300">{label}</div>
+      <div className="text-2xl font-bold">{Number(value || 0)}</div>
     </div>
   );
 }

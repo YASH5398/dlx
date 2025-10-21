@@ -25,12 +25,15 @@ import SecretAdminLayout from './pages/SecretAdmin/SecretAdminLayout';
 import AdminLogin from './pages/SecretAdmin/AdminLogin';
 import AdminInviteAccept from './pages/SecretAdmin/AdminInviteAccept';
 import AdminDashboard from './pages/SecretAdmin/AdminDashboard';
-import SecretAdminUsers from './pages/SecretAdmin/AdminUsers';
+import SecretAdminUsers from './pages/SecretAdmin/AdminUsers2';
 import SecretAdminOrders from './pages/SecretAdmin/AdminOrders';
 import SecretAdminProducts from './pages/SecretAdmin/AdminProducts';
-import SecretAdminTransactions from './pages/SecretAdmin/AdminTransactions';
+import SecretAdminTransactions from './pages/SecretAdmin/AdminTransactions2';
 import SecretAdminSupport from './pages/SecretAdmin/AdminSupport';
 import SecretAdminSettings from './pages/SecretAdmin/AdminSettings';
+import SecretAdminReferrals from './pages/SecretAdmin/AdminReferrals';
+import SecretAdminAffiliates from './pages/SecretAdmin/AdminAffiliates';
+import SecretAdminNotifications from './pages/SecretAdmin/AdminNotifications';
 
 // Public pages
 // Removed public pages: Exchanges, Pricing, Tutorials, Docs, Blogs, Apply
@@ -44,7 +47,8 @@ import PhoneSignup from './pages/PhoneSignup';
 import DashboardHome from './pages/Dashboard/DashboardHome';
 import Commission from './pages/Dashboard/Commission';
 import Orders from './pages/Dashboard/Orders';
-import Mining from './pages/Dashboard/Mining';
+import Mining2 from './pages/Dashboard/Mining2';
+import Tasks from './pages/Dashboard/Tasks';
 import Referrals from './pages/Dashboard/Referrals';
 import Wallet from './pages/Dashboard/Wallet';
 import Support from './pages/Dashboard/Support';
@@ -94,7 +98,8 @@ function App() {
         <Route path="/commission" element={<Commission />} />
         <Route path="/orders" element={<Orders />} />
         <Route path="/orders/:orderId/invoice" element={<OrderInvoice />} />
-        <Route path="/mining" element={<Mining />} />
+        <Route path="/mining" element={<Mining2 />} />
+        <Route path="/dashboard/tasks" element={<Tasks />} />
         <Route path="/referrals" element={<Referrals />} />
         <Route path="/wallet" element={<Wallet />} />
         <Route path="/affiliate-program" element={<AffiliateProgram />} />
@@ -139,7 +144,10 @@ function App() {
         <Route path="/secret-admin/orders" element={<SecretAdminOrders />} />
         <Route path="/secret-admin/products" element={<SecretAdminProducts />} />
         <Route path="/secret-admin/transactions" element={<SecretAdminTransactions />} />
+        <Route path="/secret-admin/referrals" element={<SecretAdminReferrals />} />
+        <Route path="/secret-admin/affiliates" element={<SecretAdminAffiliates />} />
         <Route path="/secret-admin/support" element={<SecretAdminSupport />} />
+        <Route path="/secret-admin/notifications" element={<SecretAdminNotifications />} />
         <Route path="/secret-admin/settings" element={<SecretAdminSettings />} />
       </Route>
 

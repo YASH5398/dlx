@@ -1,44 +1,39 @@
 import React, { useEffect, useState } from 'react';
-
-type AdminRow = { id: string; email: string; name?: string; created_at?: string; last_login_at?: string };
+import { firestore } from '../../firebase';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 
 export default function AdminUsers() {
-  const [rows, setRows] = useState<AdminRow[]>([]);
+  const [admins, setAdmins] = useState<Array<{ id: string; email: string; name?: string }>>([]);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch('http://localhost:4000/api/admin/users', { credentials: 'include' });
-        const data = await res.json();
-        if (res.ok) setRows(data.map((d: any) => ({ id: d._id, email: d.email, name: d.name, created_at: d.created_at, last_login_at: d.last_login_at })));
-      } catch {}
-    })();
+    const q = query(collection(firestore, 'users'), where('role', '==', 'admin'));
+    const unsub = onSnapshot(q, (snap) => {
+      const list = snap.docs.map((d) => {
+        const data = d.data() as any;
+        return {
+          id: d.id,
+          email: data.email || '',
+          name: data.name || data.displayName || '',
+        };
+      });
+      setAdmins(list);
+    });
+    return () => { try { unsub(); } catch {} };
   }, []);
 
   return (
-    <div className="rounded-xl bg-[#0a0e1f] border border-white/10 p-4">
-      <div className="text-lg font-semibold mb-3">Admins</div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="text-left text-gray-300">
-              <th className="py-2 pr-4">Email</th>
-              <th className="py-2 pr-4">Name</th>
-              <th className="py-2 pr-4">Created</th>
-              <th className="py-2 pr-4">Last Login</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id} className="border-t border-white/10">
-                <td className="py-2 pr-4">{r.email}</td>
-                <td className="py-2 pr-4">{r.name || '-'}</td>
-                <td className="py-2 pr-4">{r.created_at ? new Date(r.created_at).toLocaleString() : '-'}</td>
-                <td className="py-2 pr-4">{r.last_login_at ? new Date(r.last_login_at).toLocaleString() : '-'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div className="space-y-4">
+      <h1 className="text-xl font-bold">Admin Users</h1>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {admins.map((a) => (
+          <div key={a.id} className="rounded-lg border border-white/10 bg-white/[0.03] p-4">
+            <div className="font-semibold">{a.name || a.email}</div>
+            <div className="text-xs text-gray-400">{a.email}</div>
+          </div>
+        ))}
+        {admins.length === 0 && (
+          <div className="text-sm text-gray-400">No admins found</div>
+        )}
       </div>
     </div>
   );

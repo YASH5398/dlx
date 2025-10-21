@@ -1,6 +1,9 @@
 import type { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import React, { useEffect, useState } from 'react';
+import { auth, firestore } from '../firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 
 type Props = { children: ReactNode };
 
@@ -10,20 +13,22 @@ export default function AdminProtectedRoute({ children }: Props) {
   const location = useLocation();
 
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const res = await fetch('http://localhost:4000/api/admin/session', {
-          credentials: 'include',
-        });
-        setIsAdmin(res.ok);
-      } catch {
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      if (u) {
+        try {
+          const userDoc = await getDoc(doc(firestore, 'users', u.uid));
+          const data = userDoc.data() as any || {};
+          const role = (data.role || data.userRole || '').toLowerCase();
+          setIsAdmin(userDoc.exists() && role === 'admin');
+        } catch {
+          setIsAdmin(false);
+        }
+      } else {
         setIsAdmin(false);
-      } finally {
-        if (mounted) setInitialized(true);
       }
-    })();
-    return () => { mounted = false; };
+      setInitialized(true);
+    });
+    return () => { try { unsub(); } catch {} };
   }, []);
 
   if (!initialized) return null;

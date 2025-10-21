@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useForm, FormProvider, useFormContext } from 'react-hook-form';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getFirestore, doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useNavigate } from 'react-router-dom';
 import { UserPlusIcon, LinkIcon, ShoppingCartIcon, CurrencyDollarIcon, ChartBarIcon, WalletIcon, QuestionMarkCircleIcon } from '@heroicons/react/24/outline';
+import { firestore } from '../firebase';
 
 const validators = {
   email: (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v || ''),
@@ -14,8 +15,7 @@ const validators = {
 // Mock Firebase service for fetching affiliate stats
 const affiliateService = {
   async getStats(userId: string): Promise<AffiliateStats> {
-    const db = getFirestore();
-    const docRef = doc(db, 'affiliates', userId);
+    const docRef = doc(firestore, 'affiliates', userId);
     const docSnap = await getDoc(docRef);
     const data: any = docSnap.exists() ? docSnap.data() : {};
     return {

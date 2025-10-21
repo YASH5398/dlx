@@ -5,10 +5,12 @@ import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { Server as SocketIOServer } from 'socket.io';
-import mongoose from 'mongoose';
+
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
+
+import admin from 'firebase-admin';
 
 import Ticket from './models/Ticket.js';
 import LiveChat from './models/LiveChat.js';
@@ -33,7 +35,10 @@ const io = new SocketIOServer(server, {
 
 // Basic security, CORS & JSON
 app.use(helmet({ crossOriginResourcePolicy: false }));
-app.use(cors({ origin: ['http://localhost:5173', 'http://localhost:5175'], credentials: true }));
+app.use(cors({
+  origin: ['http://localhost:5176', 'http://localhost:5177'],
+  credentials: true,
+}));
 app.use(cookieParser());
 app.use(express.json({ limit: '2mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -49,12 +54,30 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// MongoDB connection
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/digilinex_support';
-mongoose
-  .connect(MONGODB_URI, { autoIndex: true })
-  .then(() => console.log('MongoDB connected'))
-  .catch((err) => console.error('MongoDB connection error:', err));
+
+// Firebase Admin SDK initialization
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY || '{}');
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+  projectId: process.env.FIREBASE_PROJECT_ID,
+  databaseURL: process.env.FIREBASE_DATABASE_URL || 'https://digilinex-a80a9-default-rtdb.firebaseio.com'
+});
+
+const db = admin.firestore();
+
+// Firestore helper functions
+const getDoc = async (collection, docId) => {
+  const docRef = db.collection(collection).doc(docId);
+  const doc = await docRef.get();
+  return doc.exists ? { id: doc.id, ...doc.data() } : null;
+};
+
+const setDoc = async (collection, docId, data) => {
+  const docRef = db.collection(collection).doc(docId);
+  await docRef.set(data, { merge: true });
+  return { id: docId, ...data };
+};
 
 // Track connected admins and users
 const clients = {
@@ -113,7 +136,7 @@ function notifyAdmins(event, payload) {
 // Agent availability endpoints
 app.get('/api/agents/status', async (req, res) => {
   try {
-    const agent = await Agent.findOne();
+    const agent = await getDoc('agents', 'mainAgent');
     const available = agent?.available ?? false;
     res.json({ available });
   } catch (e) {
@@ -124,9 +147,9 @@ app.get('/api/agents/status', async (req, res) => {
 app.post('/api/agents/status', async (req, res) => {
   try {
     const { available } = req.body || {};
-    const agent = (await Agent.findOne()) || (await Agent.create({ available: false }));
+    const agent = (await getDoc('agents', 'mainAgent')) || (await setDoc('agents', 'mainAgent', { available: false }));
     agent.available = !!available;
-    await agent.save();
+    await setDoc('agents', 'mainAgent', { available: agent.available });
     io.emit('agent:status', { available: agent.available });
     res.json({ ok: true, available: agent.available });
   } catch (e) {
@@ -277,10 +300,11 @@ app.post('/api/ai-chat', async (req, res) => {
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
 // Admin API
-import adminRouter from './routes/adminFirebase.js';
+import adminRouter from './routes/admin.js';
 app.use('/api/admin', adminRouter);
 
 const PORT = process.env.PORT || 4000;
+console.log(`Attempting to start server on port ${PORT}...`);
 server.listen(PORT, () => {
   console.log(`Support server listening on http://localhost:${PORT}`);
 });

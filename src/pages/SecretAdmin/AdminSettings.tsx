@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { firestore } from '../../firebase';
+import { doc, getDoc, setDoc, collection, addDoc } from 'firebase/firestore';
 
 export default function AdminSettings() {
   const [config, setConfig] = useState<any>(null);
@@ -9,10 +11,19 @@ export default function AdminSettings() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch('http://localhost:4000/api/admin/settings', { credentials: 'include' });
-        const data = await res.json();
-        if (res.ok) setConfig(data);
-      } catch {}
+        const cfgRef = doc(firestore, 'config', 'admin');
+        const snap = await getDoc(cfgRef);
+        if (snap.exists()) {
+          setConfig(snap.data());
+        } else {
+          const defaultCfg = { auth: 'firebase', hashing: 'argon2 (client-only)', invites: true, updatedAt: Date.now() };
+          await setDoc(cfgRef, defaultCfg);
+          setConfig(defaultCfg);
+        }
+      } catch (error) {
+        console.error('Failed to load admin config:', error);
+        setConfig({ auth: 'firebase', hashing: 'argon2 (client-only)', invites: true });
+      }
     })();
   }, []);
 
@@ -21,15 +32,14 @@ export default function AdminSettings() {
     setError(null);
     setInvite(null);
     try {
-      const res = await fetch('http://localhost:4000/api/admin/invite/generate', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || 'Failed to generate invite');
-      setInvite({ link: data.link, expires_at: new Date(data.expires_at).toLocaleString() });
+      if (!email) throw new Error('Email is required');
+      const token = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      const expiresAt = Date.now() + 1000 * 60 * 60 * 24; // 24h
+      const invCol = collection(firestore, 'admin_invites');
+      await addDoc(invCol, { email, token, expiresAt, createdAt: Date.now(), status: 'pending' });
+      const base = typeof window !== 'undefined' ? window.location.origin : '';
+      const link = `${base}/secret-admin/invite/${token}`;
+      setInvite({ link, expires_at: new Date(expiresAt).toLocaleString() });
     } catch (e: any) {
       setError(e.message || 'Failed to generate invite');
     }

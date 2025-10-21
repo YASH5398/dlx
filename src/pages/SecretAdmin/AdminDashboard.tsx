@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { db } from '../../firebase';
+import { get, ref } from 'firebase/database';
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState<{ users: number; tickets: number; orders: number; revenue: number } | null>(null);
@@ -6,10 +8,17 @@ export default function AdminDashboard() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch('http://localhost:4000/api/admin/stats', { credentials: 'include' });
-        const data = await res.json();
-        if (res.ok) setStats(data);
-      } catch {}
+        // Aggregate simple stats from Realtime Database
+        const usersSnap = await get(ref(db, 'users'));
+        const usersVal = usersSnap.val() || {};
+        const userIds = Object.keys(usersVal);
+        const ordersCount = userIds.reduce((acc, uid) => acc + Object.keys(usersVal[uid]?.orders || {}).length, 0);
+        // Tickets/revenue not tracked here; default to 0
+        setStats({ users: userIds.length, orders: ordersCount, revenue: 0, tickets: 0 });
+      } catch (error) {
+        console.error('Failed to load admin stats from Firebase:', error);
+        setStats({ users: 0, orders: 0, revenue: 0, tickets: 0 });
+      }
     })();
   }, []);
 

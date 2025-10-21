@@ -1,17 +1,24 @@
 import React, { useEffect, useState } from 'react';
+import { firestore } from '../../firebase';
+import { collection, onSnapshot } from 'firebase/firestore';
 
 type Product = { id: string; name: string; price: number };
 
 export default function AdminProducts() {
   const [rows, setRows] = useState<Product[]>([]);
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch('http://localhost:4000/api/admin/products', { credentials: 'include' });
-        const data = await res.json();
-        if (res.ok) setRows(data);
-      } catch {}
-    })();
+    const col = collection(firestore, 'products');
+    const unsub = onSnapshot(col, (snap) => {
+      const arr: Product[] = [];
+      snap.forEach((doc) => {
+        const d: any = doc.data() || {};
+        arr.push({ id: doc.id, name: d.name || '-', price: Number(d.price || 0) });
+      });
+      setRows(arr);
+    }, (err) => {
+      console.error('Failed to stream products:', err);
+    });
+    return () => { try { unsub(); } catch {} };
   }, []);
 
   return (
@@ -24,6 +31,9 @@ export default function AdminProducts() {
             <div className="text-emerald-400">${p.price}</div>
           </div>
         ))}
+        {rows.length === 0 && (
+          <div className="text-sm text-gray-400">No products found.</div>
+        )}
       </div>
     </div>
   );
