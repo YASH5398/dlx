@@ -71,3 +71,20 @@ export default defineConfig([
   },
 ])
 ```
+
+## Daily Game (Mining) UI Update
+- Adds a top stats header with: `Next claim` countdown, `Total DLX`, `Total referrals`, and `Total earned $` from DLX→USDT swaps.
+- Removes legacy tiles: `Daily Game play`, `Daily reward`, `Daily Combo`, `Daily Secret Code` and right-side `Boost`, `Energy`, `Invite`, `Gifts`.
+- Mobile-friendly layout: larger tap targets, responsive grid, accessible focus rings.
+- Countdown derives from `users/{uid}.lastClaimAt` with a 24h window; values stream live from Firestore.
+- Swap totals stream from `wallets/{uid}/transactions` where `type==='swap'` (sum of `amount` in USDT/$, excluding `failed`).
+
+### Where to Review
+- Dev server: `npm run dev` → open `http://localhost:5173/mining`.
+- Use browser DevTools device toolbar to check mobile scaling.
+
+### Files Touched
+- `src/pages/Dashboard/Mining2.tsx` (UI only; claim and streak logic preserved).
+
+### Screenshots
+- See `docs/mining-ui-update.md` for quick steps to capture desktop and mobile screenshots.

@@ -116,57 +116,57 @@ export default function AdminServiceForms() {
   };
 
   return (
-    <div className="p-4">
-      <h1 className="text-xl font-semibold mb-4">Service Form Manager</h1>
-
-      {/* Service selector */}
-      <div className="mb-4 flex items-center gap-2">
-        <label className="text-sm text-gray-600">Service</label>
-        <select
-          className="border rounded px-2 py-1"
-          value={selectedService}
-          onChange={(e) => setSelectedService(e.target.value)}
-        >
-          {serviceOptions.map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-        <button
-          className="ml-auto bg-blue-600 text-white px-3 py-1 rounded disabled:opacity-50"
-          onClick={saveForm}
-          disabled={saving}
-        >
-          {saving ? 'Saving…' : 'Save Form'}
-        </button>
-      </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-600/20 via-purple-600/20 to-pink-600/20 border border-white/10 p-6 backdrop-blur-xl">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold mb-1">
+              <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">Service Form Manager</span>
+            </h1>
+            <p className="text-gray-300 text-sm">Define step-wise fields for each service</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-300">Service</label>
+            <select className="px-3 py-2 rounded-xl bg-white/5 border border-white/10" value={selectedService} onChange={(e) => setSelectedService(e.target.value)}>
+              {serviceOptions.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            <button className="ml-auto px-4 py-2 rounded-xl bg-white/10 border border-white/20 hover:bg-white/15 disabled:opacity-50" onClick={saveForm} disabled={saving}>
+              {saving ? 'Saving…' : 'Save Form'}
+            </button>
+          </div>
+        </div>
+      </section>
 
       {loading ? (
-        <div className="text-gray-600">Loading form configuration…</div>
+        <div className="text-gray-400">Loading form configuration…</div>
       ) : steps.length === 0 ? (
-        <div className="text-gray-600">No steps found. You can start by adding fields to Step 1.</div>
+        <div className="text-gray-400">No steps found. You can start by adding fields to Step 1.</div>
       ) : null}
 
       {/* Steps editor */}
       <div className="space-y-6">
         {steps.map((step, si) => (
-          <div key={si} className="border rounded-md p-4">
+          <div key={si} className="rounded-2xl border border-white/10 bg-white/5 p-4">
             <div className="flex items-center gap-2 mb-3">
-              <span className="text-sm text-gray-500">Step {si + 1}</span>
+              <span className="text-xs text-gray-400">Step {si + 1}</span>
               <input
-                className="flex-1 border rounded px-2 py-1"
+                className="flex-1 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-gray-400"
                 value={step.title || ''}
                 onChange={(e) => updateStepTitle(si, e.target.value)}
                 placeholder={`Step ${si + 1} title`}
               />
               <div className="flex items-center gap-2">
                 <button
-                  className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-2 py-1 rounded text-sm"
+                  className="px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-sm hover:bg-white/15"
                   onClick={() => addFieldToStep(si, 'normal')}
                 >
                   + Add Field
                 </button>
                 <button
-                  className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-2 py-1 rounded text-sm"
+                  className="px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-sm hover:bg-white/15"
                   onClick={() => addFieldToStep(si, 'array')}
                 >
                   + Add List
@@ -175,25 +175,25 @@ export default function AdminServiceForms() {
             </div>
 
             {(step.fields || []).length === 0 ? (
-              <div className="text-gray-500 text-sm">No fields in this step.</div>
+              <div className="text-gray-400 text-sm">No fields in this step.</div>
             ) : (
               <div className="space-y-3">
                 {(step.fields || []).map((f, fi) => (
                   <div key={f.name} className="grid grid-cols-1 md:grid-cols-6 gap-2 items-start">
                     <input
-                      className="border rounded px-2 py-1 md:col-span-2"
+                      className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 md:col-span-2"
                       value={f.label || ''}
                       onChange={(e) => updateField(si, fi, { label: e.target.value })}
                       placeholder="Label"
                     />
                     <input
-                      className="border rounded px-2 py-1"
+                      className="px-3 py-2 rounded-xl bg-white/5 border border-white/10"
                       value={f.name || ''}
                       onChange={(e) => updateField(si, fi, { name: e.target.value })}
                       placeholder="name"
                     />
                     <select
-                      className="border rounded px-2 py-1"
+                      className="px-3 py-2 rounded-xl bg-white/5 border border-white/10"
                       value={f.type}
                       onChange={(e) => updateField(si, fi, { type: e.target.value as FieldDef['type'] })}
                     >
@@ -202,7 +202,7 @@ export default function AdminServiceForms() {
                       ))}
                     </select>
                     <input
-                      className="border rounded px-2 py-1"
+                      className="px-3 py-2 rounded-xl bg-white/5 border border-white/10"
                       value={f.placeholder || ''}
                       onChange={(e) => updateField(si, fi, { placeholder: e.target.value })}
                       placeholder="Placeholder"
@@ -218,7 +218,7 @@ export default function AdminServiceForms() {
                     <div className="md:col-span-6 grid grid-cols-1 md:grid-cols-3 gap-2">
                       {(f.type === 'select' || f.type === 'checkbox' || f.type === 'radio') && (
                         <input
-                          className="border rounded px-2 py-1"
+                          className="px-3 py-2 rounded-xl bg-white/5 border border-white/10"
                           value={(f.options || []).join(', ')}
                           onChange={(e) => updateField(si, fi, { options: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
                           placeholder="Options (comma separated)"
@@ -227,7 +227,7 @@ export default function AdminServiceForms() {
                       {f.type === 'array' && (
                         <>
                           <select
-                            className="border rounded px-2 py-1"
+                            className="px-3 py-2 rounded-xl bg-white/5 border border-white/10"
                             value={f.itemType || 'text'}
                             onChange={(e) => updateField(si, fi, { itemType: e.target.value as FieldDef['itemType'] })}
                           >
@@ -236,7 +236,7 @@ export default function AdminServiceForms() {
                             ))}
                           </select>
                           <input
-                            className="border rounded px-2 py-1"
+                            className="px-3 py-2 rounded-xl bg-white/5 border border-white/10"
                             value={f.itemLabel || ''}
                             onChange={(e) => updateField(si, fi, { itemLabel: e.target.value })}
                             placeholder="Item label"
@@ -244,7 +244,7 @@ export default function AdminServiceForms() {
                         </>
                       )}
                       <button
-                        className="text-red-600 hover:text-red-700 text-sm justify-self-start"
+                        className="text-red-400 hover:text-red-300 text-sm justify-self-start"
                         onClick={() => removeFieldFromStep(si, fi)}
                       >
                         Remove
@@ -259,7 +259,7 @@ export default function AdminServiceForms() {
       </div>
 
       {/* Helper: explain persistence */}
-      <p className="mt-6 text-xs text-gray-500">
+      <p className="mt-2 text-xs text-gray-400">
         Changes are saved to Firebase under each service’s form config. Users see these in the request modal.
       </p>
     </div>

@@ -29,7 +29,7 @@ export default function AdminActivities() {
     const all: ActivityRow[] = [];
     for (const [uid, items] of Object.entries(raw)) {
       for (const [ts, entry] of Object.entries(items)) {
-        const e: ActivityRow = { uid, ts: Number(ts), type: entry.type ?? 'unknown', meta: entry.meta };
+        const e: ActivityRow = { uid, ts: Number(ts), type: (entry as any).type ?? 'unknown', meta: (entry as any).meta };
         all.push(e);
       }
     }
@@ -58,30 +58,43 @@ export default function AdminActivities() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Activities</h1>
-        <button onClick={exportCsv} className="px-4 py-2 rounded-xl bg-white/10 border border-white/20 hover:bg-white/15">Export CSV</button>
-      </div>
+      {/* Header */}
+      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-600/20 via-purple-600/20 to-pink-600/20 border border-white/10 p-6 backdrop-blur-xl">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold mb-1">
+              <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">Activities</span>
+            </h1>
+            <p className="text-gray-300 text-sm">Filter and review all user activities</p>
+          </div>
+          <button onClick={exportCsv} className="px-4 py-2 rounded-xl bg-white/10 border border-white/20 hover:bg-white/15">Export CSV</button>
+        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search (uid/type/meta)" className="px-3 py-2 rounded-xl bg-white/10 border border-white/20" />
-        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="px-3 py-2 rounded-xl bg-white/10 border border-white/20">
-          <option value="">All types</option>
-          <option value="login">Login</option>
-          <option value="logout">Logout</option>
-          <option value="purchase">Service purchase</option>
-          <option value="get_service">Get Service click</option>
-          <option value="referral_register">Referral registered</option>
-          <option value="commission">Commission earned</option>
-          <option value="mining_reward">DLX reward</option>
-          <option value="interaction">Interaction</option>
-        </select>
-        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="px-3 py-2 rounded-xl bg-white/10 border border-white/20" />
-        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="px-3 py-2 rounded-xl bg-white/10 border border-white/20" />
-      </div>
+        {/* Filters */}
+        <div className="mt-5 grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div className="relative">
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search (uid/type/meta)" className="w-full px-3 py-2 pl-9 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/40" />
+            <span className="absolute left-3 top-2.5 text-gray-400">🔎</span>
+          </div>
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="px-3 py-2 rounded-xl bg-white/5 border border-white/10">
+            <option value="">All types</option>
+            <option value="login">Login</option>
+            <option value="logout">Logout</option>
+            <option value="purchase">Service purchase</option>
+            <option value="get_service">Get Service click</option>
+            <option value="referral_register">Referral registered</option>
+            <option value="commission">Commission earned</option>
+            <option value="mining_reward">DLX reward</option>
+            <option value="interaction">Interaction</option>
+          </select>
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="px-3 py-2 rounded-xl bg-white/5 border border-white/10" />
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="px-3 py-2 rounded-xl bg-white/5 border border-white/10" />
+        </div>
+      </section>
 
+      {/* Table */}
       <div className="rounded-2xl overflow-hidden border border-white/10 bg-white/5">
-        <div className="grid grid-cols-5 gap-4 px-4 py-3 text-sm text-gray-300 border-b border-white/10">
+        <div className="grid grid-cols-5 gap-4 px-4 py-3 text-sm text-gray-300 border-b border-white/10 bg-gradient-to-r from-white/[0.06] to-transparent">
           <div>Time</div>
           <div>User</div>
           <div>Type</div>

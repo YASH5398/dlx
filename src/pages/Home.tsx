@@ -324,13 +324,7 @@ const HeroSection = () => {
                 />
               </motion.button>
 
-              <motion.button
-                className="px-8 py-4 bg-white/10 backdrop-blur-lg text-white text-base font-semibold rounded-xl border border-white/20 hover:bg-white/20 transition-all"
-                whileHover={{ scale: 1.05, borderColor: 'rgba(255,255,255,0.4)' }}
-                whileTap={{ scale: 0.95 }}
-              >
-                Get Free Consultation
-              </motion.button>
+              {/* Removed secondary CTA button per request */}
             </motion.div>
 
             {/* Trust Badges */}
@@ -1445,13 +1439,7 @@ const CTASection = () => {
                   />
                 </motion.button>
 
-                <motion.button
-                  className="px-8 py-4 bg-white/10 backdrop-blur-lg text-white rounded-xl font-bold text-lg border-2 border-white/30 hover:bg-white/20 hover:border-white/50 transition-all"
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  Schedule Free Consultation
-                </motion.button>
+                {/* Removed secondary CTA to eliminate right-side circle icon */}
               </div>
 
               {/* Trust Indicators */}

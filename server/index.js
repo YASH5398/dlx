@@ -25,19 +25,35 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const server = http.createServer(app);
 
+const allowedOrigins = ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5176', 'http://localhost:5177'];
+
 const io = new SocketIOServer(server, {
   cors: {
-    origin: ['http://localhost:5173', 'http://localhost:5175'],
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true,
   },
 });
 
 // Basic security, CORS & JSON
+
 app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(cors({
-  origin: ['http://localhost:5176', 'http://localhost:5177'],
-  credentials: true,
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true
 }));
 app.use(cookieParser());
 app.use(express.json({ limit: '2mb' }));
@@ -56,15 +72,51 @@ const upload = multer({ storage });
 
 
 // Firebase Admin SDK initialization
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY || '{}');
+let serviceAccount = null;
+const saStr = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+if (saStr) {
+  try {
+    serviceAccount = JSON.parse(saStr);
+    if (serviceAccount?.private_key?.includes('\\n')) {
+      serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+    }
+  } catch {
+    serviceAccount = null;
+  }
+}
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  projectId: process.env.FIREBASE_PROJECT_ID,
-  databaseURL: process.env.FIREBASE_DATABASE_URL || 'https://digilinex-a80a9-default-rtdb.firebaseio.com'
-});
+const credential = (serviceAccount && typeof serviceAccount.project_id === 'string')
+  ? admin.credential.cert(serviceAccount)
+  : admin.credential.applicationDefault();
+
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential,
+    projectId: process.env.FIREBASE_PROJECT_ID || serviceAccount?.project_id,
+    databaseURL: process.env.FIREBASE_DATABASE_URL || 'https://digilinex-a80a9-default-rtdb.firebaseio.com'
+  });
+}
 
 const db = admin.firestore();
+
+// Placeholder for site context retrieval
+async function getSiteContext() {
+  // In a real application, this would fetch site-specific data from a database or file
+  return {
+    "general_info": "This is a support chatbot for a digital products platform.",
+    "faq": "How can I reset my password? Visit the login page and click 'Forgot Password'."
+  };
+}
+
+// Placeholder for context retrieval based on prompt
+function retrieveContext(siteContext, prompt) {
+  // In a real application, this would use a more sophisticated retrieval mechanism
+  // For now, a simple keyword match or just returning the prompt
+  if (prompt.toLowerCase().includes("password")) {
+    return siteContext.faq;
+  }
+  return siteContext.general_info;
+}
 
 // Firestore helper functions
 const getDoc = async (collection, docId) => {
@@ -280,19 +332,45 @@ app.get('/api/messages', async (req, res) => {
   }
 });
 
-app.post('/api/ai-chat', async (req, res) => {
+app.post('/api/support/tickets/:ticketId/ai-chat', async (req, res) => {
   try {
-    const { prompt, userId } = req.body;
-    if (!prompt) return res.status(400).json({ error: 'Prompt is required' });
+    const { ticketId } = req.params;
+    const { prompt, user_id } = req.body;
+    if (!ticketId || !prompt) {
+      return res.status(400).json({ error: 'ticketId and prompt are required' });
+    }
 
     const site = await getSiteContext();
     const relevant = retrieveContext(site, prompt);
-    const answer = await generateAnswer(prompt, relevant);
+    const reply = await generateAnswer(prompt, relevant);
 
-    res.json({ reply: answer });
+    const messagesRef = db.collection('supportTickets').doc(ticketId).collection('messages');
+    await messagesRef.add({
+      senderType: 'AI',
+      content: reply ?? 'Sorry, I could not process your request.',
+      userId: user_id || null,
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('Ticket AI Chat Error:', e);
+    res.status(500).json({ error: 'AI processing failed' });
+  }
+});
+
+// General AI chatbot endpoint used by Support.tsx AI tab
+app.post('/api/ai-chat', async (req, res) => {
+  try {
+    const { prompt, userId } = req.body || {};
+    if (!prompt) return res.status(400).json({ error: 'Prompt is required' });
+    const site = await getSiteContext();
+    const relevant = retrieveContext(site, prompt);
+    const reply = await generateAnswer(prompt, relevant);
+    return res.json({ reply });
   } catch (e) {
     console.error('AI Chat Error:', e);
-    res.status(500).json({ error: 'AI processing failed' });
+    return res.status(500).json({ error: 'AI processing failed' });
   }
 });
 

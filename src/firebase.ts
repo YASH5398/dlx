@@ -20,7 +20,7 @@ const app = initializeApp(firebaseConfig);
 
 // Guard analytics for non-browser environments
 let analytics: ReturnType<typeof getAnalytics> | undefined;
-if (typeof window !== "undefined") {
+if (typeof window !== "undefined" && import.meta.env.PROD) {
   isSupported()
     .then((ok) => {
       if (ok) analytics = getAnalytics(app);

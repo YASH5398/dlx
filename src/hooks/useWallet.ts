@@ -1,57 +1,61 @@
 import { useEffect, useState } from 'react';
-import { DEFAULT_WALLET } from '../utils/constants';
 import { firestore } from '../firebase';
-import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc } from 'firebase/firestore';
 import { useUser } from '../context/UserContext';
 
 export type WalletState = { dlx: number; usdt: number; inr: number };
 
 export function useWallet() {
   const { user } = useUser();
-  const [wallet, setWallet] = useState<WalletState>(DEFAULT_WALLET);
+  const [wallet, setWallet] = useState<WalletState>({ dlx: 0, usdt: 0, inr: 0 });
 
   useEffect(() => {
     if (!user?.id) return;
-    const walletDoc = doc(firestore, 'wallets', user.id);
-    const unsub = onSnapshot(walletDoc, async (snap) => {
-      if (snap.exists()) {
-        const data = snap.data() as any;
-        const usdt = Number(data.mainUsdt || 0) + Number(data.purchaseUsdt || 0);
-        const inr = Number(data.mainInr || 0) + Number(data.purchaseInr || 0);
-        const dlx = Number(data.dlx || 0);
-        setWallet({ usdt, inr, dlx });
-      } else {
-        try {
-          await setDoc(walletDoc, {
-            mainUsdt: DEFAULT_WALLET.usdt,
-            purchaseUsdt: 0,
-            mainInr: DEFAULT_WALLET.inr,
-            purchaseInr: 0,
-            dlx: DEFAULT_WALLET.dlx,
-            updatedAt: Date.now(),
-          });
-          setWallet(DEFAULT_WALLET);
-        } catch {
-          setWallet(DEFAULT_WALLET);
-        }
-      }
+    const uid = user.id;
+
+    // Stream balances from Firestore
+    const walletsDoc = doc(firestore, 'wallets', uid);
+    const usersDoc = doc(firestore, 'users', uid);
+
+    const unsubWallets = onSnapshot(walletsDoc, (snap) => {
+      const d = (snap.data() as any) || {};
+      const usdt = Number(d.mainUsdt || 0) + Number(d.purchaseUsdt || 0);
+      const inr = Number(d.mainInr || 0) + Number(d.purchaseInr || 0);
+      setWallet((prev) => ({ ...prev, usdt, inr }));
+    }, () => {
+      setWallet((prev) => ({ ...prev, usdt: 0, inr: 0 }));
     });
+
+    const unsubUsers = onSnapshot(usersDoc, (snap) => {
+      const d = (snap.data() as any) || {};
+      const dlx = Number(d.wallet?.miningBalance ?? 0);
+      setWallet((prev) => ({ ...prev, dlx }));
+    }, () => {
+      setWallet((prev) => ({ ...prev, dlx: 0 }));
+    });
+
     return () => {
-      try { unsub(); } catch {}
+      try { unsubWallets(); } catch {}
+      try { unsubUsers(); } catch {}
     };
   }, [user?.id]);
 
   const refresh = async () => {
     if (!user?.id) return;
-    const walletDoc = doc(firestore, 'wallets', user.id);
-    const snap = await getDoc(walletDoc);
-    if (snap.exists()) {
-      const data = snap.data() as any;
-      const usdt = Number(data.mainUsdt || 0) + Number(data.purchaseUsdt || 0);
-      const inr = Number(data.mainInr || 0) + Number(data.purchaseInr || 0);
-      const dlx = Number(data.dlx || 0);
-      setWallet({ usdt, inr, dlx });
-    }
+    const uid = user.id;
+    const walletsDoc = doc(firestore, 'wallets', uid);
+    const usersDoc = doc(firestore, 'users', uid);
+
+    const [wSnap, uSnap] = await Promise.all([getDoc(walletsDoc), getDoc(usersDoc)]);
+
+    const wData = wSnap.exists() ? (wSnap.data() as any) : {};
+    const uData = uSnap.exists() ? (uSnap.data() as any) : {};
+
+    const usdt = Number(wData.mainUsdt || 0) + Number(wData.purchaseUsdt || 0);
+    const inr = Number(wData.mainInr || 0) + Number(wData.purchaseInr || 0);
+    const dlx = Number(uData.wallet?.miningBalance ?? 0);
+
+    setWallet({ dlx, usdt, inr });
   };
 
   return { wallet, refresh };

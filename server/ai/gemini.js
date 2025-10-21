@@ -1,23 +1,34 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import AIContext from './context.js';
 
-const apiKey = 'AIzaSyCDu1WN_2bx2BbYWL-Nx2BSpYPbddT-QVg';
-const genAI = new GoogleGenerativeAI(apiKey);
+const apiKey = process.env.GEMINI_API_KEY;
+let genAI = null;
+if (apiKey) {
+  genAI = new GoogleGenerativeAI(apiKey);
+}
 
-async function getAIResponse(query) {
-  const contextResponse = AIContext.getResponse(query);
-  if (contextResponse) return contextResponse;
+async function generateAnswer(query, relevant = '') {
+  const cached = AIContext.getResponse(query);
+  if (cached) return cached;
+
+  if (!genAI) {
+    console.error('Missing GEMINI_API_KEY in environment');
+    throw new Error('AI key missing');
+  }
 
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
-    const result = await model.generateContent(query);
+    const model = genAI.getGenerativeModel('gemini-pro');
+    const composedPrompt = relevant
+      ? `You are a helpful support assistant.\nContext:\n${relevant}\n\nUser question:\n${query}\n\nProvide a concise, helpful answer.`
+      : query;
+    const result = await model.generateContent(composedPrompt);
     const response = result.response.text();
     AIContext.addResponse(query, response);
     return response;
   } catch (error) {
     console.error('AI Error:', error);
-    return 'Sorry, I couldn’t process your request. Please raise a ticket or contact a live agent.';
+    throw error;
   }
 }
 
-export { getAIResponse as generateAnswer };
+export { generateAnswer };

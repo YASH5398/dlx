@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { db } from '../../firebase';
+import { db, firestore } from '../../firebase';
 import { ref, onValue, off, set, push, update } from 'firebase/database';
 import { useUser } from '../../context/UserContext';
 import { useNavigate } from 'react-router-dom';
 import { subscribeAgentAvailability, createChat, subscribeMessages, sendMessage as sendChatMessage, saveCommonQA, logAiConversation } from '../../utils/support';
+import { doc as fsDoc, setDoc as fsSetDoc, collection as fsCollection, addDoc as fsAddDoc, onSnapshot as fsOnSnapshot, query as fsQuery, orderBy as fsOrderBy, serverTimestamp as fsServerTimestamp } from 'firebase/firestore';
 
 interface Ticket {
   id: string;
@@ -47,7 +48,11 @@ export default function Support() {
   const [error, setError] = useState<string | null>(null);
   const [notificationCount, setNotificationCount] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const chatUnsubRef = useRef<(() => void) | null>(null);
+const chatUnsubRef = useRef<(() => void) | null>(null);
+// Firestore ticket chat state
+const [ticketMessages, setTicketMessages] = useState<ChatMessage[]>([]);
+const [ticketMsgInput, setTicketMsgInput] = useState('');
+const ticketChatUnsubRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     let unsubscribeTickets: (() => void) | undefined;
@@ -79,7 +84,36 @@ export default function Support() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, aiMessages]);
+  }, [messages, aiMessages, ticketMessages]);
+
+  // Subscribe to Firestore ticket messages when a ticket is selected
+  useEffect(() => {
+    if (!selectedTicket?.id) {
+      if (ticketChatUnsubRef.current) { try { ticketChatUnsubRef.current(); } catch {} }
+      setTicketMessages([]);
+      return;
+    }
+    const q = fsQuery(
+      fsCollection(firestore, 'supportTickets', selectedTicket.id, 'messages'),
+      fsOrderBy('timestamp', 'asc') as any,
+    );
+    const unsub = fsOnSnapshot(q, (snap) => {
+      const list: ChatMessage[] = [];
+      snap.forEach((d) => {
+        const data: any = d.data();
+        list.push({
+          id: d.id,
+          chatId: selectedTicket!.id,
+          senderType: (data.senderType || data.role || 'USER'),
+          content: String(data.content || ''),
+          timestamp: (data.timestamp && typeof data.timestamp.toDate === 'function') ? data.timestamp.toDate().toISOString() : new Date((data.timestamp || Date.now())).toISOString(),
+        });
+      });
+      setTicketMessages(list);
+    });
+    ticketChatUnsubRef.current = unsub;
+    return () => { try { unsub(); } catch {} };
+  }, [selectedTicket?.id]);
 
   const createTicket = useCallback(async () => {
     if (!user?.id || !ticketForm.title || !ticketForm.description) return;
@@ -99,6 +133,19 @@ export default function Support() {
       };
       await set(globalRef, ticket);
       await set(ref(db, `users/${user.id}/tickets/${ticket.id}`), ticket);
+      // Mirror ticket into Firestore
+      try {
+        await fsSetDoc(fsDoc(firestore, 'supportTickets', ticket.id), {
+          id: ticket.id,
+          userId: ticket.userId,
+          title: ticket.title,
+          description: ticket.description,
+          category: ticket.category,
+          priority: ticket.priority,
+          status: ticket.status,
+          createdAt: Date.now(),
+        }, { merge: true } as any)
+      } catch {}
       setTicketForm({ title: '', description: '', category: 'Technical', priority: 'Medium' });
       document.dispatchEvent(new CustomEvent('notifications:add', {
         detail: { type: 'service', message: `Ticket "${ticket.title}" created`, route: '/support' },
@@ -157,40 +204,39 @@ export default function Support() {
       timestamp: new Date().toISOString(),
     };
     setAiMessages((prev) => [...prev, userMsg]);
-    try {
-      const res = await fetch('http://localhost:4000/api/ai-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user?.id, prompt: aiInput }),
-      });
-      if (!res.ok) throw new Error('AI chat failed');
-      const response = await res.json();
-      const aiMsg: ChatMessage = {
-        id: crypto.randomUUID(),
-        chatId: 'ai',
-        senderType: 'AGENT',
-        content: response.reply || 'Sorry, I couldn’t process your request.',
-        timestamp: new Date().toISOString(),
-      };
-      setAiMessages((prev) => [...prev, aiMsg]);
-      await saveCommonQA(userMsg.content, aiMsg.content);
-      await logAiConversation(user?.id ?? 'anon', userMsg.content, aiMsg.content, !response?.reply);
 
-      if (response.suggestTicket || !response.reply) {
-        setAiMessages((prev) => [
-          ...prev,
-          {
+    const maxAttempts = 2;
+    let attempt = 0;
+    let response: any = null;
+
+    while (attempt < maxAttempts) {
+      try {
+        const res = await fetch('http://localhost:4000/api/ai-chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user?.id, prompt: aiInput }),
+        });
+        if (!res.ok) throw new Error(`AI chat failed (${res.status})`);
+        response = await res.json();
+        break;
+      } catch (err) {
+        attempt++;
+        if (attempt < maxAttempts) {
+          setError('Reconnecting...');
+          const reconnectMsg: ChatMessage = {
             id: crypto.randomUUID(),
             chatId: 'ai',
             senderType: 'AGENT',
-            content: 'Would you like to raise a ticket or connect with a live agent?',
+            content: 'Reconnecting...',
             timestamp: new Date().toISOString(),
-          },
-        ]);
+          };
+          setAiMessages((prev) => [...prev, reconnectMsg]);
+          await new Promise((r) => setTimeout(r, 1000 * attempt));
+        }
       }
-      setNotificationCount((prev) => prev + 1);
-      document.dispatchEvent(new CustomEvent('notifications:add', { detail: { type: 'service', message: 'AI responded', route: '/support' } }));
-    } catch (e) {
+    }
+
+    if (!response?.reply) {
       setError('Failed to get AI response. Please try again.');
       const aiMsg: ChatMessage = {
         id: crypto.randomUUID(),
@@ -203,11 +249,47 @@ export default function Support() {
       try {
         await logAiConversation(user?.id ?? 'anon', userMsg.content, aiMsg.content, true);
       } catch {}
-    } finally {
-      setAiInput('');
-      setLoading(false);
+    } else {
+      const aiMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        chatId: 'ai',
+        senderType: 'AI',
+        content: response.reply,
+        timestamp: new Date().toISOString(),
+      };
+      setAiMessages((prev) => [...prev, aiMsg]);
+      try {
+        await saveCommonQA(userMsg.content, aiMsg.content);
+        await logAiConversation(user?.id ?? 'anon', userMsg.content, aiMsg.content, false);
+      } catch {}
+      setNotificationCount((prev) => prev + 1);
+      document.dispatchEvent(new CustomEvent('notifications:add', { detail: { type: 'service', message: 'AI responded', route: '/support' } }));
     }
+
+    setAiInput('');
+    setLoading(false);
   }, [aiInput, user?.id]);
+
+  const sendTicketMessage = useCallback(async () => {
+    if (!selectedTicket?.id || !ticketMsgInput.trim() || !user?.id) return;
+    const content = ticketMsgInput.trim();
+    setTicketMsgInput('');
+    try {
+      await fsAddDoc(fsCollection(firestore, 'supportTickets', selectedTicket.id, 'messages'), {
+        senderType: 'USER',
+        userId: user.id,
+        content,
+        timestamp: fsServerTimestamp(),
+      } as any);
+      await fetch(`http://localhost:4000/api/support/tickets/${selectedTicket.id}/ai-chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: user.id, prompt: content }),
+      });
+    } catch (e) {
+      setError('Failed to send message. Please try again.');
+    }
+  }, [selectedTicket?.id, ticketMsgInput, user?.id]);
 
   const formatDate = (iso: string) => (iso ? new Date(iso).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : '—');
 
@@ -475,6 +557,37 @@ export default function Support() {
                     </div>
                   </div>
                 )}
+              </div>
+              {/* Chat with AI Agent inside this ticket */}
+              <div className="mt-6 space-y-3">
+                <h4 className="text-white font-medium text-sm">Chat with AI Agent</h4>
+                <div className="h-56 overflow-y-auto rounded-lg bg-gray-800/40 p-4">
+                  {ticketMessages.map((m) => (
+                    <div key={m.id} className={`mb-2 ${m.senderType === 'USER' ? 'text-right' : 'text-left'}`}>
+                      <span className={`inline-block px-3 py-2 rounded-lg ${m.senderType === 'USER' ? 'bg-cyan-500/20 text-white' : 'bg-gray-700/40 text-gray-200'}`}>
+                        {m.content}
+                      </span>
+                      <p className="text-xs text-gray-500 mt-1">{formatDate(m.timestamp)}</p>
+                    </div>
+                  ))}
+                  <div ref={messagesEndRef} />
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    value={ticketMsgInput}
+                    onChange={(e) => setTicketMsgInput(e.target.value)}
+                    placeholder="Type your message to AI"
+                    className="flex-1 px-4 py-2 rounded-lg bg-gray-800/40 border border-gray-700/30 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all duration-300"
+                  />
+                  <button
+                    onClick={async () => { await sendTicketMessage(); }}
+                    disabled={loading || !ticketMsgInput.trim()}
+                    className="px-4 py-2 rounded-full bg-gradient-to-r from-cyan-500 to-purple-500 text-white hover:shadow-lg transition-all duration-300 disabled:opacity-50"
+                  >
+                    {loading ? <span className="animate-pulse">Sending...</span> : 'Send'}
+                  </button>
+                </div>
+                {error && <p className="text-red-400 text-sm">{error}</p>}
               </div>
               <div className="mt-6 flex justify-end gap-2">
                 <button

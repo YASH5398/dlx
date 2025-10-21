@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useUser } from '../../context/UserContext';
-import { useWallet } from '../../hooks/useWallet';
+// import { useWallet } from '../../hooks/useWallet';
 import { useReferral } from '../../hooks/useReferral';
 import { firestore } from '../../firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
@@ -36,7 +36,7 @@ interface StaticService {
 
 export default function DashboardHome() {
   const { user } = useUser();
-  const { wallet } = useWallet();
+  // const { wallet } = useWallet();
   const { totalEarnings, activeReferrals, tier } = useReferral();
   const navigate = useNavigate();
   const [ordersCount, setOrdersCount] = useState(0);
@@ -45,6 +45,26 @@ export default function DashboardHome() {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedService, setSelectedService] = useState<string | null>(null);
   const [services, setServices] = useState<ServiceItem[]>([]);
+
+  // Real-time wallet subscription for dashboard balances
+  const [usdtTotal, setUsdtTotal] = useState(0);
+  const [inrMain, setInrMain] = useState(0);
+  useEffect(() => {
+    if (!user?.id) return;
+    (async () => {
+      const { doc, onSnapshot: onSnap } = await import('firebase/firestore');
+      const uref = doc(firestore, 'users', user.id);
+      const unsub = onSnap(uref, (snap) => {
+        const data = snap.data() as any || {};
+        const w = data.wallet || {};
+        const main = Number(w.main || 0);
+        const purchase = Number(w.purchase || 0);
+        setUsdtTotal(main + purchase);
+        setInrMain(main);
+      });
+      return () => { try { unsub(); } catch {} };
+    })();
+  }, [user?.id]);
 
   // Ensure required Firestore docs exist for this user
   useEffect(() => {
@@ -126,16 +146,7 @@ export default function DashboardHome() {
       features: ['Smart Contract Development', 'Token Economics Design', 'Audit & Security'],
       category: 'blockchain'
     },
-    {
-      id: '2',
-      name: 'Website Development',
-      description: 'Professional web development services including modern responsive websites and web applications with cutting-edge technologies.',
-      startingPrice: '$1,499',
-      icon: '🌐',
-      gradient: 'from-purple-500 to-indigo-600',
-      features: ['Responsive Design', 'SEO Optimization', 'CMS Integration'],
-      category: 'web'
-    },
+
     {
       id: '3',
       name: 'Chatbot Development',
@@ -305,6 +316,7 @@ export default function DashboardHome() {
               <div className="h-1 bg-gradient-to-r from-cyan-500 to-blue-600"></div>
             </div>
 
+
             {/* USDT Balance Card */}
             <div className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-emerald-500/20 hover:shadow-2xl transition-all duration-300 overflow-hidden border border-slate-700/50 hover:border-emerald-500/50">
               <div className="absolute inset-0 bg-gradient-to-br from-emerald-600/10 to-green-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -319,13 +331,12 @@ export default function DashboardHome() {
                 </div>
                 <h3 className="text-sm font-medium text-slate-400 mb-1">USDT Balance</h3>
                 <p className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-green-400 bg-clip-text text-transparent">
-                  ${Number(wallet?.usdt || 0).toFixed(2)}
+                  ${Number(usdtTotal || 0).toFixed(2)}
                 </p>
                 <p className="text-xs text-slate-500 mt-2">Available in Wallet</p>
               </div>
               <div className="h-1 bg-gradient-to-r from-emerald-500 to-green-600"></div>
             </div>
-
             {/* INR Balance Card */}
             <div className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-orange-500/20 hover:shadow-2xl transition-all duration-300 overflow-hidden border border-slate-700/50 hover:border-orange-500/50">
               <div className="absolute inset-0 bg-gradient-to-br from-orange-600/10 to-amber-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -340,7 +351,7 @@ export default function DashboardHome() {
                 </div>
                 <h3 className="text-sm font-medium text-slate-400 mb-1">INR Balance</h3>
                 <p className="text-3xl font-bold bg-gradient-to-r from-orange-400 to-amber-400 bg-clip-text text-transparent">
-                  ₹{Number(wallet?.inr || 0).toFixed(2)}
+                  ₹{Number(inrMain || 0).toFixed(2)}
                 </p>
                 <p className="text-xs text-slate-500 mt-2">Available in Wallet</p>
               </div>

@@ -29,5 +29,5 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src", "src/App.tsx"]
+  "include": ["src", "src/App.tsx", "src/pages/Dashboard"]
 }

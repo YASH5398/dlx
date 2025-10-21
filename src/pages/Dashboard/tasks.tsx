@@ -10,7 +10,7 @@ import {
   GiftIcon
 } from '@heroicons/react/24/outline';
 import { useUser } from '../../context/UserContext';
-import { db } from '../../firebase';
+import { firestore as db } from '../../firebase';
 import { 
   collection, 
   doc, 
@@ -88,24 +88,24 @@ export default function Tasks() {
   const [processingTask, setProcessingTask] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user?.uid) {
+    if (user?.id) {
       fetchUserStatus();
       fetchCompletedTasks();
     }
   }, [user]);
 
   const fetchUserStatus = async () => {
-    if (!user?.uid) return;
+    if (!user?.id) return;
     
     try {
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      const userDoc = await getDoc(doc(db, 'users', user.id));
       if (userDoc.exists()) {
         const userData = userDoc.data();
         
         // Check if user has any orders to determine active status
         const ordersQuery = query(
           collection(db, 'orders'),
-          where('userId', '==', user.uid)
+          where('userId', '==', user.id)
         );
         const ordersSnapshot = await getDocs(ordersQuery);
         
@@ -116,7 +116,7 @@ export default function Tasks() {
         
         // Update user status in Firestore if it's different
         if (userData.status !== status) {
-          await updateDoc(doc(db, 'users', user.uid), { status });
+          await updateDoc(doc(db, 'users', user.id), { status });
         }
       }
     } catch (error) {
@@ -125,7 +125,7 @@ export default function Tasks() {
   };
 
   const fetchCompletedTasks = async () => {
-    if (!user?.uid) return;
+    if (!user?.id) return;
     
     try {
       const today = new Date();
@@ -133,7 +133,7 @@ export default function Tasks() {
       
       const tasksQuery = query(
         collection(db, 'taskRewards'),
-        where('userId', '==', user.uid),
+        where('userId', '==', user.id),
         where('completedAt', '>=', today)
       );
       
@@ -173,7 +173,7 @@ export default function Tasks() {
       } else if (task.id === 'follow_telegram' && task.url) {
         window.open(task.url, '_blank');
       } else if (task.id === 'refer_friend') {
-        const referralLink = `${window.location.origin}?ref=${user?.uid}`;
+        const referralLink = `${window.location.origin}?ref=${user?.id}`;
         await navigator.clipboard.writeText(referralLink);
         toast.success('Referral link copied to clipboard!');
       }
@@ -190,12 +190,12 @@ export default function Tasks() {
   };
 
   const completeTask = async (task: Task) => {
-    if (!user?.uid) return;
+    if (!user?.id) return;
 
     try {
       // Add task completion record
       const taskCompletion: TaskCompletion = {
-        userId: user.uid,
+        userId: user.id,
         taskId: task.id,
         amount: task.reward,
         completedAt: serverTimestamp()
@@ -207,7 +207,7 @@ export default function Tasks() {
       );
 
       // Update user's mining balance
-      await updateDoc(doc(db, 'users', user.uid), {
+      await updateDoc(doc(db, 'users', user.id), {
         'wallet.miningBalance': increment(task.reward)
       });
 

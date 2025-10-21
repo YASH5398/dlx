@@ -5,6 +5,7 @@ import { UserProvider } from './context/UserContext';
 import { I18nProvider } from './context/I18nContext';
 import { NotificationProvider } from './context/NotificationContext';
 import './tailwind.css';
+import './utils/mediaSafeGuard';
 // import './App.css';
 
 import App from './App';

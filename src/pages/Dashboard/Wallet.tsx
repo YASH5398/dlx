@@ -61,16 +61,15 @@ export default function Wallet() {
     trc20: 'TH1s69X1MqxJJme6BVPU3XFXhk8QwSXa7M'
   };
 
-  // Stream wallet breakdown from Firestore
+  // Stream wallet from Firestore users doc
   useEffect(() => {
     if (!uid) return;
-    const wdoc = doc(firestore, 'wallets', uid);
-    const unsub = onSnapshot(wdoc, (snap) => {
+    const udoc = doc(firestore, 'users', uid);
+    const unsub = onSnapshot(udoc, (snap) => {
       const d = (snap.data() as any) || {};
-      setMainUsdt(Number(d.mainUsdt || 0));
-      setMainInr(Number(d.mainInr || 0));
-      setPurchaseUsdt(Number(d.purchaseUsdt || 0));
-      setPurchaseInr(Number(d.purchaseInr || 0));
+      const w = d.wallet || {};
+      setMainUsdt(Number(w.main || 0));
+      setPurchaseUsdt(Number(w.purchase || 0));
     });
     return () => { try { unsub(); } catch {} };
   }, [uid]);
@@ -342,10 +341,7 @@ export default function Wallet() {
                 <span className="text-slate-300">USDT</span>
                 <span className="text-2xl font-bold text-white">{mainUsdt.toFixed(2)}</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-300">INR</span>
-                <span className="text-2xl font-bold text-white">₹{mainInr.toFixed(2)}</span>
-              </div>
+
             </div>
           </div>
 
@@ -365,10 +361,7 @@ export default function Wallet() {
                 <span className="text-slate-300">USDT</span>
                 <span className="text-2xl font-bold text-white">{purchaseUsdt.toFixed(2)}</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-300">INR</span>
-                <span className="text-2xl font-bold text-white">₹{purchaseInr.toFixed(2)}</span>
-              </div>
+
             </div>
           </div>
         </div>
@@ -927,7 +920,7 @@ export default function Wallet() {
                       ))}
                     </div>
                     <button
-                      onClick={() => setWithdrawAmount(wallet.usdt.toFixed(2))}
+                      onClick={() => setWithdrawAmount(mainUsdt.toFixed(2))}
                       className="px-4 py-2 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 text-sm font-medium transition-all"
                     >
                       MAX
@@ -937,7 +930,7 @@ export default function Wallet() {
 
                 <button
                   onClick={() => setWithdrawStep(2)}
-                  disabled={!withdrawAmount || parseFloat(withdrawAmount) <= 0 || parseFloat(withdrawAmount) > wallet.usdt}
+                  disabled={!withdrawAmount || parseFloat(withdrawAmount) <= 0 || parseFloat(withdrawAmount) > mainUsdt}
                   className="w-full py-4 rounded-xl bg-gradient-to-r from-rose-500 to-pink-500 text-white font-bold text-lg shadow-lg hover:shadow-rose-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none"
                 >
                   Continue
