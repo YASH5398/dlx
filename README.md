@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
@@ -88,3 +89,7 @@ export default defineConfig([
 
 ### Screenshots
 - See `docs/mining-ui-update.md` for quick steps to capture desktop and mobile screenshots.
+=======
+# dlx
+digilinex - service selling website
+>>>>>>> 4bb1ddb5253f710fa46f606ad29d0f7555a75b3e
