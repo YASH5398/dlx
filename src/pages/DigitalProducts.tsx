@@ -90,7 +90,6 @@ export default function DigitalProducts() {
   const [showModal, setShowModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [currency, setCurrency] = useState<Currency>("USDT");
-  const [useSplit, setUseSplit] = useState(false);
   const [addingProduct, setAddingProduct] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [newProduct, setNewProduct] = useState({
@@ -141,9 +140,8 @@ export default function DigitalProducts() {
     const walletRef = doc(firestore, "wallets", user.id);
     const ordersRef = collection(firestore, "orders");
     const affiliateId = referrerId && referrerId !== user.id ? referrerId : undefined;
-    const amountUsd = Number((selectedProduct as any).priceUsd ?? (selectedProduct as any).price ?? 0);
-    const amountInr = Math.round(amountUsd * USD_TO_INR);
-    const commissionUsd = Number((amountUsd * 0.7).toFixed(2));
+    const productPrice = Number((selectedProduct as any).priceUsd ?? (selectedProduct as any).price ?? 0);
+    const commissionUsd = Number((productPrice * 0.7).toFixed(2));
 
     try {
       await runTransaction(firestore, async (tx) => {
@@ -153,30 +151,42 @@ export default function DigitalProducts() {
         }
         const w = walletSnap.data() as any;
 
+        // Always split 50/50 between mainWallet and purchaseWallet
+        const halfAmount = Number((productPrice / 2).toFixed(2));
+        
         if (currency === "USDT") {
-          const main = Number(w.mainUsdt || 0);
-          const purchase = Number(w.purchaseUsdt || 0);
-          if (useSplit) {
-            const half = Number((amountUsd / 2).toFixed(2));
-            if (purchase < half || main < half) throw new Error("Insufficient USDT in wallets for split.");
-            tx.update(walletRef, { mainUsdt: main - half, purchaseUsdt: purchase - half });
-          } else {
-            if (main < amountUsd) throw new Error("Insufficient USDT in Main Wallet.");
-            tx.update(walletRef, { mainUsdt: main - amountUsd });
+          const mainWallet = Number(w.mainUsdt || 0);
+          const purchaseWallet = Number(w.purchaseUsdt || 0);
+          
+          // Check if both wallets have enough funds (50% each)
+          if (mainWallet < halfAmount || purchaseWallet < halfAmount) {
+            throw new Error("Insufficient balance.");
           }
+          
+          // Deduct 50% from each wallet
+          tx.update(walletRef, { 
+            mainUsdt: mainWallet - halfAmount, 
+            purchaseUsdt: purchaseWallet - halfAmount 
+          });
         } else {
-          const main = Number(w.mainInr || 0);
-          const purchase = Number(w.purchaseInr || 0);
-          if (useSplit) {
-            const half = Math.floor(amountInr / 2);
-            if (purchase < half || main < half) throw new Error("Insufficient INR in wallets for split.");
-            tx.update(walletRef, { mainInr: main - half, purchaseInr: purchase - half });
-          } else {
-            if (main < amountInr) throw new Error("Insufficient INR in Main Wallet.");
-            tx.update(walletRef, { mainInr: main - amountInr });
+          const amountInr = Math.round(productPrice * USD_TO_INR);
+          const halfAmountInr = Math.floor(amountInr / 2);
+          const mainWallet = Number(w.mainInr || 0);
+          const purchaseWallet = Number(w.purchaseInr || 0);
+          
+          // Check if both wallets have enough funds (50% each)
+          if (mainWallet < halfAmountInr || purchaseWallet < halfAmountInr) {
+            throw new Error("Insufficient balance.");
           }
+          
+          // Deduct 50% from each wallet
+          tx.update(walletRef, { 
+            mainInr: mainWallet - halfAmountInr, 
+            purchaseInr: purchaseWallet - halfAmountInr 
+          });
         }
 
+        // Handle affiliate commission
         if (affiliateId) {
           const affRef = doc(firestore, "wallets", affiliateId);
           const affSnap = await tx.get(affRef);
@@ -184,18 +194,15 @@ export default function DigitalProducts() {
           tx.update(affRef, { mainUsdt: Number((affMain + commissionUsd).toFixed(2)) });
         }
 
+        // Create order document with required fields
         await addDoc(ordersRef, {
           userId: user.id,
           productId: selectedProduct.id,
-          productTitle: selectedProduct.title,
-          paymentMode: currency,
-          amountUsd,
-          amountInr,
-          status: "Completed",
-          timestamp: serverTimestamp(),
-          downloadUrl: (selectedProduct as any).downloadUrl ?? (selectedProduct as any).productLink ?? "",
-          affiliateId: affiliateId || null,
-          split: useSplit,
+          productName: selectedProduct.title,
+          productPrice: productPrice,
+          productLink: (selectedProduct as any).downloadUrl ?? (selectedProduct as any).productLink ?? "",
+          status: "pending",
+          createdAt: serverTimestamp(),
         });
       });
 
@@ -634,7 +641,7 @@ export default function DigitalProducts() {
                 </div>
 
                 {/* Payment Options */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
                       Currency
@@ -648,18 +655,13 @@ export default function DigitalProducts() {
                       <option value="INR">INR</option>
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Payment Method
-                    </label>
-                    <select
-                      className="w-full rounded-xl bg-black/40 border border-white/20 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                      value={useSplit ? "split" : "main"}
-                      onChange={(e) => setUseSplit(e.target.value === "split")}
-                    >
-                      <option value="main">Main Wallet</option>
-                      <option value="split">50% Purchase + 50% Main</option>
-                    </select>
+                  
+                  {/* Payment Method Info */}
+                  <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+                    <div className="text-sm text-blue-300 font-medium mb-1">Payment Method</div>
+                    <div className="text-sm text-blue-200">
+                      50% from Main Wallet + 50% from Purchase Wallet
+                    </div>
                   </div>
                 </div>
 

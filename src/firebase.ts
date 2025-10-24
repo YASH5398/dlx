@@ -1,3 +1,4 @@
+/// <reference lib="dom" />
 import { initializeApp } from "firebase/app";
 import { getAnalytics, isSupported } from "firebase/analytics";
 import { getAuth } from "firebase/auth";
@@ -19,11 +20,13 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 // Guard analytics for non-browser environments
-let analytics: ReturnType<typeof getAnalytics> | undefined;
 if (typeof window !== "undefined" && (process.env.NODE_ENV === 'production')) {
   isSupported()
     .then((ok) => {
-      if (ok) analytics = getAnalytics(app);
+      if (ok) {
+        // Initialize analytics in production browsers
+        getAnalytics(app);
+      }
     })
     .catch(() => {
       // ignore analytics errors in dev

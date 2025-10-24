@@ -7,6 +7,7 @@ import SeederButton from './SeederButton'; // ✅ Correct local import
 export default function AdminDashboard() {
   console.log('AdminDashboard loaded'); // ✅ Console verification
   const [stats, setStats] = useState<{ users: number; tickets: number; orders: number; revenue: number; products: number; referrals: number; walletUsdt: number } | null>(null);
+  const defaultStats = { users: 0, orders: 0, revenue: 0, tickets: 0, products: 0, referrals: 0, walletUsdt: 0 };
 
   useEffect(() => {
     (async () => {
@@ -16,7 +17,8 @@ export default function AdminDashboard() {
         const userIds = Object.keys(usersVal);
         const ordersCount = userIds.reduce((acc, uid) => acc + Object.keys(usersVal[uid]?.orders || {}).length, 0);
         setStats((prev) => ({
-          ...(prev || { users: 0, orders: 0, revenue: 0, tickets: 0, products: 0, referrals: 0, walletUsdt: 0 }),
+          ...defaultStats,
+          ...(prev || {}),
           users: userIds.length,
           orders: ordersCount,
         }));
@@ -28,11 +30,11 @@ export default function AdminDashboard() {
     const unsubs: Array<() => void> = [];
 
     unsubs.push(onSnapshot(collection(firestore, 'users'), (snap: any) => {
-      setStats((prev) => ({ ...(prev || {}), users: snap.size }));
+      setStats((prev) => ({ ...defaultStats, ...(prev || {}), users: snap.size }));
     }));
 
     unsubs.push(onSnapshot(collection(firestore, 'products'), (snap: any) => {
-      setStats((prev) => ({ ...(prev || {}), products: snap.size }));
+      setStats((prev) => ({ ...defaultStats, ...(prev || {}), products: snap.size }));
     }));
 
     unsubs.push(onSnapshot(collection(firestore, 'orders'), (snap: any) => {
@@ -43,12 +45,12 @@ export default function AdminDashboard() {
         revenue += Number(x.total || x.amountUsd || x.amount || 0);
         if (x.affiliateId || x.referrerId) referrals += 1;
       });
-      setStats((prev) => ({ ...(prev || {}), orders, revenue, referrals }));
+      setStats((prev) => ({ ...defaultStats, ...(prev || {}), orders, revenue, referrals }));
     }));
 
     try {
       unsubs.push(onSnapshot(collection(firestore, 'referrals'), (snap: any) => {
-        setStats((prev) => ({ ...(prev || {}), referrals: snap.size }));
+        setStats((prev) => ({ ...defaultStats, ...(prev || {}), referrals: snap.size }));
       }));
     } catch {}
 
@@ -59,7 +61,7 @@ export default function AdminDashboard() {
         const w = x.usdt || {};
         usdt += Number(w.mainUsdt || 0) + Number(w.purchaseUsdt || 0);
       });
-      setStats((prev) => ({ ...(prev || {}), walletUsdt: usdt }));
+      setStats((prev) => ({ ...defaultStats, ...(prev || {}), walletUsdt: usdt }));
     }));
 
     return () => { unsubs.forEach((u) => { try { u(); } catch {} }); };
@@ -89,7 +91,7 @@ export default function AdminDashboard() {
             <div className="mt-4">
               <SeederButton
                 className="inline-flex items-center rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-4 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-gray-900 transition-colors duration-200"
-                style={{ display: 'block !important', visibility: 'visible !important', opacity: '1 !important', position: 'relative !important', zIndex: '9999 !important', margin: '20px !important' }}
+                style={{ display: 'block', visibility: 'visible', opacity: 1, position: 'relative', zIndex: 9999, margin: 20 }}
               />
             </div>
           </div>

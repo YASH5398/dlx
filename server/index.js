@@ -336,26 +336,57 @@ app.post('/api/support/tickets/:ticketId/ai-chat', async (req, res) => {
   try {
     const { ticketId } = req.params;
     const { prompt, user_id } = req.body;
+    
     if (!ticketId || !prompt) {
-      return res.status(400).json({ error: 'ticketId and prompt are required' });
+      return res.status(400).json({ 
+        error: 'Missing required fields',
+        details: 'ticketId and prompt are required' 
+      });
     }
+
+    console.log(`Processing AI chat for ticket ${ticketId}: ${prompt.substring(0, 50)}...`);
 
     const site = await getSiteContext();
     const relevant = retrieveContext(site, prompt);
     const reply = await generateAnswer(prompt, relevant);
 
+    // Save AI response to Firestore
     const messagesRef = db.collection('supportTickets').doc(ticketId).collection('messages');
     await messagesRef.add({
       senderType: 'AI',
-      content: reply ?? 'Sorry, I could not process your request.',
+      content: reply || 'I apologize, but I encountered an issue processing your request. Please try again or contact support directly.',
       userId: user_id || null,
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    res.json({ ok: true });
+    console.log(`AI response saved for ticket ${ticketId}`);
+    res.json({ 
+      success: true, 
+      reply,
+      message: 'AI response generated and saved successfully' 
+    });
+    
   } catch (e) {
     console.error('Ticket AI Chat Error:', e);
-    res.status(500).json({ error: 'AI processing failed' });
+    
+    // Try to save error message to chat
+    try {
+      const messagesRef = db.collection('supportTickets').doc(req.params.ticketId).collection('messages');
+      await messagesRef.add({
+        senderType: 'AI',
+        content: 'I apologize, but I\'m experiencing technical difficulties. Please try again in a moment or contact support directly.',
+        userId: req.body.user_id || null,
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (saveError) {
+      console.error('Failed to save error message:', saveError);
+    }
+    
+    res.status(500).json({ 
+      error: 'AI processing failed',
+      details: e.message || 'Unknown error occurred',
+      retry: true
+    });
   }
 });
 
@@ -363,14 +394,37 @@ app.post('/api/support/tickets/:ticketId/ai-chat', async (req, res) => {
 app.post('/api/ai-chat', async (req, res) => {
   try {
     const { prompt, userId } = req.body || {};
-    if (!prompt) return res.status(400).json({ error: 'Prompt is required' });
+    
+    if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
+      return res.status(400).json({ 
+        error: 'Invalid prompt',
+        details: 'Prompt is required and must be a non-empty string' 
+      });
+    }
+
+    console.log(`Processing AI chat for user ${userId || 'anonymous'}: ${prompt.substring(0, 50)}...`);
+
     const site = await getSiteContext();
-    const relevant = retrieveContext(site, prompt);
-    const reply = await generateAnswer(prompt, relevant);
-    return res.json({ reply });
+    const relevant = retrieveContext(site, prompt.trim());
+    const reply = await generateAnswer(prompt.trim(), relevant);
+
+    console.log(`AI chat response generated successfully`);
+    
+    return res.json({ 
+      success: true,
+      reply: reply || 'I apologize, but I couldn\'t generate a proper response. Please try rephrasing your question or contact support.',
+      timestamp: new Date().toISOString()
+    });
+    
   } catch (e) {
     console.error('AI Chat Error:', e);
-    return res.status(500).json({ error: 'AI processing failed' });
+    
+    return res.status(500).json({ 
+      error: 'AI processing failed',
+      details: e.message || 'Unknown error occurred',
+      retry: true,
+      fallbackMessage: 'I\'m experiencing technical difficulties. Please try again in a moment or contact support directly.'
+    });
   }
 });
 

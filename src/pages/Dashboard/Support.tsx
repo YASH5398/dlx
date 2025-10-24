@@ -1,606 +1,252 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { db, firestore } from '../../firebase';
-import { ref, onValue, off, set, push, update } from 'firebase/database';
+import React, { useState, useEffect } from 'react';
 import { useUser } from '../../context/UserContext';
 import { useNavigate } from 'react-router-dom';
-import { subscribeAgentAvailability, createChat, subscribeMessages, sendMessage as sendChatMessage, saveCommonQA, logAiConversation } from '../../utils/support';
-import { doc as fsDoc, setDoc as fsSetDoc, collection as fsCollection, addDoc as fsAddDoc, onSnapshot as fsOnSnapshot, query as fsQuery, orderBy as fsOrderBy, serverTimestamp as fsServerTimestamp } from 'firebase/firestore';
+import { supportService } from '../../services/supportService';
+import ChatInterface from '../../components/ChatInterface';
 
-interface Ticket {
-  id: string;
-  userId: string;
-  title: string;
-  description: string;
-  category: 'Technical' | 'Payment' | 'Other';
-  priority: 'Low' | 'Medium' | 'High';
-  status: 'Open' | 'Pending' | 'Resolved';
-  createdAt: string;
-  updates: { date: string; message: string; adminId?: string }[];
+interface SupportRequest {
+  id?: string;
+  status: string;
+  createdAt: any;
+  lastMessageAt?: any;
 }
+import { 
+  MessageSquare, 
+  Bot, 
+  Users, 
+  AlertCircle
+} from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
 
-interface ChatMessage {
-  id: string;
-  chatId: string;
-  senderType: 'USER' | 'AGENT' | 'AI';
-  content: string;
-  timestamp: string;
-}
-
-export default function Support() {
+const Support: React.FC = () => {
   const { user } = useUser();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'ticket' | 'chat' | 'ai'>('ticket');
-  const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [ticketForm, setTicketForm] = useState({
-    title: '',
-    description: '',
-    category: 'Technical' as Ticket['category'],
-    priority: 'Medium' as Ticket['priority'],
-  });
-  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
-  const [chatId, setChatId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [msgInput, setMsgInput] = useState('');
-  const [agentOnline, setAgentOnline] = useState(false);
-  const [aiMessages, setAiMessages] = useState<ChatMessage[]>([]);
-  const [aiInput, setAiInput] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [userRequests, setUserRequests] = useState<SupportRequest[]>([]);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatType, setChatType] = useState<'ai_agent' | 'live_chat' | 'ai_chatbot'>('ai_chatbot');
+  const [selectedRequestId, setSelectedRequestId] = useState<string | undefined>();
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notificationCount, setNotificationCount] = useState(0);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-const chatUnsubRef = useRef<(() => void) | null>(null);
-// Firestore ticket chat state
-const [ticketMessages, setTicketMessages] = useState<ChatMessage[]>([]);
-const [ticketMsgInput, setTicketMsgInput] = useState('');
-const ticketChatUnsubRef = useRef<(() => void) | null>(null);
 
+  // Subscribe to user's support requests
   useEffect(() => {
-    let unsubscribeTickets: (() => void) | undefined;
-    if (user?.id) {
-      setLoading(true);
-      const ticketsRef = ref(db, `users/${user.id}/tickets`);
-      const handler = (snap: any) => {
-        const val = snap.val() || {};
-        const list: Ticket[] = Object.keys(val).map((id) => ({ ...(val[id] as any), id }));
-        setTickets(list);
-        setNotificationCount(list.filter((t) => t.status === 'Open' || (t.updates?.length ?? 0) > 0).length);
-        setLoading(false);
-      };
-      onValue(ticketsRef, handler);
-      unsubscribeTickets = () => off(ticketsRef, 'value', handler);
-    }
-
-    const unsubAgent = subscribeAgentAvailability((available) => setAgentOnline(!!available));
-
-    return () => {
-      try { unsubscribeTickets && unsubscribeTickets(); } catch {}
-      try { unsubAgent && unsubAgent(); } catch {}
-      if (chatUnsubRef.current) {
-        try { chatUnsubRef.current(); } catch {}
-        chatUnsubRef.current = null;
-      }
-    };
-  }, [user?.id]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, aiMessages, ticketMessages]);
-
-  // Subscribe to Firestore ticket messages when a ticket is selected
-  useEffect(() => {
-    if (!selectedTicket?.id) {
-      if (ticketChatUnsubRef.current) { try { ticketChatUnsubRef.current(); } catch {} }
-      setTicketMessages([]);
+    if (!user) {
+      navigate('/login');
       return;
     }
-    const q = fsQuery(
-      fsCollection(firestore, 'supportTickets', selectedTicket.id, 'messages'),
-      fsOrderBy('timestamp', 'asc') as any,
-    );
-    const unsub = fsOnSnapshot(q, (snap) => {
-      const list: ChatMessage[] = [];
-      snap.forEach((d) => {
-        const data: any = d.data();
-        list.push({
-          id: d.id,
-          chatId: selectedTicket!.id,
-          senderType: (data.senderType || data.role || 'USER'),
-          content: String(data.content || ''),
-          timestamp: (data.timestamp && typeof data.timestamp.toDate === 'function') ? data.timestamp.toDate().toISOString() : new Date((data.timestamp || Date.now())).toISOString(),
-        });
-      });
-      setTicketMessages(list);
+
+    const unsubscribe = supportService.subscribeToUserRequests(user.id, (requests) => {
+      setUserRequests(requests);
     });
-    ticketChatUnsubRef.current = unsub;
-    return () => { try { unsub(); } catch {} };
-  }, [selectedTicket?.id]);
 
-  const createTicket = useCallback(async () => {
-    if (!user?.id || !ticketForm.title || !ticketForm.description) return;
-    setLoading(true);
-    try {
-      const globalRef = push(ref(db, `support/tickets`));
-      const ticket: Ticket = {
-        id: globalRef.key!,
-        userId: user.id,
-        title: ticketForm.title,
-        description: ticketForm.description,
-        category: ticketForm.category,
-        priority: ticketForm.priority,
-        status: 'Open',
-        createdAt: new Date().toISOString(),
-        updates: [],
-      };
-      await set(globalRef, ticket);
-      await set(ref(db, `users/${user.id}/tickets/${ticket.id}`), ticket);
-      // Mirror ticket into Firestore
-      try {
-        await fsSetDoc(fsDoc(firestore, 'supportTickets', ticket.id), {
-          id: ticket.id,
-          userId: ticket.userId,
-          title: ticket.title,
-          description: ticket.description,
-          category: ticket.category,
-          priority: ticket.priority,
-          status: ticket.status,
-          createdAt: Date.now(),
-        }, { merge: true } as any)
-      } catch {}
-      setTicketForm({ title: '', description: '', category: 'Technical', priority: 'Medium' });
-      document.dispatchEvent(new CustomEvent('notifications:add', {
-        detail: { type: 'service', message: `Ticket "${ticket.title}" created`, route: '/support' },
-      }));
-    } catch (e) {
-      setError('Failed to create ticket. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  }, [user?.id, ticketForm]);
+    return unsubscribe;
+  }, [user, navigate]);
 
-  const startChat = useCallback(async () => {
-    if (!user?.id) return;
-    setLoading(true);
+  // Handle opening different chat types
+  const handleOpenChat = (type: 'ai_agent' | 'live_chat' | 'ai_chatbot', requestId?: string) => {
+    setChatType(type);
+    setSelectedRequestId(requestId);
+    setIsChatOpen(true);
+  };
+
+  // Handle creating new AI Agent request
+  const handleCreateAIAgentRequest = async (message: string) => {
+    if (!user || !message.trim()) return;
+
     try {
-      const id = await createChat(user.id);
-      setChatId(id);
-      setMessages([]);
-      if (chatUnsubRef.current) { try { chatUnsubRef.current(); } catch {} }
-      chatUnsubRef.current = subscribeMessages(id, (list) => {
-        setMessages(list);
-        setNotificationCount((prev) => prev + 1);
-        if (activeTab !== 'chat') {
-          document.dispatchEvent(new CustomEvent('notifications:add', { detail: { type: 'service', message: 'New chat message', route: '/support' } }));
+      setIsLoading(true);
+      setError(null);
+
+      const requestId = await supportService.createSupportRequest(
+        user.id,
+        user.name || 'Anonymous User',
+        user.email || '',
+        message.trim(),
+        'ai_agent',
+        {
+          title: 'AI Agent Support Request',
+          category: 'general',
+          priority: 'medium'
         }
-      });
-      setActiveTab('chat');
-    } catch (e) {
-      setError('Failed to start chat. Please try again.');
+      );
+
+      // Open chat with the new request
+      handleOpenChat('ai_agent', requestId);
+    } catch (error) {
+      console.error('Error creating AI Agent request:', error);
+      setError('Failed to create support request. Please try again.');
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
-  }, [user?.id, activeTab]);
+  };
 
-  const sendMessage = useCallback(() => {
-    if (!chatId || !msgInput.trim()) return;
-    const msg: ChatMessage = {
-      id: crypto.randomUUID(),
-      chatId,
-      senderType: 'USER',
-      content: msgInput.trim(),
-      timestamp: new Date().toISOString(),
-    };
-    sendChatMessage(chatId, msg);
-    setMsgInput('');
-  }, [chatId, msgInput]);
+  // Format timestamp
+  const formatTime = (timestamp: any) => {
+    const date = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp);
+    return formatDistanceToNow(date, { addSuffix: true });
+  };
 
-  const sendAiMessage = useCallback(async () => {
-    if (!aiInput.trim()) return;
-    setLoading(true);
-    const userMsg: ChatMessage = {
-      id: crypto.randomUUID(),
-      chatId: 'ai',
-      senderType: 'USER',
-      content: aiInput,
-      timestamp: new Date().toISOString(),
-    };
-    setAiMessages((prev) => [...prev, userMsg]);
-
-    const maxAttempts = 2;
-    let attempt = 0;
-    let response: any = null;
-
-    while (attempt < maxAttempts) {
-      try {
-        const res = await fetch('http://localhost:4000/api/ai-chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: user?.id, prompt: aiInput }),
-        });
-        if (!res.ok) throw new Error(`AI chat failed (${res.status})`);
-        response = await res.json();
-        break;
-      } catch (err) {
-        attempt++;
-        if (attempt < maxAttempts) {
-          setError('Reconnecting...');
-          const reconnectMsg: ChatMessage = {
-            id: crypto.randomUUID(),
-            chatId: 'ai',
-            senderType: 'AGENT',
-            content: 'Reconnecting...',
-            timestamp: new Date().toISOString(),
-          };
-          setAiMessages((prev) => [...prev, reconnectMsg]);
-          await new Promise((r) => setTimeout(r, 1000 * attempt));
-        }
-      }
+  // Get status color for requests
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'pending': return 'bg-yellow-500';
+      case 'active': return 'bg-green-500';
+      case 'closed': return 'bg-gray-500';
+      default: return 'bg-gray-500';
     }
+  };
 
-    if (!response?.reply) {
-      setError('Failed to get AI response. Please try again.');
-      const aiMsg: ChatMessage = {
-        id: crypto.randomUUID(),
-        chatId: 'ai',
-        senderType: 'AGENT',
-        content: 'I am having trouble answering right now. Please raise a ticket or try live chat.',
-        timestamp: new Date().toISOString(),
-      };
-      setAiMessages((prev) => [...prev, aiMsg]);
-      try {
-        await logAiConversation(user?.id ?? 'anon', userMsg.content, aiMsg.content, true);
-      } catch {}
-    } else {
-      const aiMsg: ChatMessage = {
-        id: crypto.randomUUID(),
-        chatId: 'ai',
-        senderType: 'AI',
-        content: response.reply,
-        timestamp: new Date().toISOString(),
-      };
-      setAiMessages((prev) => [...prev, aiMsg]);
-      try {
-        await saveCommonQA(userMsg.content, aiMsg.content);
-        await logAiConversation(user?.id ?? 'anon', userMsg.content, aiMsg.content, false);
-      } catch {}
-      setNotificationCount((prev) => prev + 1);
-      document.dispatchEvent(new CustomEvent('notifications:add', { detail: { type: 'service', message: 'AI responded', route: '/support' } }));
-    }
-
-    setAiInput('');
-    setLoading(false);
-  }, [aiInput, user?.id]);
-
-  const sendTicketMessage = useCallback(async () => {
-    if (!selectedTicket?.id || !ticketMsgInput.trim() || !user?.id) return;
-    const content = ticketMsgInput.trim();
-    setTicketMsgInput('');
-    try {
-      await fsAddDoc(fsCollection(firestore, 'supportTickets', selectedTicket.id, 'messages'), {
-        senderType: 'USER',
-        userId: user.id,
-        content,
-        timestamp: fsServerTimestamp(),
-      } as any);
-      await fetch(`http://localhost:4000/api/support/tickets/${selectedTicket.id}/ai-chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: user.id, prompt: content }),
-      });
-    } catch (e) {
-      setError('Failed to send message. Please try again.');
-    }
-  }, [selectedTicket?.id, ticketMsgInput, user?.id]);
-
-  const formatDate = (iso: string) => (iso ? new Date(iso).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : '—');
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Please log in</h3>
+          <p className="text-gray-600">You need to be logged in to access support.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white py-6 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-semibold text-white">Support</h2>
-          {notificationCount > 0 && (
-            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-red-500/20 text-red-400">
-              {notificationCount}
-            </span>
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">Support Center</h1>
+          {userRequests.filter(req => req.status === 'pending').length > 0 && (
+            <div className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-medium">
+              {userRequests.filter(req => req.status === 'pending').length} pending requests
+            </div>
           )}
         </div>
 
-        <div className="flex border-b border-gray-700/30">
-          {(['ticket', 'chat', 'ai'] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 text-sm font-medium transition-all duration-300 ${
-                activeTab === tab
-                  ? 'border-b-2 border-cyan-500 text-cyan-400'
-                  : 'text-gray-400 hover:text-gray-200'
-              }`}
-            >
-              {tab === 'ticket' ? 'Raise Ticket' : tab === 'chat' ? 'Live Chat' : 'AI Chatbot'}
-            </button>
-          ))}
-        </div>
+        {/* Error Display */}
+        {error && (
+          <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+            {error}
+          </div>
+        )}
 
-        <section className="rounded-xl bg-gray-800/50 border border-gray-700/30 backdrop-blur-sm p-6 animate-fade-in">
-          {activeTab === 'ticket' && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium text-white">Raise a Ticket</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <input
-                  value={ticketForm.title}
-                  onChange={(e) => setTicketForm({ ...ticketForm, title: e.target.value })}
-                  placeholder="Ticket Title"
-                  className="w-full px-4 py-2 rounded-lg bg-gray-800/40 border border-gray-700/30 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all duration-300"
-                />
-                <select
-                  value={ticketForm.category}
-                  onChange={(e) => setTicketForm({ ...ticketForm, category: e.target.value as any })}
-                  className="w-full px-4 py-2 rounded-lg bg-gray-800/40 border border-gray-700/30 text-gray-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all duration-300"
-                >
-                  <option value="Technical">Technical</option>
-                  <option value="Payment">Payment</option>
-                  <option value="Other">Other</option>
-                </select>
-                <select
-                  value={ticketForm.priority}
-                  onChange={(e) => setTicketForm({ ...ticketForm, priority: e.target.value as any })}
-                  className="w-full px-4 py-2 rounded-lg bg-gray-800/40 border border-gray-700/30 text-gray-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all duration-300"
-                >
-                  <option value="Low">Low</option>
-                  <option value="Medium">Medium</option>
-                  <option value="High">High</option>
-                </select>
-                <textarea
-                  value={ticketForm.description}
-                  onChange={(e) => setTicketForm({ ...ticketForm, description: e.target.value })}
-                  placeholder="Describe your issue"
-                  className="w-full sm:col-span-2 px-4 py-2 rounded-lg bg-gray-800/40 border border-gray-700/30 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all duration-300"
-                  rows={4}
-                />
-                <button
-                  onClick={createTicket}
-                  disabled={loading}
-                  className="px-4 py-2 rounded-full bg-gradient-to-r from-cyan-500 to-purple-500 text-white hover:shadow-lg transition-all duration-300 disabled:opacity-50"
-                >
-                  {loading ? <span className="animate-pulse">Submitting...</span> : 'Submit Ticket'}
-                </button>
-              </div>
-              {error && <p className="text-red-400 text-sm">{error}</p>}
-              <div className="mt-6">
-                <h4 className="text-white font-medium mb-2">My Tickets</h4>
-                {tickets.length === 0 ? (
-                  <p className="text-gray-400 text-sm">No tickets found.</p>
-                ) : (
-                  <div className="space-y-3">
-                    {tickets.map((t) => (
-                      <div
-                        key={t.id}
-                        onClick={() => setSelectedTicket(t)}
-                        className="rounded-lg bg-gray-800/40 p-4 cursor-pointer hover:bg-gray-700/50 transition-all duration-300"
-                      >
-                        <div className="flex justify-between items-center">
-                          <span className="text-white truncate">{t.title}</span>
-                          <span
-                            className={`text-xs px-2.5 py-1 rounded-full ${
-                              t.status === 'Open'
-                                ? 'bg-yellow-500/10 text-yellow-400'
-                                : t.status === 'Pending'
-                                ? 'bg-blue-500/10 text-blue-400'
-                                : 'bg-emerald-500/10 text-emerald-400'
-                            }`}
-                          >
-                            {t.status}
-                          </span>
-                        </div>
-                        <p className="text-gray-400 text-sm mt-1">{formatDate(t.createdAt)}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-          {activeTab === 'chat' && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium text-white">Live Chat</h3>
-              {agentOnline ? (
-                <p className="text-green-400 text-sm">Agent is online</p>
-              ) : (
-                <p className="text-red-400 text-sm">No agents available</p>
-              )}
-              {chatId ? (
-                <div className="space-y-3">
-                  <div className="h-64 overflow-y-auto rounded-lg bg-gray-800/40 p-4">
-                    {messages.map((m) => (
-                      <div
-                        key={m.id}
-                        className={`mb-2 ${m.senderType === 'USER' ? 'text-right' : 'text-left'}`}
-                      >
-                        <span
-                          className={`inline-block px-3 py-2 rounded-lg ${
-                            m.senderType === 'USER'
-                              ? 'bg-cyan-500/20 text-white'
-                              : 'bg-gray-700/40 text-gray-200'
-                          }`}
-                        >
-                          {m.content}
-                        </span>
-                        <p className="text-xs text-gray-500 mt-1">{formatDate(m.timestamp)}</p>
-                      </div>
-                    ))}
-                    <div ref={messagesEndRef} />
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      value={msgInput}
-                      onChange={(e) => setMsgInput(e.target.value)}
-                      placeholder="Type your message"
-                      className="flex-1 px-4 py-2 rounded-lg bg-gray-800/40 border border-gray-700/30 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all duration-300"
-                    />
-                    <button
-                      onClick={sendMessage}
-                      disabled={loading || !chatId || !msgInput.trim()}
-                      className="px-4 py-2 rounded-full bg-gradient-to-r from-cyan-500 to-purple-500 text-white hover:shadow-lg transition-all duration-300 disabled:opacity-50"
-                    >
-                      {loading ? <span className="animate-pulse">Sending...</span> : 'Send'}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  onClick={startChat}
-                  disabled={loading}
-                  className="px-4 py-2 rounded-full bg-gradient-to-r from-cyan-500 to-purple-500 text-white hover:shadow-lg transition-all duration-300 disabled:opacity-50"
-                >
-                  {loading ? <span className="animate-pulse">Starting...</span> : 'Start Live Chat'}
-                </button>
-              )}
-              {error && <p className="text-red-400 text-sm">{error}</p>}
-            </div>
-          )}
-          {activeTab === 'ai' && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium text-white">AI Chatbot</h3>
-              <div className="h-64 overflow-y-auto rounded-lg bg-gray-800/40 p-4">
-                {aiMessages.map((m) => (
-                  <div
-                    key={m.id}
-                    className={`mb-2 ${m.senderType === 'USER' ? 'text-right' : 'text-left'}`}
-                  >
-                    <span
-                      className={`inline-block px-3 py-2 rounded-lg ${
-                        m.senderType === 'USER'
-                          ? 'bg-cyan-500/20 text-white'
-                          : 'bg-gray-700/40 text-gray-200'
-                      }`}
-                    >
-                      {m.content}
-                    </span>
-                    <p className="text-xs text-gray-500 mt-1">{formatDate(m.timestamp)}</p>
-                  </div>
-                ))}
-                <div ref={messagesEndRef} />
-              </div>
-              <div className="flex gap-2">
-                <input
-                  value={aiInput}
-                  onChange={(e) => setAiInput(e.target.value)}
-                  placeholder="Ask the AI bot"
-                  className="flex-1 px-4 py-2 rounded-lg bg-gray-800/40 border border-gray-700/30 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all duration-300"
-                />
-                <button
-                  onClick={sendAiMessage}
-                  disabled={loading}
-                  className="px-4 py-2 rounded-full bg-gradient-to-r from-cyan-500 to-purple-500 text-white hover:shadow-lg transition-all duration-300 disabled:opacity-50"
-                >
-                  {loading ? <span className="animate-pulse">Responding...</span> : 'Send'}
-                </button>
-              </div>
-              {error && <p className="text-red-400 text-sm">{error}</p>}
-            </div>
-          )}
-        </section>
+        {/* Chat Interface */}
+        {isChatOpen && (
+          <ChatInterface
+            isOpen={isChatOpen}
+            onClose={() => setIsChatOpen(false)}
+            chatType={chatType}
+            requestId={selectedRequestId}
+          />
+        )}
 
-        {selectedTicket && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div
-              className="absolute inset-0 bg-black/70 backdrop-blur-sm transition-opacity duration-500"
-              onClick={() => setSelectedTicket(null)}
-            />
-            <div className="relative w-full max-w-lg rounded-xl bg-gray-800/50 border border-gray-700/30 backdrop-blur-sm p-6 animate-in fade-in-50 slide-in-from-bottom-10 duration-500">
-              <h3 className="text-xl font-semibold text-white mb-4">{selectedTicket.title}</h3>
-              <div className="space-y-3 text-sm text-gray-400">
-                <div className="flex justify-between items-center">
-                  <span className="font-medium">Ticket ID</span>
-                  <span className="font-mono text-white">{selectedTicket.id}</span>
+        {/* Main Content */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Left Panel - Actions */}
+          <div className="lg:col-span-1 space-y-6">
+            <div className="bg-white rounded-lg shadow-sm border p-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Get Help</h2>
+              <div className="space-y-4">
+                <button
+                  onClick={() => handleOpenChat('ai_chatbot')}
+                  className="w-full flex items-center justify-center px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  disabled={isLoading}
+                >
+                  <Bot className="w-5 h-5 mr-2" />
+                  AI Chatbot
+                </button>
+                
+                <button
+                  onClick={() => handleCreateAIAgentRequest('I need help with my account')}
+                  className="w-full flex items-center justify-center px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  disabled={isLoading}
+                >
+                  <Users className="w-5 h-5 mr-2" />
+                  Contact AI Agent
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Stats */}
+            <div className="bg-white rounded-lg shadow-sm border p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Your Support</h3>
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Total Requests</span>
+                  <span className="font-medium">{userRequests.length}</span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="font-medium">Category</span>
-                  <span>{selectedTicket.category}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="font-medium">Priority</span>
-                  <span>{selectedTicket.priority}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="font-medium">Status</span>
-                  <span
-                    className={`text-xs px-2.5 py-1 rounded-full ${
-                      selectedTicket.status === 'Open'
-                        ? 'bg-yellow-500/10 text-yellow-400'
-                        : selectedTicket.status === 'Pending'
-                        ? 'bg-blue-500/10 text-blue-400'
-                        : 'bg-emerald-500/10 text-emerald-400'
-                    }`}
-                  >
-                    {selectedTicket.status}
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Pending</span>
+                  <span className="font-medium text-orange-600">
+                    {userRequests.filter(req => req.status === 'pending').length}
                   </span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="font-medium">Created</span>
-                  <span>{formatDate(selectedTicket.createdAt)}</span>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Active</span>
+                  <span className="font-medium text-green-600">
+                    {userRequests.filter(req => req.status === 'active').length}
+                  </span>
                 </div>
-                <div>
-                  <span className="font-medium">Description</span>
-                  <p className="text-gray-200 mt-1">{selectedTicket.description}</p>
-                </div>
-                {selectedTicket.updates?.length > 0 && (
-                  <div>
-                    <h4 className="text-white font-medium text-sm mb-2">Updates</h4>
-                    <div className="space-y-2">
-                      {selectedTicket.updates.map((u, i) => (
-                        <div key={i} className="flex items-center justify-between">
-                          <span>{u.message}</span>
-                          <span className="text-xs text-gray-500">{formatDate(u.date)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-              {/* Chat with AI Agent inside this ticket */}
-              <div className="mt-6 space-y-3">
-                <h4 className="text-white font-medium text-sm">Chat with AI Agent</h4>
-                <div className="h-56 overflow-y-auto rounded-lg bg-gray-800/40 p-4">
-                  {ticketMessages.map((m) => (
-                    <div key={m.id} className={`mb-2 ${m.senderType === 'USER' ? 'text-right' : 'text-left'}`}>
-                      <span className={`inline-block px-3 py-2 rounded-lg ${m.senderType === 'USER' ? 'bg-cyan-500/20 text-white' : 'bg-gray-700/40 text-gray-200'}`}>
-                        {m.content}
-                      </span>
-                      <p className="text-xs text-gray-500 mt-1">{formatDate(m.timestamp)}</p>
-                    </div>
-                  ))}
-                  <div ref={messagesEndRef} />
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    value={ticketMsgInput}
-                    onChange={(e) => setTicketMsgInput(e.target.value)}
-                    placeholder="Type your message to AI"
-                    className="flex-1 px-4 py-2 rounded-lg bg-gray-800/40 border border-gray-700/30 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all duration-300"
-                  />
-                  <button
-                    onClick={async () => { await sendTicketMessage(); }}
-                    disabled={loading || !ticketMsgInput.trim()}
-                    className="px-4 py-2 rounded-full bg-gradient-to-r from-cyan-500 to-purple-500 text-white hover:shadow-lg transition-all duration-300 disabled:opacity-50"
-                  >
-                    {loading ? <span className="animate-pulse">Sending...</span> : 'Send'}
-                  </button>
-                </div>
-                {error && <p className="text-red-400 text-sm">{error}</p>}
-              </div>
-              <div className="mt-6 flex justify-end gap-2">
-                <button
-                  onClick={() => setSelectedTicket(null)}
-                  className="px-3 py-1.5 rounded-full bg-gray-700/40 text-gray-300 hover:bg-gray-600/50 hover:text-white transition-all duration-300"
-                >
-                  Close
-                </button>
               </div>
             </div>
           </div>
-        )}
+
+          {/* Right Panel - Request History */}
+          <div className="lg:col-span-2">
+            <div className="bg-white rounded-lg shadow-sm border">
+              <div className="p-6 border-b">
+                <h2 className="text-xl font-semibold text-gray-900">Your Support Requests</h2>
+              </div>
+              
+              <div className="p-6">
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  </div>
+                ) : userRequests.length === 0 ? (
+                  <div className="text-center py-8">
+                    <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No support requests yet</h3>
+                    <p className="text-gray-600">Start a conversation with our AI chatbot or contact an agent.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {userRequests.map((request) => (
+                      <div
+                        key={request.id}
+                        className="border rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition-colors"
+                        onClick={() => handleOpenChat('ai_agent', request.id)}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center space-x-3">
+                            <div className={`w-3 h-3 rounded-full ${getStatusColor(request.status)}`}></div>
+                            <span className="font-medium text-gray-900">Support Request</span>
+                          </div>
+                          <span className="text-sm text-gray-500">
+                            {formatTime(request.createdAt)}
+                          </span>
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-600 capitalize">
+                            Status: {request.status}
+                          </span>
+                          <AlertCircle className="w-4 h-4 text-gray-400" />
+                        </div>
+                        
+                        {request.lastMessageAt && (
+                          <div className="mt-2 text-xs text-gray-500">
+                            Last message: {formatTime(request.lastMessageAt)}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
+
+export default Support;
