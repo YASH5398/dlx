@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ref, onValue, set, update, off, DataSnapshot } from 'firebase/database';
-import { db } from '../firebase';
+import { db } from '../firebase.ts';
 import { useUser } from './UserContext';
 
 export type NotificationType =

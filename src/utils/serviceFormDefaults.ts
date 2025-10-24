@@ -302,4 +302,205 @@ export const DEFAULT_SERVICE_FORMS: Record<string, StepDef[]> = {
       ],
     },
   ],
+  // Additional 10 high-ticket services
+  'Landing Page Creation': [
+    {
+      title: 'Design & Structure',
+      fields: [
+        { name: 'preferredStyle', label: 'Preferred Style', type: 'select', required: true, options: ['Minimal', 'Modern', 'Bold', 'Classic', 'Other'] },
+        { name: 'numberOfSections', label: 'Number of Sections', type: 'number', required: true },
+        { name: 'deadline', label: 'Deadline', type: 'text', placeholder: 'YYYY-MM-DD or text' },
+        { name: 'colorScheme', label: 'Color Scheme Preference', type: 'text' },
+      ],
+    },
+    {
+      title: 'Content & Assets',
+      fields: [
+        { name: 'brandAssets', label: 'Brand Assets Available?', type: 'select', options: ['Logo', 'Palette', 'Typography', 'None'] },
+        { name: 'copywritingNeeded', label: 'Copywriting Needed?', type: 'select', options: ['Yes', 'No'] },
+        { name: 'ctaGoal', label: 'Primary CTA Goal', type: 'text' },
+        { name: 'targetAudience', label: 'Target Audience', type: 'textarea' },
+      ],
+    },
+  ],
+  'E-commerce Store Setup': [
+    {
+      title: 'Platform & Catalog',
+      fields: [
+        { name: 'preferredPlatform', label: 'Preferred Platform', type: 'select', required: true, options: ['Shopify', 'WooCommerce', 'Magento', 'Other'] },
+        { name: 'productCount', label: 'Number of Products', type: 'number', required: true },
+        { name: 'paymentOptions', label: 'Payment Options', type: 'text', placeholder: 'UPI, Cards, PayPal, etc.' },
+        { name: 'inventoryManagement', label: 'Inventory Management Needed?', type: 'select', options: ['Yes', 'No'] },
+      ],
+    },
+    {
+      title: 'SEO & Shipping',
+      fields: [
+        { name: 'basicSeo', label: 'Basic SEO', type: 'select', options: ['Yes', 'No'] },
+        { name: 'shippingRegions', label: 'Shipping Regions', type: 'text' },
+        { name: 'currency', label: 'Store Currency', type: 'text' },
+        { name: 'taxSettings', label: 'Tax Settings Required?', type: 'select', options: ['Yes', 'No'] },
+      ],
+    },
+  ],
+  'TradingView Custom Indicator / Strategy': [
+    {
+      title: 'Strategy Basics',
+      fields: [
+        { name: 'indicatorsNeeded', label: 'Indicators Needed', type: 'array', itemType: 'text', itemLabel: 'Indicator' },
+        { name: 'timeframe', label: 'Timeframe', type: 'select', required: true, options: ['1m','5m','15m','1h','4h','1d','1w'] },
+        { name: 'alertsRequired', label: 'Alerts Required?', type: 'select', options: ['Yes', 'No'] },
+        { name: 'tradingPairs', label: 'Trading Pairs', type: 'text' },
+      ],
+    },
+    {
+      title: 'Backtesting & Params',
+      fields: [
+        { name: 'backtestingNeeded', label: 'Backtesting Needed?', type: 'select', options: ['Yes', 'No'] },
+        { name: 'entryExitRules', label: 'Entry/Exit Rules', type: 'textarea' },
+        { name: 'riskManagement', label: 'Risk Management Notes', type: 'textarea' },
+        { name: 'performanceMetrics', label: 'Performance Metrics Required', type: 'array', itemType: 'text', itemLabel: 'Metric' },
+      ],
+    },
+  ],
+  'Social Media Management': [
+    {
+      title: 'Scope & Platforms',
+      fields: [
+        { name: 'platforms', label: 'Platforms', type: 'select', required: true, options: ['Instagram','Facebook','Twitter','YouTube','LinkedIn','TikTok','Other'] },
+        { name: 'postsPerMonth', label: 'Posts per Month', type: 'number', required: true },
+        { name: 'primaryGoal', label: 'Primary Goal', type: 'select', options: ['Brand Awareness','Engagement','Leads','Sales'] },
+        { name: 'contentTypes', label: 'Content Types', type: 'array', itemType: 'text', itemLabel: 'Type' },
+      ],
+    },
+    {
+      title: 'Content & Reporting',
+      fields: [
+        { name: 'contentPlan', label: 'Monthly Content Plan', type: 'select', options: ['Yes', 'No'] },
+        { name: 'templatesNeeded', label: 'Templates Needed?', type: 'select', options: ['Yes', 'No'] },
+        { name: 'analyticsReport', label: 'Analytics Report', type: 'select', options: ['Monthly','Bi-weekly'] },
+        { name: 'engagementTarget', label: 'Engagement Target', type: 'text' },
+      ],
+    },
+  ],
+  'SEO Services': [
+    {
+      title: 'Site & Keywords',
+      fields: [
+        { name: 'websiteUrl', label: 'Website URL', type: 'text', required: true },
+        { name: 'targetKeywords', label: 'Target Keywords', type: 'array', itemType: 'text', itemLabel: 'Keyword' },
+        { name: 'targetCountry', label: 'Target Country', type: 'text' },
+        { name: 'competitorAnalysis', label: 'Competitor Analysis Needed?', type: 'select', options: ['Yes', 'No'] },
+      ],
+    },
+    {
+      title: 'On-page & Tech',
+      fields: [
+        { name: 'onPageOptimization', label: 'On-page Optimization', type: 'select', options: ['Yes', 'No'] },
+        { name: 'technicalImprovements', label: 'Technical Improvements', type: 'select', options: ['Yes', 'No'] },
+        { name: 'cms', label: 'CMS', type: 'text' },
+        { name: 'linkBuilding', label: 'Link Building Required?', type: 'select', options: ['Yes', 'No'] },
+      ],
+    },
+  ],
+  'Digital Marketing Campaigns': [
+    {
+      title: 'Campaign Setup',
+      fields: [
+        { name: 'platform', label: 'Platform', type: 'select', required: true, options: ['Facebook Ads','Instagram Ads','Google Ads','TikTok Ads','LinkedIn Ads'] },
+        { name: 'budget', label: 'Budget', type: 'number', required: true },
+        { name: 'campaignGoal', label: 'Campaign Goal', type: 'select', options: ['Traffic','Leads','Sales','Awareness'] },
+        { name: 'targetAudience', label: 'Target Audience Description', type: 'textarea' },
+      ],
+    },
+    {
+      title: 'Creatives & Tracking',
+      fields: [
+        { name: 'creativeDesign', label: 'Creative Design Needed?', type: 'select', options: ['Yes', 'No'] },
+        { name: 'copywriting', label: 'Copywriting Needed?', type: 'select', options: ['Yes', 'No'] },
+        { name: 'analyticsTracking', label: 'Analytics/Pixel Tracking', type: 'select', options: ['Yes', 'No'] },
+        { name: 'campaignDuration', label: 'Campaign Duration', type: 'text' },
+      ],
+    },
+  ],
+  'Video Editing Service': [
+    {
+      title: 'Video Details',
+      fields: [
+        { name: 'videoLength', label: 'Video Length (minutes)', type: 'number', required: true },
+        { name: 'style', label: 'Style', type: 'select', required: true, options: ['Vlog','Educational','Promotional','Cinematic','Gaming','Other'] },
+        { name: 'platform', label: 'Platform', type: 'select', required: true, options: ['YouTube','Instagram Reels','TikTok','Facebook','Other'] },
+        { name: 'videoCount', label: 'Number of Videos', type: 'number' },
+      ],
+    },
+    {
+      title: 'Editing Specs',
+      fields: [
+        { name: 'transitionsEffects', label: 'Transitions & Effects', type: 'select', options: ['Yes', 'No'] },
+        { name: 'subtitles', label: 'Subtitles', type: 'select', options: ['Yes', 'No'] },
+        { name: 'finalFormats', label: 'Final Formats Needed', type: 'array', itemType: 'text', itemLabel: 'Format' },
+        { name: 'colorGrading', label: 'Color Grading Required?', type: 'select', options: ['Yes', 'No'] },
+      ],
+    },
+  ],
+  'Daily Thumbnails Service': [
+    {
+      title: 'Channel & Theme',
+      fields: [
+        { name: 'youtubeChannel', label: 'YouTube Channel', type: 'text', required: true },
+        { name: 'theme', label: 'Theme', type: 'text' },
+        { name: 'duration', label: 'Duration', type: 'select', required: true, options: ['30 days','60 days','90 days'] },
+        { name: 'brandColors', label: 'Brand Colors', type: 'text' },
+      ],
+    },
+    {
+      title: 'Design & Delivery',
+      fields: [
+        { name: 'highCtrFocus', label: 'High CTR Focused', type: 'select', options: ['Yes', 'No'] },
+        { name: 'dimensions', label: 'Dimensions', type: 'text', placeholder: 'e.g. 1280x720' },
+        { name: 'deliveryFrequency', label: 'Delivery Frequency', type: 'select', options: ['Daily','Weekdays','Custom'] },
+        { name: 'revisionRounds', label: 'Revision Rounds', type: 'number' },
+      ],
+    },
+  ],
+  'Automated Email Marketing Setup': [
+    {
+      title: 'Platform & Campaign',
+      fields: [
+        { name: 'emailPlatform', label: 'Email Platform', type: 'select', required: true, options: ['Mailchimp','SendGrid','Brevo','ConvertKit','Other'] },
+        { name: 'campaignType', label: 'Campaign Type', type: 'select', required: true, options: ['Newsletter','Promotional','Transactional','Welcome Series'] },
+        { name: 'frequency', label: 'Frequency', type: 'select', required: true, options: ['Daily','Weekly','Monthly','Custom'] },
+        { name: 'subscriberCount', label: 'Subscriber Count', type: 'number' },
+      ],
+    },
+    {
+      title: 'Automation & Templates',
+      fields: [
+        { name: 'workflowAutomation', label: 'Workflow Automation Needed?', type: 'select', options: ['Yes', 'No'] },
+        { name: 'templateDesign', label: 'Email Template Design', type: 'select', options: ['Yes', 'No'] },
+        { name: 'integrations', label: 'Integrations', type: 'text', placeholder: 'CRM, APIs, Webhooks' },
+        { name: 'segmentation', label: 'Audience Segmentation Required?', type: 'select', options: ['Yes', 'No'] },
+      ],
+    },
+  ],
+  'WhatsApp Marketing Hidden Software': [
+    {
+      title: 'Audience & Goals',
+      fields: [
+        { name: 'targetAudienceSize', label: 'Target Audience Size', type: 'number', required: true },
+        { name: 'purpose', label: 'Purpose', type: 'text' },
+        { name: 'campaignsCount', label: 'Number of Campaigns', type: 'number' },
+        { name: 'messageTypes', label: 'Message Types', type: 'array', itemType: 'text', itemLabel: 'Type' },
+      ],
+    },
+    {
+      title: 'Automation & Setup',
+      fields: [
+        { name: 'hiddenAutomation', label: 'Hidden WhatsApp Automation', type: 'select', options: ['Yes', 'No'] },
+        { name: 'apiCost', label: 'API Cost', type: 'select', options: ['Zero Cost'] },
+        { name: 'installationGuide', label: 'Installation Guide Required?', type: 'select', options: ['Yes', 'No'] },
+        { name: 'bulkMessaging', label: 'Bulk Messaging Features', type: 'select', options: ['Yes', 'No'] },
+      ],
+    },
+  ],
 };

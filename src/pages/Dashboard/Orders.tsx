@@ -120,6 +120,7 @@ export default function Orders() {
   const [payCurrency, setPayCurrency] = useState<'USDT' | 'INR'>('USDT');
   const [usePurchase, setUsePurchase] = useState<boolean>(true);
   const [isPaying, setIsPaying] = useState<boolean>(false);
+  const [upiTxnId, setUpiTxnId] = useState<string>('');
 
 
   // Fetch orders (Firestore)
@@ -327,6 +328,22 @@ export default function Orders() {
       setIsPaying(false);
     }
   }, [user?.id, selected, payCurrency, usePurchase]);
+
+  const submitUpiPayment = useCallback(async () => {
+    if (!user?.id || !selected) return;
+    try {
+      const orderRef = doc(firestore, 'orders', selected.id);
+      await updateDoc(orderRef, { paymentMode: 'INR', status: 'Pending', transactionId: upiTxnId });
+      try {
+        const nid = crypto.randomUUID();
+        await notifyAdminPayment({ id: nid, orderId: selected.id, userId: user.id, amountUsd: selected.priceInUsd || 0, method: 'INR' });
+      } catch {}
+      setSelected({ ...selected, method: 'INR', status: 'pending', transactionId: upiTxnId });
+      alert('UPI payment submitted. Wait 15–30 minutes for admin approval.');
+    } catch (e) {
+      console.error(e);
+    }
+  }, [user?.id, selected, upiTxnId]);
 
   const handleRefund = async (o: OrderItem) => {
     if (!user?.id) return;
@@ -987,32 +1004,89 @@ export default function Orders() {
               )}
 
               {/* Action Buttons */}
-              <div className="flex flex-wrap gap-3 pt-4">
-                <button
-                  onClick={() => navigate(`/orders/${selected.id}/invoice`)}
-                  className="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-purple-500 rounded-lg hover:shadow-lg hover:shadow-cyan-500/20 transition-all"
-                >
-                  <DocumentArrowDownIcon className="w-5 h-5" />
-                  <span className="font-medium">Invoice</span>
-                </button>
-                
+              <div className="flex flex-col gap-4 pt-4">
+                {/* Payment Options */}
                 {selected.status !== 'paid' && (
-                  <button
-                    onClick={() => handleMarkPaid(selected)}
-                    className="flex-1 min-w-[140px] px-4 py-2.5 bg-emerald-600/90 hover:bg-emerald-600 rounded-lg transition-all"
-                  >
-                    Mark as Paid
-                  </button>
+                  <div className="rounded-xl border border-gray-700/50 p-4 bg-gray-800/30">
+                    <p className="text-sm font-semibold text-white mb-3">Payment Options</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Digi Wallet */}
+                      <div className="rounded-lg bg-gray-900/40 border border-gray-700/50 p-3">
+                        <p className="text-sm text-gray-300 mb-2">Digi Wallet</p>
+                        <div className="flex items-center gap-2 mb-2">
+                          <label className="text-xs text-gray-400">Currency</label>
+                          <select
+                            value={payCurrency}
+                            onChange={(e) => setPayCurrency(e.target.value as any)}
+                            className="px-2 py-1 rounded bg-gray-800/50 border border-gray-700/50 text-white text-xs"
+                          >
+                            <option value="USDT">USDT</option>
+                            <option value="INR">INR</option>
+                          </select>
+                        </div>
+                        <label className="inline-flex items-center gap-2 text-xs text-gray-300">
+                          <input type="checkbox" checked={usePurchase} onChange={(e) => setUsePurchase(e.target.checked)} />
+                          Split 50% Main Wallet + 50% Purchase Wallet
+                        </label>
+                        <button
+                          onClick={doPay}
+                          disabled={isPaying}
+                          className="mt-3 w-full px-3 py-2 bg-emerald-600/90 hover:bg-emerald-600 rounded-lg text-sm"
+                        >
+                          {isPaying ? 'Processing...' : 'Pay with Digi Wallet'}
+                        </button>
+                      </div>
+
+                      {/* UPI Payment */}
+                      <div className="rounded-lg bg-gray-900/40 border border-gray-700/50 p-3">
+                        <p className="text-sm text-gray-300 mb-2">UPI Payment</p>
+                        <div className="text-xs text-gray-400 mb-2">Pay to UPI ID: <span className="text-white font-mono">digilinex@ibl</span></div>
+                        <input
+                          value={upiTxnId}
+                          onChange={(e) => setUpiTxnId(e.target.value)}
+                          placeholder="Enter UTR / Transaction ID"
+                          className="w-full px-3 py-2 bg-gray-800/50 border border-gray-700/50 rounded-lg text-sm text-white placeholder-gray-500"
+                        />
+                        <button
+                          onClick={submitUpiPayment}
+                          disabled={!upiTxnId.trim()}
+                          className="mt-3 w-full px-3 py-2 bg-cyan-600/90 hover:bg-cyan-600 rounded-lg text-sm"
+                        >
+                          Submit UPI Payment
+                        </button>
+                        <div className="text-[11px] text-gray-500 mt-2">Wait 15–30 minutes for admin approval.</div>
+                      </div>
+                    </div>
+                  </div>
                 )}
-                
-                {selected.status === 'paid' && (
+
+                <div className="flex flex-wrap gap-3">
                   <button
-                    onClick={() => handleRefund(selected)}
-                    className="flex-1 min-w-[140px] px-4 py-2.5 bg-red-600/90 hover:bg-red-600 rounded-lg transition-all"
+                    onClick={() => navigate(`/orders/${selected.id}/invoice`)}
+                    className="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-purple-500 rounded-lg hover:shadow-lg hover:shadow-cyan-500/20 transition-all"
                   >
-                    Request Refund
+                    <DocumentArrowDownIcon className="w-5 h-5" />
+                    <span className="font-medium">Invoice</span>
                   </button>
-                )}
+                  
+                  {selected.status !== 'paid' && (
+                    <button
+                      onClick={() => handleMarkPaid(selected)}
+                      className="flex-1 min-w-[140px] px-4 py-2.5 bg-emerald-600/90 hover:bg-emerald-600 rounded-lg transition-all"
+                    >
+                      Mark as Paid
+                    </button>
+                  )}
+                  
+                  {selected.status === 'paid' && (
+                    <button
+                      onClick={() => handleRefund(selected)}
+                      className="flex-1 min-w-[140px] px-4 py-2.5 bg-red-600/90 hover:bg-red-600 rounded-lg transition-all"
+                    >
+                      Request Refund
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>

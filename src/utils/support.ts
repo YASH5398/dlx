@@ -1,5 +1,5 @@
-import { db } from '../firebase';
-import { ref, push, set, onValue, off, update, get, DataSnapshot } from 'firebase/database';
+import { db } from '../firebase.ts';
+import { ref, push, set, onValue, off, update, get, DataSnapshot, remove } from 'firebase/database';
 
 export type TicketStatus = 'Open' | 'Pending' | 'Resolved';
 export type TicketCategory = 'Technical' | 'Payment' | 'Other';
@@ -106,4 +106,26 @@ export async function saveCommonQA(question: string, answer: string) {
 export async function logAiConversation(userId: string, question: string, answer: string, suggestTicket: boolean) {
   const convRef = push(ref(db, `support/ai/conversations/${userId}`));
   await set(convRef, { question, answer, suggestTicket, createdAt: new Date().toISOString() });
+}
+
+export function subscribeAllTickets(cb: (tickets: Ticket[]) => void) {
+  const r = ref(db, 'support/tickets');
+  const handler = (snap: DataSnapshot) => {
+    const val = snap.val() || {};
+    const list: Ticket[] = Object.keys(val).map((id) => ({ id, ...(val[id] as any) }));
+    list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    cb(list);
+  };
+  onValue(r, handler);
+  return () => off(r, 'value', handler);
+}
+
+export async function sendTicketMessage(ticketId: string, message: string, adminId?: string) {
+  const uRef = push(ref(db, `support/tickets/${ticketId}/updates`));
+  await set(uRef, { date: new Date().toISOString(), message, adminId: adminId || 'admin' });
+}
+
+export async function deleteTicket(ticketId: string) {
+  await remove(ref(db, `support/tickets/${ticketId}`));
+  await remove(ref(db, `support/messages/${ticketId}`));
 }

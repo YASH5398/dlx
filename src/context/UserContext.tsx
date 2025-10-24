@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { auth, db } from '../firebase';
+import { auth, db } from '../firebase.ts';
 import {
   onAuthStateChanged,
   createUserWithEmailAndPassword,

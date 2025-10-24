@@ -1,4 +1,4 @@
-import { db } from '../firebase';
+import { db } from '../firebase.ts';
 import { ref, set, get, remove } from 'firebase/database';
 
 export type Order = { id: string; title: string; priceInUsd: number; priceInInr: number; status: 'paid' | 'pending' };

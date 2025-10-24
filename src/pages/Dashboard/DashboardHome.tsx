@@ -3,10 +3,10 @@ import { useUser } from '../../context/UserContext';
 // import { useWallet } from '../../hooks/useWallet';
 import { useReferral } from '../../hooks/useReferral';
 import { firestore } from '../../firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, getDocs, doc, deleteDoc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import ServiceRequestModal from '../../components/ServiceRequestModal';
-import { getServices, subscribeServices } from '../../utils/services';
+
 import type { ServiceItem } from '../../utils/services';
 import { restoreDefaultServiceForms } from '../../utils/services';
 import { DEFAULT_SERVICE_FORMS } from '../../utils/serviceFormDefaults';
@@ -42,6 +42,7 @@ export default function DashboardHome() {
   const [ordersCount, setOrdersCount] = useState(0);
   const [progress, setProgress] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedService, setSelectedService] = useState<string | null>(null);
   const [services, setServices] = useState<ServiceItem[]>([]);
@@ -101,37 +102,123 @@ export default function DashboardHome() {
     })();
   }, [user?.id]);
 
-  // Load services with backend subscription and fallback to static list
+  // Load services directly from Firestore, map fields, and clean extras
+  const gradientForCategory = (cat?: string) => {
+    const c = (cat || '').toLowerCase();
+    if (c === 'web development') return 'from-purple-500 to-pink-600';
+    if (c === 'crypto' || c === 'blockchain') return 'from-blue-500 to-cyan-600';
+    if (c === 'marketing') return 'from-teal-500 to-green-600';
+    if (c === 'media') return 'from-red-500 to-pink-600';
+    if (c === 'ai') return 'from-cyan-500 to-teal-600';
+    if (c === 'mlm') return 'from-pink-500 to-rose-600';
+    if (c === 'mobile') return 'from-blue-500 to-indigo-600';
+    if (c === 'automation') return 'from-emerald-500 to-green-600';
+    if (c === 'bot') return 'from-sky-500 to-blue-600';
+    if (c === 'security') return 'from-red-500 to-orange-600';
+    return 'from-cyan-500 to-blue-600';
+  };
+
+  const getDefaultFeatures = (serviceId: string, category?: string) => {
+    const featuresMap: Record<string, string[]> = {
+      'token': ['Smart Contract Development', 'Token Economics Design', 'Audit & Security'],
+      'website': ['Custom Design', 'Responsive Layout', 'SEO Optimization'],
+      'chatbot': ['AI Integration', 'Multi-platform Support', 'Natural Language Processing'],
+      'mlm': ['Compensation Plans', 'Genealogy System', 'E-wallet Integration'],
+      'mobile': ['Cross-platform Development', 'Native Performance', 'App Store Optimization'],
+      'automation': ['Process Automation', 'Workflow Design', 'Integration Services'],
+      'telegram': ['Custom Commands', 'API Integration', 'User Management'],
+      'audit': ['Smart Contract Audit', 'Security Assessment', 'Vulnerability Testing'],
+      'landing-page': ['Custom Layout Design', 'Responsive Web Development', 'Hosting & Deployment'],
+      'ecommerce-store': ['Shopify / WooCommerce Setup', 'Payment Gateway Integration', 'Product Upload & Basic SEO'],
+      'tradingview-indicator': ['Custom Indicator / Strategy', 'Backtesting & Alerts', 'Easy Integration'],
+      'social-media-management': ['Monthly Content Plan', 'Post Scheduling & Templates', 'Engagement & Analytics Report'],
+      'seo-services': ['Website Audit', 'On-page Optimization', 'Keyword Recommendations'],
+      'digital-marketing-campaigns': ['Ads Setup & Targeting', 'Creative Design & Copywriting', 'Analytics & Performance Report'],
+      'video-editing': ['Video Cutting & Editing', 'Transitions & Effects', 'Final Render in Multiple Formats'],
+      'daily-thumbnails': ['Custom Thumbnail Design', '30/60 Days Delivery', 'High CTR Focused'],
+      'email-marketing-setup': ['Mailchimp / SendGrid Setup', 'Workflow Automation', 'Email Template Design'],
+      'whatsapp-marketing-software': ['Hidden WhatsApp Automation', 'No API / Zero Cost per Message', 'Easy Setup & Installation Guide'],
+    };
+    
+    return featuresMap[serviceId] || ['Professional Service', 'Quality Assurance', '24/7 Support'];
+  };
+
   useEffect(() => {
-    let unsub: (() => void) | null = null;
     const load = async () => {
       try {
-        const list = await getServices();
-        if (list && list.length) {
-          setServices(list);
-        } else {
-          setServices(
-            staticServices.map((s) => ({
-              id: s.id,
-              name: s.name,
-              description: s.description,
-              startingPrice: s.startingPrice,
-              icon: String(s.icon),
-              gradient: s.gradient,
-              features: s.features,
-              category: s.category,
-            }))
-          );
-        }
+        const snap = await getDocs(collection(firestore, 'services'));
+        const items: ServiceItem[] = [];
+        snap.forEach((d) => {
+          const data = d.data() as any;
+          items.push({
+            id: d.id,
+            name: data.title ?? data.name ?? '',
+            description: data.description ?? '',
+            startingPrice: data.price ?? data.startingPrice ?? '',
+            icon: String(data.icon ?? '✨'),
+            gradient: gradientForCategory(data.category),
+            features: Array.isArray(data.features) ? data.features : getDefaultFeatures(d.id, data.category),
+            category: data.category ?? 'General',
+          });
+        });
+        setServices(items);
+
         // Restore missing service form configs (idempotent)
         await restoreDefaultServiceForms(DEFAULT_SERVICE_FORMS);
-      } catch {}
-      unsub = subscribeServices((items) => {
-        if (items && items.length) setServices(items);
-      });
+
+        const allowedIds = new Set([
+          'token',
+          'website',
+          'chatbot',
+          'mlm',
+          'mobile',
+          'automation',
+          'telegram',
+          'audit',
+          'landing-page',
+          'ecommerce-store',
+          'tradingview-indicator',
+          'social-media-management',
+          'seo-services',
+          'digital-marketing-campaigns',
+          'video-editing',
+          'daily-thumbnails',
+          'email-marketing-setup',
+          'whatsapp-marketing-software',
+        ]);
+
+        if (snap.size > allowedIds.size) {
+          const deletions: Promise<any>[] = [];
+          snap.forEach((d) => {
+            if (!allowedIds.has(d.id)) {
+              deletions.push(deleteDoc(doc(firestore, 'services', d.id)));
+            }
+          });
+          if (deletions.length) {
+            await Promise.all(deletions);
+            const snap2 = await getDocs(collection(firestore, 'services'));
+            const items2: ServiceItem[] = [];
+            snap2.forEach((d2) => {
+              const data2 = d2.data() as any;
+              items2.push({
+                id: d2.id,
+                name: data2.title ?? data2.name ?? '',
+                description: data2.description ?? '',
+                startingPrice: data2.price ?? data2.startingPrice ?? '',
+                icon: String(data2.icon ?? '✨'),
+                gradient: gradientForCategory(data2.category),
+                features: Array.isArray(data2.features) ? data2.features : getDefaultFeatures(d2.id, data2.category),
+                category: data2.category ?? 'General',
+              });
+            });
+            setServices(items2);
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load services from Firestore', e);
+      }
     };
     load();
-    return () => { if (unsub) unsub(); };
   }, []);
 
   // Fallback static list (used if backend is empty)
@@ -206,13 +293,115 @@ export default function DashboardHome() {
       gradient: 'from-red-500 to-orange-600',
       features: ['Smart Contract Audit', 'Security Assessment', 'Vulnerability Testing'],
       category: 'security'
+    },
+    {
+      id: '9',
+      name: 'Landing Page Creation',
+      description: 'Create a responsive and high-converting landing page with custom design, layout, and hosting-ready setup.',
+      startingPrice: '$45 / ₹4,000',
+      icon: '🎨',
+      gradient: 'from-purple-500 to-pink-600',
+      features: ['Custom Layout Design', 'Responsive Web Development', 'Hosting & Deployment'],
+      category: 'Web Development'
+    },
+    {
+      id: '10',
+      name: 'E-commerce Store Setup',
+      description: 'Launch a full-featured e-commerce store with payment integration, product setup, and basic SEO optimization.',
+      startingPrice: '$190 / ₹16,000',
+      icon: '🛒',
+      gradient: 'from-green-500 to-emerald-600',
+      features: ['Shopify / WooCommerce Setup', 'Payment Gateway Integration', 'Product Upload & Basic SEO'],
+      category: 'Web Development'
+    },
+    {
+      id: '11',
+      name: 'TradingView Custom Indicator / Strategy',
+      description: 'Get your personalized TradingView indicator or strategy with alerts and backtesting for automated trading.',
+      startingPrice: '$30 / ₹2,500',
+      icon: '📈',
+      gradient: 'from-blue-500 to-cyan-600',
+      features: ['Custom Indicator / Strategy', 'Backtesting & Alerts', 'Easy Integration'],
+      category: 'Crypto'
+    },
+    {
+      id: '12',
+      name: 'Social Media Management',
+      description: 'Full monthly social media management with content creation, post scheduling, and engagement tracking.',
+      startingPrice: '$20 / ₹1,700 per month',
+      icon: '📱',
+      gradient: 'from-indigo-500 to-purple-600',
+      features: ['Monthly Content Plan', 'Post Scheduling & Templates', 'Engagement & Analytics Report'],
+      category: 'Marketing'
+    },
+    {
+      id: '13',
+      name: 'SEO Services',
+      description: 'Optimize your website for better search engine visibility with technical and on-page SEO improvements.',
+      startingPrice: '$50 / ₹4,200',
+      icon: '🔍',
+      gradient: 'from-yellow-500 to-orange-600',
+      features: ['Website Audit', 'On-page Optimization', 'Keyword Recommendations'],
+      category: 'Marketing'
+    },
+    {
+      id: '14',
+      name: 'Digital Marketing Campaigns',
+      description: 'Setup and manage FB/IG/Google Ads campaigns with creatives, targeting, and performance tracking.',
+      startingPrice: '$20 / ₹1,700',
+      icon: '📊',
+      gradient: 'from-teal-500 to-green-600',
+      features: ['Ads Setup & Targeting', 'Creative Design & Copywriting', 'Analytics & Performance Report'],
+      category: 'Marketing'
+    },
+    {
+      id: '15',
+      name: 'Video Editing Service',
+      description: 'Professional video editing for YouTube, Reels, or promotional content with high-quality output.',
+      startingPrice: '$15 / ₹1,300',
+      icon: '🎬',
+      gradient: 'from-red-500 to-pink-600',
+      features: ['Video Cutting & Editing', 'Transitions & Effects', 'Final Render in Multiple Formats'],
+      category: 'Media'
+    },
+    {
+      id: '16',
+      name: 'Daily Thumbnails Service',
+      description: 'Custom thumbnail creation daily for your YouTube videos or content platform for 30/60 days.',
+      startingPrice: '$5 / ₹450 per thumbnail',
+      icon: '🖼️',
+      gradient: 'from-orange-500 to-red-600',
+      features: ['Custom Thumbnail Design', '30/60 Days Delivery', 'High CTR Focused'],
+      category: 'Media'
+    },
+    {
+      id: '17',
+      name: 'Automated Email Marketing Setup',
+      description: 'Setup automated email campaigns with workflows, templates, and integrations for better engagement.',
+      startingPrice: '$30 / ₹2,500',
+      icon: '📧',
+      gradient: 'from-cyan-500 to-blue-600',
+      features: ['Mailchimp / SendGrid Setup', 'Workflow Automation', 'Email Template Design'],
+      category: 'Marketing'
+    },
+    {
+      id: '18',
+      name: 'WhatsApp Marketing Hidden Software',
+      description: 'Get a cost-effective WhatsApp marketing software without API cost, fully automated for campaigns.',
+      startingPrice: '$30 / ₹2,500',
+      icon: '💬',
+      gradient: 'from-green-500 to-teal-600',
+      features: ['Hidden WhatsApp Automation', 'No API / Zero Cost per Message', 'Easy Setup & Installation Guide'],
+      category: 'Marketing'
     }
   ];
 
-  const filteredServices = services.filter(service =>
-    service.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    service.description.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredServices = services.filter(service => {
+    const matchesSearch = service.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      service.description.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = selectedCategory === 'All' || service.category === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
 
   useEffect(() => {
     if (!user?.id) return;
@@ -248,9 +437,33 @@ export default function DashboardHome() {
 
   const levelLabel = tier === 1 ? 'Starter' : tier === 2 ? 'Silver' : 'Gold';
 
+  // Map Firestore service ids to default form names used in DEFAULT_SERVICE_FORMS
+  const DEFAULT_FORM_NAME_BY_ID: Record<string, string> = {
+    token: 'Crypto Token Creation',
+    website: 'Website Development',
+    chatbot: 'Chatbot Development',
+    mlm: 'MLM Plan Development',
+    mobile: 'Mobile App Development',
+    automation: 'Business Automation',
+    telegram: 'Telegram Bot',
+    audit: 'Crypto Audit',
+    'landing-page': 'Landing Page Creation',
+    'ecommerce-store': 'E-commerce Store Setup',
+    'tradingview-indicator': 'TradingView Custom Indicator / Strategy',
+    'social-media-management': 'Social Media Management',
+    'seo-services': 'SEO Services',
+    'digital-marketing-campaigns': 'Digital Marketing Campaigns',
+    'video-editing': 'Video Editing Service',
+    'daily-thumbnails': 'Daily Thumbnails Service',
+    'email-marketing-setup': 'Automated Email Marketing Setup',
+    'whatsapp-marketing-software': 'WhatsApp Marketing Hidden Software',
+  };
+
   const handleGetService = (serviceId: string) => {
     const svc = services.find((s) => s.id === serviceId);
-    setSelectedService(svc?.name || '');
+    const fallbackName = svc?.name || '';
+    const mappedName = DEFAULT_FORM_NAME_BY_ID[serviceId] ?? fallbackName;
+    setSelectedService(mappedName);
     setModalOpen(true);
   };
 
@@ -502,20 +715,45 @@ export default function DashboardHome() {
                 </p>
               </div>
               
-              {/* Search Bar */}
-              <div className="relative w-full sm:w-80">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <svg className="h-5 w-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
+              {/* Search and Filter Bar */}
+              <div className="flex flex-col sm:flex-row gap-4 w-full">
+                {/* Search Bar */}
+                <div className="relative w-full sm:w-80">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg className="h-5 w-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Search services..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="block w-full pl-10 pr-4 py-3 bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all shadow-sm"
+                  />
                 </div>
-                <input
-                  type="text"
-                  placeholder="Search services..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="block w-full pl-10 pr-4 py-3 bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all shadow-sm"
-                />
+                
+                {/* Category Filter */}
+                <div className="w-full sm:w-48">
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    className="block w-full px-4 py-3 bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all shadow-sm"
+                  >
+                    <option value="All">All Categories</option>
+                    <option value="Web Development">Web Development</option>
+                    <option value="Crypto">Crypto</option>
+                    <option value="Marketing">Marketing</option>
+                    <option value="Media">Media</option>
+                    <option value="blockchain">Blockchain</option>
+                    <option value="ai">AI</option>
+                    <option value="mlm">MLM</option>
+                    <option value="mobile">Mobile</option>
+                    <option value="automation">Automation</option>
+                    <option value="bot">Bot</option>
+                    <option value="security">Security</option>
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -601,6 +839,36 @@ export default function DashboardHome() {
                 </p>
               </div>
             )}
+
+            {/* Promotional Banner */}
+            <div className="mt-16 p-8 bg-gradient-to-r from-cyan-500/10 to-blue-500/10 backdrop-blur-sm border border-cyan-500/20 rounded-2xl">
+              <div className="text-center">
+                <h3 className="text-2xl font-bold text-slate-200 mb-4">
+                  Explore More High-Value Services
+                </h3>
+                <p className="text-slate-300 mb-6 max-w-2xl mx-auto">
+                  Discover our premium offerings including Crypto Token Creation, Landing Pages, E-commerce Setup, 
+                  and advanced automation solutions. Transform your business with our expert services.
+                </p>
+                <div className="flex flex-wrap justify-center gap-4 text-sm">
+                  <span className="px-4 py-2 bg-cyan-500/20 text-cyan-300 rounded-full border border-cyan-500/30">
+                    🪙 Crypto Token Creation
+                  </span>
+                  <span className="px-4 py-2 bg-purple-500/20 text-purple-300 rounded-full border border-purple-500/30">
+                    🎨 Landing Pages
+                  </span>
+                  <span className="px-4 py-2 bg-green-500/20 text-green-300 rounded-full border border-green-500/30">
+                    🛒 E-commerce Setup
+                  </span>
+                  <span className="px-4 py-2 bg-orange-500/20 text-orange-300 rounded-full border border-orange-500/30">
+                    📈 TradingView Indicators
+                  </span>
+                  <span className="px-4 py-2 bg-pink-500/20 text-pink-300 rounded-full border border-pink-500/30">
+                    📱 Social Media Management
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
 
         </div>

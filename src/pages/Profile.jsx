@@ -3,7 +3,7 @@ import { useUser } from '../context/UserContext';
 import InputField from '../components/InputField.jsx';
 import Button from '../components/Button.jsx';
 import ToggleSwitch from '../components/ToggleSwitch.jsx';
-import { auth, db } from '../firebase';
+import { auth, db } from '../firebase.ts';
 import { updateProfile } from 'firebase/auth';
 import { ref, update } from 'firebase/database';
 import { IdentificationIcon, UserCircleIcon, EnvelopeIcon, PhoneIcon, WalletIcon, ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline';

@@ -1,4 +1,4 @@
-import { db } from '../firebase';
+import { db } from '../firebase.ts';
 import { ref, set } from 'firebase/database';
 
 export async function notifyAdminNewServiceRequest(payload: { id: string; serviceName: string; userId: string; userName: string }) {

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useUser } from '../context/UserContext';
 import { useReferral } from '../hooks/useReferral';
 import { useAffiliateApproval } from '../hooks/useAffiliateApproval';
-import { firestore } from '../firebase';
+import { firestore } from '../firebase.ts';
 import { doc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';

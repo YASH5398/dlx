@@ -1,0 +1,6 @@
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import React from 'react';
+import Button from './Button';
+export default function HeroSection() {
+    return (_jsx("section", { className: "container-padded pt-10 pb-8 md:pt-16 md:pb-12 text-white", children: _jsxs("div", { className: "grid md:grid-cols-2 gap-10 items-center", children: [_jsxs("div", { children: [_jsx("h1", { className: "text-3xl md:text-5xl font-extrabold tracking-tight heading-gradient", children: "Transforming Ideas into Digital Reality" }), _jsx("p", { className: "mt-4 text-lg text-gray-300", children: "Blockchain | AI | Websites | Mobile Apps | Business Automation" }), _jsx("p", { className: "mt-2 text-sm text-gray-400", children: "Trusted by 200+ founders & teams globally." }), _jsxs("div", { className: "mt-6 flex gap-3", children: [_jsx(Button, { to: "/contact", children: "Start Your Project" }), _jsx(Button, { variant: "outline", to: "/contact", children: "Get Free Consultation" })] })] }), _jsx("div", { className: "hidden md:block", children: _jsx("div", { className: "rounded-xl bg-gradient-to-br from-[#0a0f1f] to-black border border-white/20 backdrop-blur-xl shadow-[0_0_40px_rgba(236,72,153,0.15)] h-64" }) })] }) }));
+}

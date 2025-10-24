@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import ServiceCard from '../components/ServiceCard';
+import ServiceRequestModal from '../components/ServiceRequestModal';
 
 const services = [
   { title: 'Crypto Token Creation', price: '$2,999' },
@@ -16,6 +17,9 @@ const services = [
 ];
 
 export default function Services() {
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedService, setSelectedService] = useState<string>('');
+
   return (
     <div className="min-h-screen">
       <Header />
@@ -24,11 +28,21 @@ export default function Services() {
         <p className="text-sm text-gray-600 mt-2">Choose a service and get started.</p>
         <div className="mt-6 grid md:grid-cols-3 gap-4">
           {services.map((s) => (
-            <ServiceCard key={s.title} title={s.title} price={s.price} />
+            <ServiceCard 
+              key={s.title} 
+              title={s.title} 
+              price={s.price} 
+              onGetService={() => { setSelectedService(s.title); setModalOpen(true); }}
+            />
           ))}
         </div>
       </main>
       <Footer />
+      <ServiceRequestModal 
+        open={modalOpen} 
+        onClose={() => setModalOpen(false)} 
+        serviceName={selectedService}
+      />
     </div>
   );
 }

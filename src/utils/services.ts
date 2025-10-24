@@ -1,4 +1,4 @@
-import { db } from '../firebase';
+import { db } from '../firebase.ts';
 import { ref, get, set, onValue, off, update } from 'firebase/database';
 
 export type FieldType = 'text' | 'textarea' | 'select' | 'number' | 'checkbox' | 'radio' | 'email' | 'tel' | 'array';
@@ -170,10 +170,13 @@ function appendExtraStep(base: StepDef[], serviceName: string): StepDef[] {
 export async function restoreDefaultServiceForms(defaults: Record<string, StepDef[]>): Promise<void> {
   for (const [serviceName, steps] of Object.entries(defaults)) {
     try {
-      const snap = await get(ref(db, `serviceForms/${serviceName}`));
-      const val = snap.val();
-      if (!val || (Array.isArray(val) && val.length === 0)) {
-        await set(ref(db, `serviceForms/${serviceName}`), steps);
+      const { firestore } = await import('../firebase');
+      const { doc, getDoc, setDoc } = await import('firebase/firestore');
+      const docRef = doc(firestore, 'serviceForms', serviceName);
+      const docSnap = await getDoc(docRef);
+      const existing = docSnap.exists() ? (docSnap.data() as any) : null;
+      if (!existing || !Array.isArray(existing.steps) || existing.steps.length === 0) {
+        await setDoc(docRef, { steps });
       }
     } catch (e) {
       console.warn('Failed to restore form for', serviceName, e);
@@ -181,27 +184,65 @@ export async function restoreDefaultServiceForms(defaults: Record<string, StepDe
   }
 }
 export async function getServiceFormConfig(serviceName: string): Promise<StepDef[] | null> {
-  const snap = await get(ref(db, `serviceForms/${serviceName}`));
-  const val = snap.val();
-  const steps = (val as StepDef[]) || null;
-  // Fall back to predefined defaults when not found (handled by admin setup)
-  if (!steps) return null;
-  return steps;
+  try {
+    const { firestore } = await import('../firebase');
+    const { doc, getDoc } = await import('firebase/firestore');
+    const docRef = doc(firestore, 'serviceForms', serviceName);
+    const docSnap = await getDoc(docRef);
+    
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      return data.steps || null;
+    }
+    return null;
+  } catch (error) {
+    console.warn('Failed to fetch service form config from Firestore:', error);
+    return null;
+  }
 }
 
 export async function setServiceFormConfig(serviceName: string, steps: StepDef[]): Promise<void> {
-  await set(ref(db, `serviceForms/${serviceName}`), steps);
+  try {
+    const { firestore } = await import('../firebase');
+    const { doc, setDoc } = await import('firebase/firestore');
+    const docRef = doc(firestore, 'serviceForms', serviceName);
+    await setDoc(docRef, { steps });
+  } catch (error) {
+    console.warn('Failed to save service form config to Firestore:', error);
+    throw error;
+  }
 }
 
 export function subscribeServiceFormConfig(serviceName: string, cb: (steps: StepDef[] | null) => void): () => void {
-  const r = ref(db, `serviceForms/${serviceName}`);
-  const handler = (snap: any) => {
-    const val = snap.val();
-    const steps = val ? (val as StepDef[]) : null;
-    cb(steps);
+  let unsub: (() => void) | null = null;
+  
+  const init = async () => {
+    try {
+      const { firestore } = await import('../firebase');
+      const { doc, onSnapshot } = await import('firebase/firestore');
+      const docRef = doc(firestore, 'serviceForms', serviceName);
+      
+      unsub = onSnapshot(docRef, (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          cb(data.steps || null);
+        } else {
+          cb(null);
+        }
+      });
+    } catch (error) {
+      console.warn('Failed to subscribe to service form config:', error);
+      cb(null);
+    }
   };
-  onValue(r, handler);
-  return () => off(r, 'value', handler);
+  
+  init();
+  
+  return () => {
+    if (unsub) {
+      try { unsub(); } catch {}
+    }
+  };
 }
 
 export async function getServices(): Promise<ServiceItem[]> {

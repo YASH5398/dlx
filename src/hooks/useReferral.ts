@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useUser } from '../context/UserContext';
-import { firestore } from '../firebase';
+import { firestore } from '../firebase.ts';
 import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
 
 export type EarningsPoint = { t: number; usd: number };

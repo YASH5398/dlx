@@ -1,4 +1,4 @@
-import { db } from '../firebase';
+import { db } from '../firebase.ts';
 import { ref, update } from 'firebase/database';
 
 export async function logActivity(uid: string, type: string, meta?: Record<string, any>) {

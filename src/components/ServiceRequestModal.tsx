@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useUser } from '../context/UserContext';
-import { submitServiceRequest } from '../utils/serviceRequests';
 import { logActivity } from '../utils/activity';
 import { notifyAdminNewServiceRequest } from '../utils/notifications';
 import { getServiceFormConfig, subscribeServiceFormConfig } from '../utils/services';
 import type { StepDef } from '../utils/services';
 import type { FieldDef } from '../utils/services';
+import { createUserServiceRequest, linkOrderToRequest } from '../utils/serviceRequestsFirestore';
+import { createPendingOrderFromRequest } from '../utils/ordersFirestore';
+import { DEFAULT_SERVICE_FORMS } from '../utils/serviceFormDefaults';
 
 type Props = {
   open: boolean;
@@ -64,7 +66,8 @@ export default function ServiceRequestModal({ open, onClose, serviceName }: Prop
       if (cfg && Array.isArray(cfg) && cfg.length) {
         setSteps(cfg);
       } else {
-        setSteps([]);
+        const fallback = DEFAULT_SERVICE_FORMS[serviceName] || [];
+        setSteps(fallback);
       }
       unsub = subscribeServiceFormConfig(serviceName, (next) => {
         if (next && next.length) {
@@ -147,14 +150,24 @@ export default function ServiceRequestModal({ open, onClose, serviceName }: Prop
     if (!validateCurrentStep() || !user) return;
     try {
       setSubmitting(true);
-      const id = await submitServiceRequest({
+      const id = await createUserServiceRequest({
         userId: user.id,
         userName: user.name,
         userEmail: user.email,
-        serviceName,
-        steps: uiSteps,
-        answers,
+        serviceId: serviceName,
+        serviceTitle: serviceName,
+        requestDetails: JSON.stringify({ steps: uiSteps, answers }),
+        userWebsiteLink: '',
+        userPassword: '',
+        expectedCompletion: '',
       });
+      const orderId = await createPendingOrderFromRequest({
+        userId: user.id,
+        userEmail: user.email,
+        serviceTitle: serviceName,
+        requestId: id,
+      });
+      await linkOrderToRequest(id, orderId);
       await logActivity(user.id, 'service_request_submitted', { id, serviceName });
       try {
         document.dispatchEvent(

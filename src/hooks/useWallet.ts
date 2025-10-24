@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { firestore } from '../firebase';
+import { firestore } from '../firebase.ts';
 import { doc, onSnapshot, getDoc } from 'firebase/firestore';
 import { useUser } from '../context/UserContext';
 
@@ -21,17 +21,17 @@ export function useWallet() {
       const d = (snap.data() as any) || {};
       const usdt = Number(d.mainUsdt || 0) + Number(d.purchaseUsdt || 0);
       const inr = Number(d.mainInr || 0) + Number(d.purchaseInr || 0);
-      setWallet((prev) => ({ ...prev, usdt, inr }));
+      setWallet((prev: WalletState) => ({ ...prev, usdt, inr }));
     }, () => {
-      setWallet((prev) => ({ ...prev, usdt: 0, inr: 0 }));
+      setWallet((prev: WalletState) => ({ ...prev, usdt: 0, inr: 0 }));
     });
 
     const unsubUsers = onSnapshot(usersDoc, (snap) => {
       const d = (snap.data() as any) || {};
       const dlx = Number(d.wallet?.miningBalance ?? 0);
-      setWallet((prev) => ({ ...prev, dlx }));
+      setWallet((prev: WalletState) => ({ ...prev, dlx }));
     }, () => {
-      setWallet((prev) => ({ ...prev, dlx: 0 }));
+      setWallet((prev: WalletState) => ({ ...prev, dlx: 0 }));
     });
 
     return () => {

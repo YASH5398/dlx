@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useUser } from '../context/UserContext';
-import { firestore } from '../firebase';
+import { firestore } from '../firebase.ts';
 import { doc, onSnapshot } from 'firebase/firestore';
 
 export interface AffiliateDoc {

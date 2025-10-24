@@ -6,15 +6,6 @@ import ProtectedRoute from './components/ProtectedRoute';
 import DashboardLayout from './pages/Dashboard/DashboardLayout';
 import AffiliateProgram from './pages/AffiliateProgram.jsx';
 import OrderInvoice from './pages/Dashboard/OrderInvoice';
-import AdminLayout from './pages/Admin/AdminLayout';
-import AdminOverview from './pages/Admin/AdminOverview';
-import AdminUsers from './pages/Admin/AdminUsers';
-import AdminUserDetail from './pages/Admin/AdminUserDetail';
-import AdminActivities from './pages/Admin/AdminActivities';
-import AdminServices from './pages/Admin/AdminServices';
-import AdminWallets from './pages/Admin/AdminWallets';
-import AdminSettings from './pages/Admin/AdminSettings';
-import AdminServiceForms from './pages/Admin/AdminServiceForms';
 import Home from './pages/Home';
 import AffiliateProgramInfo from './pages/AffiliateProgramInfo';
 import AffiliateDashboard from './pages/AffiliateDashboard';
@@ -34,6 +25,7 @@ import SecretAdminSettings from './pages/SecretAdmin/AdminSettings';
 import SecretAdminReferrals from './pages/SecretAdmin/AdminReferrals';
 import SecretAdminAffiliates from './pages/SecretAdmin/AdminAffiliates';
 import SecretAdminNotifications from './pages/SecretAdmin/AdminNotifications';
+import AdminServiceRequests from './pages/SecretAdmin/AdminServiceRequests';
 
 // Public pages
 // Removed public pages: Exchanges, Pricing, Tutorials, Docs, Blogs, Apply
@@ -111,24 +103,6 @@ function App() {
         <Route path="/dashboard/digital-products" element={<DigitalProducts />} />
       </Route>
 
-      {/* Admin */}
-      <Route
-        element={
-          <ProtectedRoute>
-            <AdminLayout />
-          </ProtectedRoute>
-        }
-      >
-        <Route path="/admin" element={<AdminOverview />} />
-        <Route path="/admin/users" element={<AdminUsers />} />
-        <Route path="/admin/users/:id" element={<AdminUserDetail />} />
-        <Route path="/admin/activities" element={<AdminActivities />} />
-        <Route path="/admin/services" element={<AdminServices />} />
-        <Route path="/admin/forms" element={<AdminServiceForms />} />
-        <Route path="/admin/wallets" element={<AdminWallets />} />
-        <Route path="/admin/settings" element={<AdminSettings />} />
-      </Route>
-
       {/* Secret Admin (JWT cookie protected) */}
       <Route path="/secret-admin/login" element={<AdminLogin />} />
       <Route path="/secret-admin/invite/:token" element={<AdminInviteAccept />} />
@@ -148,6 +122,7 @@ function App() {
         <Route path="/secret-admin/affiliates" element={<SecretAdminAffiliates />} />
         <Route path="/secret-admin/support" element={<SecretAdminSupport />} />
         <Route path="/secret-admin/notifications" element={<SecretAdminNotifications />} />
+        <Route path="/secret-admin/service-requests" element={<AdminServiceRequests />} />
         <Route path="/secret-admin/settings" element={<SecretAdminSettings />} />
       </Route>
 
