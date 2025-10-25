@@ -234,10 +234,10 @@ export default function Mining2() {
         claimed: true
       };
       
-      // Update wallet with 50 DLX reward
+      // Update wallet with 25 DLX reward
       const updatedWallet = {
         ...wallet,
-        miningBalance: Number(wallet.miningBalance || 0) + 50
+        miningBalance: Number(wallet.miningBalance || 0) + 25
       };
       
       // Update user document
@@ -253,14 +253,14 @@ export default function Mining2() {
         userId: uid,
         taskType,
         username: currentTask.username,
-        reward: 50,
+        reward: 25,
         completedAt: serverTimestamp()
       });
       
       // Update local state
       setCurrentTask(newTaskState);
       
-      toast.success(`🎉 Congratulations! You've earned 50 DLX for completing the ${taskType} task!`);
+      toast.success(`🎉 Congratulations! You've earned 25 DLX for completing the ${taskType} task!`);
       
     } catch (error: any) {
       console.error('Error claiming reward:', error);
@@ -492,7 +492,7 @@ export default function Mining2() {
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 sm:gap-6">
             <div className="text-center lg:text-left">
               <h3 className="text-xl sm:text-2xl md:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-amber-500 to-orange-500 tracking-tight">
-                Earn 50 DLX Instantly
+                Earn 25 DLX Per Task
               </h3>
               <p className="mt-2 text-sm font-medium text-gray-400">Complete simple tasks to boost your mining!</p>
             </div>
@@ -524,7 +524,7 @@ export default function Mining2() {
                     onClick={() => handleUsernameSubmit('telegram')}
                     className="px-4 py-2 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold text-sm hover:from-green-700 hover:to-emerald-700 transition-all duration-300"
                   >
-                    Submit & Claim 50 DLX
+                    Submit & Claim 25 DLX
                   </button>
                 </div>
               ) : (
@@ -560,7 +560,7 @@ export default function Mining2() {
                     onClick={() => handleUsernameSubmit('twitter')}
                     className="px-4 py-2 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold text-sm hover:from-green-700 hover:to-emerald-700 transition-all duration-300"
                   >
-                    Submit & Claim 50 DLX
+                    Submit & Claim 25 DLX
                   </button>
                 </div>
               ) : (
@@ -634,7 +634,7 @@ export default function Mining2() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-yellow-400 font-bold">50 DLX</span>
+                            <span className="text-yellow-400 font-bold">25 DLX</span>
                             {telegramTask.claimed ? (
                               <span className="text-green-400 text-sm">✅ Completed</span>
                             ) : (
@@ -656,7 +656,7 @@ export default function Mining2() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-yellow-400 font-bold">50 DLX</span>
+                            <span className="text-yellow-400 font-bold">25 DLX</span>
                             {twitterTask.claimed ? (
                               <span className="text-green-400 text-sm">✅ Completed</span>
                             ) : (

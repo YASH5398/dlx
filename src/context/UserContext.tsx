@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { auth, db } from '../firebase.ts';
+import { auth, firestore } from '../firebase.ts';
 import {
   onAuthStateChanged,
   createUserWithEmailAndPassword,
@@ -12,7 +12,7 @@ import {
   signInWithPhoneNumber,
   sendPasswordResetEmail,
 } from 'firebase/auth';
-import { ref, set, update, get } from 'firebase/database';
+import { doc, setDoc, updateDoc, getDoc, serverTimestamp, getDocs, query, collection, where, increment } from 'firebase/firestore';
 import { logActivity } from '../utils/activity';
 import { randomSecret, otpauthURI, qrCodeUrlFromOtpauth, verifyTOTP, sha256Hex } from '../utils/totp';
 
@@ -94,32 +94,88 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   const isAuthenticated = !!user;
 
+  // Generate unique referral code for new users
+  const generateReferralCode = (): string => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = 'DLX';
+    for (let i = 0; i < 6; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  };
+
   const ensureUserNode = async (uid: string, data?: Record<string, any>) => {
-    const userRef = ref(db, `users/${uid}`);
-    await update(userRef, { profile: data ?? {}, createdAt: Date.now() });
-    // seed wallet if not present
-    await update(ref(db, `users/${uid}/wallet`), { dlx: 100, usdt: 500, inr: 10000 });
-    // ensure referrals node exists
-    try {
-      const referralsSnap = await get(ref(db, `users/${uid}/referrals`));
-      if (!referralsSnap.exists()) {
-        await set(ref(db, `users/${uid}/referrals`), { total: 0, tier: 1 });
-      }
-    } catch {}
-    // ensure orders collection exists
-    try {
-      const ordersSnap = await get(ref(db, `users/${uid}/orders`));
-      if (!ordersSnap.exists()) {
-        await set(ref(db, `users/${uid}/orders`), {});
-      }
-    } catch {}
-    // ensure wallet transactions list exists
-    try {
-      const txSnap = await get(ref(db, `users/${uid}/wallet/transactions`));
-      if (!txSnap.exists()) {
-        await set(ref(db, `users/${uid}/wallet/transactions`), {});
-      }
-    } catch {}
+    const userRef = doc(firestore, 'users', uid);
+    const userSnap = await getDoc(userRef);
+    
+    if (!userSnap.exists()) {
+      // Create complete user document if missing
+      await setDoc(userRef, {
+        name: data?.name ?? 'User',
+        email: data?.email ?? '',
+        phone: data?.phone ?? '',
+        role: 'user',
+        rank: 'starter',
+        status: 'inactive',
+        banned: false,
+        referralCode: generateReferralCode(),
+        referrerCode: data?.referrerCode ?? '',
+        miningStreak: 0,
+        telegramTask: {
+          clicked: false,
+          clickedAt: null,
+          username: '',
+          completed: false,
+          claimed: false
+        },
+        twitterTask: {
+          clicked: false,
+          clickedAt: null,
+          username: '',
+          completed: false,
+          claimed: false
+        },
+        preferences: {
+          theme: 'dark',
+          language: 'English',
+          notifEmail: true,
+          notifSms: false,
+          notifPush: true
+        },
+        wallet: {
+          main: 0,
+          purchase: 0,
+          miningBalance: 0
+        },
+        referralCount: 0,
+        totalEarningsUsd: 0,
+        totalOrders: 0,
+        activeReferrals: 0,
+        createdAt: serverTimestamp(),
+        lastLoginAt: serverTimestamp()
+      });
+    } else {
+      // Update lastLoginAt for existing users
+      await updateDoc(userRef, { lastLoginAt: serverTimestamp() });
+    }
+
+    // Ensure wallet document exists in wallets collection
+    const walletRef = doc(firestore, 'wallets', uid);
+    const walletSnap = await getDoc(walletRef);
+    if (!walletSnap.exists()) {
+      await setDoc(walletRef, {
+        usdt: {
+          mainUsdt: 0,
+          purchaseUsdt: 0
+        },
+        inr: {
+          mainInr: 0,
+          purchaseInr: 0
+        },
+        dlx: 100,
+        walletUpdatedAt: serverTimestamp()
+      });
+    }
   };
 
   const login = async (email: string, password: string) => {
@@ -132,20 +188,94 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     const res = await createUserWithEmailAndPassword(auth, email, password);
     if (name) await updateProfile(res.user, { displayName: name });
     const uid = res.user.uid;
-    await set(ref(db, `users/${uid}`), {
-      profile: { name, email, phone: phone ?? '', referralCode: referralCode ?? '' },
-      wallet: { dlx: 100, usdt: 500, inr: 10000 },
-      referrals: { total: 0, tier: 1 },
-      orders: {},
-      createdAt: Date.now(),
+    
+    // Create complete user document in Firestore
+    await setDoc(doc(firestore, 'users', uid), {
+      name,
+      email,
+      phone: phone ?? '',
+      role: 'user',
+      rank: 'starter',
+      status: 'inactive',
+      banned: false,
+      referralCode: generateReferralCode(),
+      referrerCode: referralCode ?? '',
+      miningStreak: 0,
+      telegramTask: {
+        clicked: false,
+        clickedAt: null,
+        username: '',
+        completed: false,
+        claimed: false
+      },
+      twitterTask: {
+        clicked: false,
+        clickedAt: null,
+        username: '',
+        completed: false,
+        claimed: false
+      },
+      preferences: {
+        theme: 'dark',
+        language: 'English',
+        notifEmail: true,
+        notifSms: false,
+        notifPush: true
+      },
+      wallet: {
+        main: 0,
+        purchase: 0,
+        miningBalance: 0
+      },
+      referralCount: 0,
+      totalEarningsUsd: 0,
+      totalOrders: 0,
+      activeReferrals: 0,
+      createdAt: serverTimestamp(),
+      lastLoginAt: serverTimestamp()
     });
+
+    // Create separate wallet document in wallets collection
+    await setDoc(doc(firestore, 'wallets', uid), {
+      usdt: {
+        mainUsdt: 0,
+        purchaseUsdt: 0
+      },
+      inr: {
+        mainInr: 0,
+        purchaseInr: 0
+      },
+      dlx: 100,
+      walletUpdatedAt: serverTimestamp()
+    });
+
+    // Handle referral system - update referrer's count if valid referral code
+    if (referralCode) {
+      try {
+        const referrerQuery = await getDocs(query(collection(firestore, 'users'), where('referralCode', '==', referralCode)));
+        if (!referrerQuery.empty) {
+          const referrerDoc = referrerQuery.docs[0];
+          await updateDoc(doc(firestore, 'users', referrerDoc.id), {
+            referralCount: increment(1),
+            activeReferrals: increment(1)
+          });
+        }
+      } catch (error) {
+        console.error('Error updating referrer count:', error);
+      }
+    }
+
     await logActivity(uid, 'signup', { referralCode: referralCode ?? null });
   };
 
   const loginWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
     const res = await signInWithPopup(auth, provider);
-    await ensureUserNode(res.user.uid);
+    await ensureUserNode(res.user.uid, {
+      name: res.user.displayName ?? res.user.email ?? 'User',
+      email: res.user.email ?? '',
+      phone: res.user.phoneNumber ?? ''
+    });
     await logActivity(res.user.uid, 'login', { method: 'google' });
   };
 
@@ -160,34 +290,60 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const verifyPhoneOtp = async (code: string) => {
     if (!confirmation) throw new Error('OTP not sent yet');
     const res = await confirmation.confirm(code);
-    await ensureUserNode(res.user.uid);
+    await ensureUserNode(res.user.uid, {
+      name: res.user.displayName ?? res.user.email ?? 'User',
+      email: res.user.email ?? '',
+      phone: res.user.phoneNumber ?? ''
+    });
     setConfirmation(null);
     await logActivity(res.user.uid, 'login', { method: 'phone_otp' });
   };
 
   const logout = async () => {
-    const uid = user?.id;
-    if (uid) await logActivity(uid, 'logout');
-    await signOut(auth);
-    setUser(null);
-    setToken(null);
     try {
-      localStorage.removeItem('dlx-auth');
-      Object.keys(localStorage).forEach((k) => {
-        if (k.startsWith('firebase:') || k.startsWith('dlx-') || k.toLowerCase().includes('auth') || k.toLowerCase().includes('session')) {
-          try { localStorage.removeItem(k); } catch {}
-        }
-      });
-      Object.keys(sessionStorage).forEach((k) => {
-        try { sessionStorage.removeItem(k); } catch {}
-      });
-    } catch {}
-    if (import.meta.env.DEV) {
-      const raw = localStorage.getItem('dlx-auth');
-      if (raw) {
-        console.warn('Post-logout: dlx-auth still present. Clearing again.', raw);
-        try { localStorage.removeItem('dlx-auth'); } catch {}
-      }
+      const uid = user?.id;
+      if (uid) await logActivity(uid, 'logout');
+      
+      // Sign out from Firebase Auth
+      await signOut(auth);
+      
+      // Clear user state
+      setUser(null);
+      setToken(null);
+      setMfaRequired(false);
+      setMfaVerified(false);
+      
+      // Clear all local storage
+      try {
+        localStorage.clear();
+      } catch {}
+      
+      // Clear all session storage
+      try {
+        sessionStorage.clear();
+      } catch {}
+      
+      // Additional cleanup for Firebase-related data
+      try {
+        // Clear any remaining Firebase data
+        Object.keys(localStorage).forEach((key) => {
+          if (key.includes('firebase') || key.includes('auth') || key.includes('session')) {
+            try { localStorage.removeItem(key); } catch {}
+          }
+        });
+        Object.keys(sessionStorage).forEach((key) => {
+          if (key.includes('firebase') || key.includes('auth') || key.includes('session')) {
+            try { sessionStorage.removeItem(key); } catch {}
+          }
+        });
+      } catch {}
+      
+      // Force reload to ensure complete cleanup
+      window.location.href = '/login';
+    } catch (error) {
+      console.error('Logout error:', error);
+      // Even if there's an error, force redirect to login
+      window.location.href = '/login';
     }
   };
 
@@ -196,8 +352,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   };
 
   const refreshMfaStatus = async (uid: string) => {
-    const snap = await get(ref(db, `users/${uid}/security/mfa`));
-    const val = snap.val();
+    const mfaRef = doc(firestore, 'users', uid, 'security', 'mfa');
+    const snap = await getDoc(mfaRef);
+    const val = snap.data();
     const enabled = !!val?.enabled;
     setMfaRequired(enabled);
     setMfaVerified(false);
@@ -210,7 +367,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     const backupCodesPlain: string[] = [];
     for (let i = 0; i < 8; i++) backupCodesPlain.push((await sha256Hex(`${uid}:${Date.now()}:${Math.random()}:${i}`)).slice(0, 10));
     const backupCodesHashed = await Promise.all(backupCodesPlain.map((c) => sha256Hex(c)));
-    await set(ref(db, `users/${uid}/security/mfa`), { secret, enabled: false, backupCodes: backupCodesHashed, createdAt: Date.now() });
+    await setDoc(doc(firestore, 'users', uid, 'security', 'mfa'), { secret, enabled: false, backupCodes: backupCodesHashed, createdAt: serverTimestamp() });
     const account = user.email || user.name || 'user';
     const otpauth = otpauthURI({ secret, account, issuer: 'DLX' });
     const qr = qrCodeUrlFromOtpauth(otpauth);
@@ -220,14 +377,14 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const enableMfa = async (code: string) => {
     if (!user) throw new Error('Not authenticated');
     const uid = user.id;
-    const mfaRef = ref(db, `users/${uid}/security/mfa`);
-    const snap = await get(mfaRef);
-    const val = snap.val();
+    const mfaRef = doc(firestore, 'users', uid, 'security', 'mfa');
+    const snap = await getDoc(mfaRef);
+    const val = snap.data();
     const secret = val?.secret;
     if (!secret) throw new Error('MFA not set up');
     const ok = await verifyTOTP(secret, code);
     if (!ok) return false;
-    await update(mfaRef, { enabled: true, enabledAt: Date.now() });
+    await updateDoc(mfaRef, { enabled: true, enabledAt: serverTimestamp() });
     setMfaVerified(true);
     setMfaRequired(false);
     await logActivity(uid, 'mfa_enabled');
@@ -237,8 +394,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const disableMfa = async () => {
     if (!user) throw new Error('Not authenticated');
     const uid = user.id;
-    const mfaRef = ref(db, `users/${uid}/security/mfa`);
-    await update(mfaRef, { enabled: false, disabledAt: Date.now() });
+    const mfaRef = doc(firestore, 'users', uid, 'security', 'mfa');
+    await updateDoc(mfaRef, { enabled: false, disabledAt: serverTimestamp() });
     setMfaRequired(false);
     setMfaVerified(false);
     await logActivity(uid, 'mfa_disabled');
@@ -247,9 +404,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const verifyMfa = async (code: string) => {
     if (!user) return false;
     const uid = user.id;
-    const mfaRef = ref(db, `users/${uid}/security/mfa`);
-    const snap = await get(mfaRef);
-    const val = snap.val();
+    const mfaRef = doc(firestore, 'users', uid, 'security', 'mfa');
+    const snap = await getDoc(mfaRef);
+    const val = snap.data();
     const secret = val?.secret as string | undefined;
     const bcodes: string[] = Array.isArray(val?.backupCodes) ? val.backupCodes : [];
     let ok = false;
@@ -261,7 +418,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       if (idx >= 0) {
         ok = true;
         bcodes.splice(idx, 1);
-        await update(mfaRef, { backupCodes: bcodes, lastBackupUsedAt: Date.now() });
+        await updateDoc(mfaRef, { backupCodes: bcodes, lastBackupUsedAt: serverTimestamp() });
       }
     }
     if (ok) {

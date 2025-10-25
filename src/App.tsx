@@ -24,6 +24,7 @@ import SecretAdminTransactions from './pages/SecretAdmin/AdminTransactionsEnhanc
 import AdminDepositRequests from './pages/SecretAdmin/AdminDepositRequests';
 import AdminWithdrawalRequests from './pages/SecretAdmin/AdminWithdrawalRequests';
 import SecretAdminSupport from './pages/SecretAdmin/AdminServiceRequestsEnhanced';
+import AdminSupportRequests from './pages/SecretAdmin/AdminSupportRequests';
 import SecretAdminSettings from './pages/SecretAdmin/AdminSettings';
 import SecretAdminReferrals from './pages/SecretAdmin/AdminReferrals';
 import SecretAdminAffiliates from './pages/SecretAdmin/AdminAffiliates';
@@ -36,6 +37,7 @@ import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Otp from './pages/Otp';
 import PhoneSignup from './pages/PhoneSignup';
+import GoogleReferralSignup from './pages/GoogleReferralSignup';
 
 // Dashboard pages
 import DashboardHome from './pages/Dashboard/DashboardHome';
@@ -53,7 +55,7 @@ import Profile from './pages/Dashboard/Profile';
 function PublicLayout() {
   const location = useLocation();
   const isHome = location.pathname === '/';
-  const isAuthRoute = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/phone-signup';
+  const isAuthRoute = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/phone-signup' || location.pathname === '/google-referral-signup';
   return (
     <div className="min-h-screen flex flex-col">
       {!isHome && <Header />}
@@ -78,6 +80,8 @@ function App() {
         <Route path="/signup" element={<Signup />} />
         {/* New phone signup route */}
         <Route path="/phone-signup" element={<PhoneSignup />} />
+        {/* Google signup with referral */}
+        <Route path="/google-referral-signup" element={<GoogleReferralSignup />} />
         <Route path="/otp" element={<Otp />} />
       </Route>
 
@@ -120,6 +124,7 @@ function App() {
         <Route path="/secret-admin/users" element={<SecretAdminUsers />} />
         <Route path="/secret-admin/user-ranks" element={<AdminUserRanks />} />
         <Route path="/secret-admin/orders" element={<SecretAdminOrders />} />
+        <Route path="/secret-admin/support-requests" element={<AdminSupportRequests />} />
         <Route path="/secret-admin/products" element={<SecretAdminProducts />} />
         <Route path="/secret-admin/transactions" element={<SecretAdminTransactions />} />
         <Route path="/secret-admin/transactions/deposit-requests" element={<AdminDepositRequests />} />

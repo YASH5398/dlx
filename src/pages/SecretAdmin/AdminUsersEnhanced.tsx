@@ -28,9 +28,23 @@ import {
   TrendingUp,
   UserPlus,
   Shield,
-  DollarSign
+  DollarSign,
+  Star,
+  Award,
+  Trophy,
+  Medal
 } from 'lucide-react';
 import { getRankInfo, getRankDisplayName } from '../../utils/rankSystem';
+
+// Icon mapping for rank icons
+const rankIconMap: Record<string, React.ComponentType<any>> = {
+  'star': Star,
+  'award': Award,
+  'crown': Crown,
+  'shield': Shield,
+  'trophy': Trophy,
+  'medal': Medal
+};
 
 interface UserDoc {
   email?: string;
@@ -465,7 +479,7 @@ export default function AdminUsersEnhanced() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <rankInfo.icon className={`w-4 h-4 ${rankInfo.textColor}`} />
+                            {React.createElement(rankIconMap[rankInfo.icon] || Star, { className: `w-4 h-4 ${rankInfo.textColor}` })}
                             <Badge variant="outline" className={`${rankInfo.borderColor} ${rankInfo.textColor}`}>
                               {rankInfo.name}
                             </Badge>
@@ -573,7 +587,7 @@ export default function AdminUsersEnhanced() {
                         </div>
                         <div className="text-right">
                           <div className="flex items-center gap-2 mb-2">
-                            <rankInfo.icon className={`w-4 h-4 ${rankInfo.textColor}`} />
+                            {React.createElement(rankIconMap[rankInfo.icon] || Star, { className: `w-4 h-4 ${rankInfo.textColor}` })}
                             <Badge variant="outline" className={`${rankInfo.borderColor} ${rankInfo.textColor} text-xs`}>
                               {rankInfo.name}
                             </Badge>

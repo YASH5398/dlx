@@ -58,6 +58,7 @@ interface OrderItem {
   transactionId?: string;
   buyer?: string;
   downloadUrl?: string | null;
+  productLink?: string | null;
   features?: string[];
   steps?: string[];
   updates?: { date?: string; message: string }[];
@@ -119,7 +120,7 @@ export default function OrdersEnhanced({}: OrdersEnhancedProps) {
     totalOrders: 0,
     serviceOrders: 0,
     digitalOrders: 0,
-    totalEarnings: 0,
+    totalFundUsed: 0,
     pendingOrders: 0,
     completedOrders: 0
   });
@@ -163,6 +164,7 @@ export default function OrdersEnhanced({}: OrdersEnhancedProps) {
             transactionId: d?.transactionId,
             buyer: d?.buyer ?? (d?.userId === user.id ? 'You' : d?.userName),
             downloadUrl: d?.downloadUrl ?? null,
+            productLink: d?.productLink ?? null,
             features: d?.features ?? [],
             steps: d?.steps ?? [],
             updates: d?.updates ?? [],
@@ -210,7 +212,7 @@ export default function OrdersEnhanced({}: OrdersEnhancedProps) {
   useEffect(() => {
     const serviceOrders = orders.filter(o => o.type === 'Service').length;
     const digitalOrders = orders.filter(o => o.type === 'Digital').length;
-    const totalEarnings = orders
+    const totalFundUsed = orders
       .filter(o => o.status === 'paid')
       .reduce((sum, o) => sum + o.priceInUsd, 0);
     const pendingOrders = orders.filter(o => o.status === 'pending').length;
@@ -220,7 +222,7 @@ export default function OrdersEnhanced({}: OrdersEnhancedProps) {
       totalOrders: orders.length,
       serviceOrders,
       digitalOrders,
-      totalEarnings,
+      totalFundUsed,
       pendingOrders,
       completedOrders
     });
@@ -414,8 +416,22 @@ export default function OrdersEnhanced({}: OrdersEnhancedProps) {
           )}
           
           {order.downloadUrl && (
-            <button className="bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 hover:text-purple-200 border border-purple-500/30 hover:border-purple-500/50 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200">
+            <button 
+              onClick={() => window.open(order.downloadUrl!, '_blank')}
+              className="bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 hover:text-purple-200 border border-purple-500/30 hover:border-purple-500/50 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200"
+              title="Download Link"
+            >
               <ArrowDownTrayIcon className="w-4 h-4" />
+            </button>
+          )}
+          
+          {order.productLink && (
+            <button 
+              onClick={() => window.open(order.productLink!, '_blank')}
+              className="bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 hover:text-blue-200 border border-blue-500/30 hover:border-blue-500/50 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200"
+              title="Product Link"
+            >
+              <DocumentArrowDownIcon className="w-4 h-4" />
             </button>
           )}
         </div>
@@ -542,8 +558,8 @@ export default function OrdersEnhanced({}: OrdersEnhancedProps) {
           <div className="text-sm text-gray-400">Digital</div>
         </div>
         <div className="text-center">
-          <div className="text-2xl font-bold text-emerald-400">${analytics.totalEarnings.toFixed(2)}</div>
-          <div className="text-sm text-gray-400">Earnings</div>
+          <div className="text-2xl font-bold text-emerald-400">${analytics.totalFundUsed.toFixed(2)}</div>
+          <div className="text-sm text-gray-400">Fund Used</div>
         </div>
       </div>
     </div>
@@ -661,6 +677,9 @@ export default function OrdersEnhanced({}: OrdersEnhancedProps) {
             opacity: 1;
             transform: translateY(0);
           }
+        }
+        .animate-fadeInUp {
+          animation: fadeInUp 0.6s ease-out forwards;
         }
       `}</style>
       <div className="max-w-7xl mx-auto p-6">
@@ -810,10 +829,9 @@ export default function OrdersEnhanced({}: OrdersEnhancedProps) {
           {filteredOrders.map((order, index) => (
             <div
               key={order.id}
-              className="transform transition-all duration-300 hover:scale-105"
+              className="transform transition-all duration-300 hover:scale-105 animate-fadeInUp"
               style={{
-                animationDelay: `${index * 100}ms`,
-                animation: 'fadeInUp 0.6s ease-out forwards'
+                animationDelay: `${index * 100}ms`
               }}
             >
               <OrderCard order={order} />
@@ -883,17 +901,54 @@ export default function OrdersEnhanced({}: OrdersEnhancedProps) {
                     <div className="bg-gray-800/50 border border-gray-700/50 rounded-lg p-4">
                       <h3 className="font-semibold text-white mb-3">Status</h3>
                       <div className="space-y-3">
-                        <StatusBadge status={selectedOrder.status} orderStatus={selectedOrder.orderStatus} />
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <StatusBadge status={selectedOrder.status} orderStatus={selectedOrder.orderStatus} />
+                          
+                          {/* Product Link Button - Only for Digital Products */}
+                          {selectedOrder.type === 'Digital' && selectedOrder.productLink && (
+                            <a
+                              href={selectedOrder.productLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600/20 text-blue-300 border border-blue-500/30 rounded-lg text-sm font-medium hover:bg-blue-600/30 transition-colors"
+                            >
+                              <DocumentArrowDownIcon className="w-4 h-4" />
+                              Product Link
+                            </a>
+                          )}
+                        </div>
+                        
                         {selectedOrder.downloadUrl && (
                           <a
                             href={selectedOrder.downloadUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 px-3 py-2 bg-purple-600/20 text-purple-300 border border-purple-500/30 rounded-lg text-sm font-medium hover:bg-purple-600/30 transition-colors"
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600/20 text-purple-300 border border-purple-500/30 rounded-lg text-sm font-medium hover:bg-purple-600/30 transition-colors"
                           >
                             <ArrowDownTrayIcon className="w-4 h-4" />
                             Download Files
                           </a>
+                        )}
+                        
+                        {/* Download Link Button - Enhanced visibility */}
+                        {selectedOrder.downloadUrl && (
+                          <div className="mt-4 p-3 bg-gradient-to-r from-purple-600/10 to-blue-600/10 border border-purple-500/20 rounded-lg">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <h4 className="text-sm font-semibold text-white mb-1">Download Access</h4>
+                                <p className="text-xs text-gray-400">Click to download your digital product files</p>
+                              </div>
+                              <a
+                                href={selectedOrder.downloadUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors shadow-lg"
+                              >
+                                <ArrowDownTrayIcon className="w-4 h-4" />
+                                Download Link
+                              </a>
+                            </div>
+                          </div>
                         )}
                       </div>
                     </div>

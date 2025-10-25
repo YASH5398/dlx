@@ -307,9 +307,14 @@ export async function submitAdminProposal(
       tx.set(chatRef, chatMessage);
     });
 
-    // Notify user
-    await notifyUser(requestData.userId, 'Proposal Received', 
-      `Admin has submitted a proposal for your ${requestData.serviceTitle} request. Please review and proceed with payment.`);
+    // Get request data for notification
+    const requestDoc = await getDoc(doc(firestore, 'service_requests', requestId));
+    if (requestDoc.exists()) {
+      const requestData = requestDoc.data() as ServiceRequest;
+      // Notify user
+      await notifyUser(requestData.userId, 'Proposal Received', 
+        `Admin has submitted a proposal for your ${requestData.serviceTitle} request. Please review and proceed with payment.`);
+    }
 
   } catch (error) {
     console.error('Failed to submit proposal:', error);
@@ -514,11 +519,16 @@ export async function reviewPayment(
     });
 
     // Notify user
-    await notifyUser(requestData.userId, 
+    // Get request data for notification
+    const requestDoc = await getDoc(doc(firestore, 'service_requests', requestId));
+    if (requestDoc.exists()) {
+      const requestData = requestDoc.data() as ServiceRequest;
+      await notifyUser(requestData.userId, 
       action === 'approve' ? 'Payment Approved' : 'Payment Rejected',
       action === 'approve' 
         ? 'Your payment has been approved. Work will begin shortly.'
         : `Your payment was rejected. ${reason || 'Please contact support for more information.'}`);
+    }
 
   } catch (error) {
     console.error('Failed to review payment:', error);
@@ -552,7 +562,11 @@ export async function updateOrderStatus(
       });
 
       // Add notification
-      const statusMessages = {
+      const statusMessages: Record<string, string> = {
+        'pending': 'Your request is being reviewed.',
+        'proposal_sent': 'A proposal has been sent for your request.',
+        'awaiting_payment': 'Payment is required to proceed.',
+        'payment_review': 'Your payment is being reviewed.',
         'processing': 'Work has started on your request.',
         'in_progress': 'Work is actively being done on your request.',
         'completed': 'Your order has been completed. Check deliverables.',
@@ -587,16 +601,25 @@ export async function updateOrderStatus(
     });
 
     // Notify user
-    const statusMessages = {
+    const statusMessages: Record<string, string> = {
+      'pending': 'Your request is being reviewed.',
+      'proposal_sent': 'A proposal has been sent for your request.',
+      'awaiting_payment': 'Payment is required to proceed.',
+      'payment_review': 'Your payment is being reviewed.',
       'processing': 'Work has started on your request.',
       'in_progress': 'Work is actively being done on your request.',
       'completed': 'Your order has been completed. Check deliverables.',
       'cancelled': 'Your order has been cancelled.'
     };
 
-    await notifyUser(requestData.userId, 
+    // Get request data for notification
+    const requestDoc = await getDoc(doc(firestore, 'service_requests', requestId));
+    if (requestDoc.exists()) {
+      const requestData = requestDoc.data() as ServiceRequest;
+      await notifyUser(requestData.userId, 
       `Order ${status.charAt(0).toUpperCase() + status.slice(1)}`,
       message || statusMessages[status] || `Order status updated to ${status}.`);
+    }
 
   } catch (error) {
     console.error('Failed to update order status:', error);
@@ -669,9 +692,14 @@ export async function releaseDeliverables(
     });
 
     // Notify user
-    await notifyUser(requestData.userId, 
+    // Get request data for notification
+    const requestDoc = await getDoc(doc(firestore, 'service_requests', requestId));
+    if (requestDoc.exists()) {
+      const requestData = requestDoc.data() as ServiceRequest;
+      await notifyUser(requestData.userId, 
       'Deliverables Released',
       'Your order deliverables have been released. Check your order details for access information.');
+    }
 
   } catch (error) {
     console.error('Failed to release deliverables:', error);
@@ -707,9 +735,14 @@ export async function sendChatMessage(
 
     // Notify recipient
     const recipientType = senderType === 'user' ? 'admin' : 'user';
-    await notifyUser(requestData.userId, 
+    // Get request data for notification
+    const requestDoc = await getDoc(doc(firestore, 'service_requests', requestId));
+    if (requestDoc.exists()) {
+      const requestData = requestDoc.data() as ServiceRequest;
+      await notifyUser(requestData.userId, 
       'New Message',
       `New message in your ${requestData.serviceTitle} order.`);
+    }
 
   } catch (error) {
     console.error('Failed to send chat message:', error);
@@ -734,45 +767,81 @@ export async function submitInquiry(
       submittedAt: serverTimestamp() as Timestamp
     };
 
-    await runTransaction(firestore, async (tx) => {
-      const requestRef = doc(serviceRequestsCol, requestId);
-      const requestSnap = await tx.get(requestRef);
-      
-      if (!requestSnap.exists()) {
-        throw new Error('Service request not found');
+    // First, try to find a service request with this ID
+    let serviceRequestFound = false;
+    
+    try {
+      await runTransaction(firestore, async (tx) => {
+        const requestRef = doc(serviceRequestsCol, requestId);
+        const requestSnap = await tx.get(requestRef);
+        
+        if (requestSnap.exists()) {
+          serviceRequestFound = true;
+          const requestData = requestSnap.data() as ServiceRequest;
+
+          // Add notification
+          const notification: Notification = {
+            id: crypto.randomUUID(),
+            type: 'inquiry',
+            title: 'New Inquiry',
+            message: `New ${inquiryType} submitted for your ${requestData.serviceTitle} order.`,
+            createdAt: serverTimestamp() as Timestamp,
+            read: false
+          };
+
+          // Add inquiry and notification in a single update
+          tx.update(requestRef, {
+            inquiries: arrayUnion(inquiry),
+            notifications: arrayUnion(notification),
+            updatedAt: serverTimestamp()
+          });
+        }
+      });
+    } catch (error) {
+      console.log('Service request not found, trying to create inquiry for order');
+    }
+
+    // If no service request found, create a general inquiry for the order
+    if (!serviceRequestFound) {
+      try {
+        // Create a general inquiry document for digital product orders
+        const inquiryRef = doc(collection(firestore, 'inquiries'));
+        await addDoc(collection(firestore, 'inquiries'), {
+          id: inquiryRef.id,
+          orderId: requestId,
+          userId,
+          userName,
+          inquiryType,
+          message,
+          submittedBy: 'user',
+          submittedAt: serverTimestamp(),
+          status: 'pending',
+          createdAt: serverTimestamp()
+        });
+
+        // Notify admin about the inquiry
+        await notifyAdmin('New product inquiry submitted', {
+          type: 'product_inquiry',
+          orderId: requestId,
+          inquiryType,
+          message,
+          userName
+        });
+
+      } catch (error) {
+        console.error('Failed to create general inquiry:', error);
+        throw new Error('Failed to submit inquiry. Please try again.');
       }
-
-      const requestData = requestSnap.data() as ServiceRequest;
-
-      // Add inquiry to request
-      tx.update(requestRef, {
-        inquiries: arrayUnion(inquiry),
-        updatedAt: serverTimestamp()
-      });
-
-      // Add notification
-      const notification: Notification = {
-        id: crypto.randomUUID(),
+    } else {
+      // Notify admin for service request inquiry
+      await notifyAdmin('New inquiry submitted', {
         type: 'inquiry',
-        title: 'New Inquiry',
-        message: `New ${inquiryType} submitted for your ${requestData.serviceTitle} order.`,
-        createdAt: serverTimestamp() as Timestamp,
-        read: false
-      };
-
-      tx.update(requestRef, {
-        notifications: arrayUnion(notification)
+        requestId,
+        inquiryType,
+        message,
+        userName
       });
-    });
-
-    // Notify admin
-    await notifyAdmin('New inquiry submitted', {
-      type: 'inquiry',
-      requestId,
-      inquiryType,
-      message,
-      userName
-    });
+    }
 
   } catch (error) {
     console.error('Failed to submit inquiry:', error);

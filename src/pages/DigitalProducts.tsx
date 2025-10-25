@@ -100,6 +100,18 @@ export default function DigitalProducts() {
     downloadUrl: "",
     category: "",
   });
+  const [walletBalances, setWalletBalances] = useState<{
+    mainUsdt: number;
+    purchaseUsdt: number;
+    mainInr: number;
+    purchaseInr: number;
+  }>({
+    mainUsdt: 0,
+    purchaseUsdt: 0,
+    mainInr: 0,
+    purchaseInr: 0,
+  });
+  const [purchaseOption, setPurchaseOption] = useState<"main_only" | "split" | "currency_choice">("split");
 
   const isAffiliate = !!user;
 
@@ -133,6 +145,25 @@ export default function DigitalProducts() {
     return () => unsub();
   }, []);
 
+  // Fetch wallet balances
+  useEffect(() => {
+    if (!user) return;
+    
+    const walletRef = doc(firestore, "wallets", user.id);
+    const unsub = onSnapshot(walletRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data() as any;
+        setWalletBalances({
+          mainUsdt: Number(data.mainUsdt || 0),
+          purchaseUsdt: Number(data.purchaseUsdt || 0),
+          mainInr: Number(data.mainInr || 0),
+          purchaseInr: Number(data.purchaseInr || 0),
+        });
+      }
+    });
+    return () => unsub();
+  }, [user]);
+
   const doPurchase = async () => {
     if (!user || !selectedProduct) return;
 
@@ -151,42 +182,108 @@ export default function DigitalProducts() {
         }
         const w = walletSnap.data() as any;
 
-        // Always split 50/50 between mainWallet and purchaseWallet
-        const halfAmount = Number((productPrice / 2).toFixed(2));
+        // Determine payment amount and currency based on purchase option
+        let paymentAmount: number;
+        let currencyToUse: string;
         
-        if (currency === "USDT") {
-          const mainWallet = Number(w.mainUsdt || 0);
-          const purchaseWallet = Number(w.purchaseUsdt || 0);
-          
-          // Check if both wallets have enough funds (50% each)
-          if (mainWallet < halfAmount || purchaseWallet < halfAmount) {
-            throw new Error("Insufficient balance.");
-          }
-          
-          // Deduct 50% from each wallet
-          tx.update(walletRef, { 
-            mainUsdt: mainWallet - halfAmount, 
-            purchaseUsdt: purchaseWallet - halfAmount 
-          });
+        if (purchaseOption === "currency_choice") {
+          currencyToUse = currency;
+          paymentAmount = currency === "INR" ? Math.round(productPrice * USD_TO_INR) : productPrice;
         } else {
-          const amountInr = Math.round(productPrice * USD_TO_INR);
-          const halfAmountInr = Math.floor(amountInr / 2);
-          const mainWallet = Number(w.mainInr || 0);
-          const purchaseWallet = Number(w.purchaseInr || 0);
-          
-          // Check if both wallets have enough funds (50% each)
-          if (mainWallet < halfAmountInr || purchaseWallet < halfAmountInr) {
-            throw new Error("Insufficient balance.");
-          }
-          
-          // Deduct 50% from each wallet
-          tx.update(walletRef, { 
-            mainInr: mainWallet - halfAmountInr, 
-            purchaseInr: purchaseWallet - halfAmountInr 
-          });
+          currencyToUse = "USDT"; // Default to USDT for main_only and split options
+          paymentAmount = productPrice;
         }
 
-        // Handle affiliate commission
+        // Check balance and deduct based on purchase option
+        if (purchaseOption === "main_only") {
+          // Pay from main wallet only
+          if (currencyToUse === "USDT") {
+            const mainWallet = Number(w.mainUsdt || 0);
+            if (mainWallet < paymentAmount) {
+              throw new Error("Insufficient balance in main wallet. Please deposit more funds.");
+            }
+            tx.update(walletRef, { 
+              mainUsdt: mainWallet - paymentAmount
+            });
+          } else {
+            const mainWallet = Number(w.mainInr || 0);
+            if (mainWallet < paymentAmount) {
+              throw new Error("Insufficient balance in main wallet. Please deposit more funds.");
+            }
+            tx.update(walletRef, { 
+              mainInr: mainWallet - paymentAmount
+            });
+          }
+        } else if (purchaseOption === "split") {
+          // Split 50/50 between main and purchase wallets, fallback to main wallet only if purchase wallet insufficient
+          const halfAmount = Number((paymentAmount / 2).toFixed(2));
+          
+          if (currencyToUse === "USDT") {
+            const mainWallet = Number(w.mainUsdt || 0);
+            const purchaseWallet = Number(w.purchaseUsdt || 0);
+            
+            // Check if main wallet has enough for full amount
+            if (mainWallet < paymentAmount) {
+              throw new Error("Insufficient balance in main wallet. Please deposit more funds.");
+            }
+            
+            // If purchase wallet has enough for 50%, split the payment
+            if (purchaseWallet >= halfAmount) {
+              tx.update(walletRef, { 
+                mainUsdt: mainWallet - halfAmount, 
+                purchaseUsdt: purchaseWallet - halfAmount 
+              });
+            } else {
+              // Use only main wallet if purchase wallet is insufficient
+              tx.update(walletRef, { 
+                mainUsdt: mainWallet - paymentAmount
+              });
+            }
+          } else {
+            const halfAmountInr = Math.floor(paymentAmount / 2);
+            const mainWallet = Number(w.mainInr || 0);
+            const purchaseWallet = Number(w.purchaseInr || 0);
+            
+            // Check if main wallet has enough for full amount
+            if (mainWallet < paymentAmount) {
+              throw new Error("Insufficient balance in main wallet. Please deposit more funds.");
+            }
+            
+            // If purchase wallet has enough for 50%, split the payment
+            if (purchaseWallet >= halfAmountInr) {
+              tx.update(walletRef, { 
+                mainInr: mainWallet - halfAmountInr, 
+                purchaseInr: purchaseWallet - halfAmountInr 
+              });
+            } else {
+              // Use only main wallet if purchase wallet is insufficient
+              tx.update(walletRef, { 
+                mainInr: mainWallet - paymentAmount
+              });
+            }
+          }
+        } else if (purchaseOption === "currency_choice") {
+          // Pay from main wallet with chosen currency
+          if (currencyToUse === "USDT") {
+            const mainWallet = Number(w.mainUsdt || 0);
+            if (mainWallet < paymentAmount) {
+              throw new Error("Insufficient balance in main wallet. Please deposit more funds.");
+            }
+            tx.update(walletRef, { 
+              mainUsdt: mainWallet - paymentAmount
+            });
+          } else {
+            const mainWallet = Number(w.mainInr || 0);
+            if (mainWallet < paymentAmount) {
+              throw new Error("Insufficient balance in main wallet. Please deposit more funds.");
+            }
+            tx.update(walletRef, { 
+              mainInr: mainWallet - paymentAmount
+            });
+          }
+        }
+
+        // Handle affiliate commission (always in USDT)
         if (affiliateId) {
           const affRef = doc(firestore, "wallets", affiliateId);
           const affSnap = await tx.get(affRef);
@@ -201,17 +298,19 @@ export default function DigitalProducts() {
           productName: selectedProduct.title,
           productPrice: productPrice,
           productLink: (selectedProduct as any).downloadUrl ?? (selectedProduct as any).productLink ?? "",
-          status: "pending",
+          status: "completed", // Changed to completed since payment is successful
+          purchaseOption: purchaseOption,
+          currency: currencyToUse,
           createdAt: serverTimestamp(),
         });
       });
 
-      setToast({ message: "Purchase successful. Access link available in Orders.", type: "success" });
+      setToast({ message: "Purchase successful! Access link available in Orders.", type: "success" });
       setTimeout(() => setToast(null), 2500);
       setShowModal(false);
       setSelectedProduct(null);
     } catch (e: any) {
-      setToast({ message: e?.message || "Payment failed. Try again.", type: "error" });
+      setToast({ message: e?.message || "Payment failed. Please try again.", type: "error" });
       setTimeout(() => setToast(null), 3000);
     } finally {
       setProcessing(false);
@@ -564,7 +663,12 @@ export default function DigitalProducts() {
                         </button>
                       )}
                       <button
-                        onClick={() => { setSelectedProduct(product); setShowModal(true); }}
+                        onClick={() => { 
+                          setSelectedProduct(product); 
+                          setShowModal(true);
+                          setPurchaseOption("split"); // Reset to default
+                          setCurrency("USDT"); // Reset to default
+                        }}
                         className="flex items-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 transition-all duration-300 font-semibold text-sm shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50"
                       >
                         <ShoppingCart className="w-4 h-4" />
@@ -614,10 +718,10 @@ export default function DigitalProducts() {
               animate="visible"
               exit="exit"
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-lg bg-gradient-to-br from-[#0d1226] to-[#0a0d1f] border border-white/20 rounded-2xl shadow-2xl overflow-hidden"
+              className="w-full max-w-lg max-h-[90vh] bg-gradient-to-br from-[#0d1226] to-[#0a0d1f] border border-white/20 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
             >
               {/* Modal Header */}
-              <div className="bg-gradient-to-r from-blue-600/20 to-purple-600/20 border-b border-white/10 px-6 py-5">
+              <div className="bg-gradient-to-r from-blue-600/20 to-purple-600/20 border-b border-white/10 px-6 py-5 flex-shrink-0">
                 <div className="flex items-center justify-between">
                   <h2 className="text-2xl font-bold flex items-center gap-2">
                     <ShoppingCart className="w-6 h-6 text-blue-400" />
@@ -632,37 +736,112 @@ export default function DigitalProducts() {
                 </div>
               </div>
 
-              {/* Modal Body */}
-              <div className="p-6 space-y-6">
+              {/* Modal Body - Scrollable */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
                 {/* Product Info */}
                 <div className="bg-white/5 border border-white/10 rounded-xl p-4">
                   <div className="text-sm text-gray-400 mb-1">Product</div>
                   <div className="text-lg font-semibold">{selectedProduct.title}</div>
                 </div>
 
+                {/* Wallet Balances */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Your Wallet Balances
+                    </label>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                        <div className="text-sm text-gray-400 mb-1">Main Wallet</div>
+                        <div className="text-lg font-semibold">
+                          {currency === "USDT" 
+                            ? `${walletBalances.mainUsdt.toFixed(2)} USDT`
+                            : `₹${walletBalances.mainInr.toFixed(2)}`
+                          }
+                        </div>
+                      </div>
+                      <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                        <div className="text-sm text-gray-400 mb-1">Purchase Wallet</div>
+                        <div className="text-lg font-semibold">
+                          {currency === "USDT" 
+                            ? `${walletBalances.purchaseUsdt.toFixed(2)} USDT`
+                            : `₹${walletBalances.purchaseInr.toFixed(2)}`
+                          }
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Payment Options */}
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Currency
+                      Purchase Option
                     </label>
-                    <select
-                      className="w-full rounded-xl bg-black/40 border border-white/20 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                      value={currency}
-                      onChange={(e) => setCurrency(e.target.value as Currency)}
-                    >
-                      <option value="USDT">USDT</option>
-                      <option value="INR">INR</option>
-                    </select>
-                  </div>
-                  
-                  {/* Payment Method Info */}
-                  <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
-                    <div className="text-sm text-blue-300 font-medium mb-1">Payment Method</div>
-                    <div className="text-sm text-blue-200">
-                      50% from Main Wallet + 50% from Purchase Wallet
+                    <div className="space-y-3">
+                      <label className="flex items-center space-x-3 p-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="purchaseOption"
+                          value="main_only"
+                          checked={purchaseOption === "main_only"}
+                          onChange={(e) => setPurchaseOption(e.target.value as any)}
+                          className="w-4 h-4 text-blue-600"
+                        />
+                        <div>
+                          <div className="font-medium">Main Wallet Only</div>
+                          <div className="text-sm text-gray-400">Pay from main wallet only</div>
+                        </div>
+                      </label>
+                      
+                      <label className="flex items-center space-x-3 p-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="purchaseOption"
+                          value="split"
+                          checked={purchaseOption === "split"}
+                          onChange={(e) => setPurchaseOption(e.target.value as any)}
+                          className="w-4 h-4 text-blue-600"
+                        />
+                        <div>
+                          <div className="font-medium">50% Main + 50% Purchase</div>
+                          <div className="text-sm text-gray-400">Split payment between both wallets</div>
+                        </div>
+                      </label>
+                      
+                      <label className="flex items-center space-x-3 p-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="purchaseOption"
+                          value="currency_choice"
+                          checked={purchaseOption === "currency_choice"}
+                          onChange={(e) => setPurchaseOption(e.target.value as any)}
+                          className="w-4 h-4 text-blue-600"
+                        />
+                        <div>
+                          <div className="font-medium">Choose Currency</div>
+                          <div className="text-sm text-gray-400">Select USDT or INR payment</div>
+                        </div>
+                      </label>
                     </div>
                   </div>
+                  
+                  {purchaseOption === "currency_choice" && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Currency
+                      </label>
+                      <select
+                        className="w-full rounded-xl bg-black/40 border border-white/20 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                        value={currency}
+                        onChange={(e) => setCurrency(e.target.value as Currency)}
+                      >
+                        <option value="USDT">USDT</option>
+                        <option value="INR">INR</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
 
                 {/* Price Summary */}
@@ -692,8 +871,8 @@ export default function DigitalProducts() {
                 </div>
               </div>
 
-              {/* Modal Footer */}
-              <div className="bg-white/5 border-t border-white/10 px-6 py-5 flex items-center justify-end gap-3">
+              {/* Modal Footer - Sticky */}
+              <div className="bg-white/5 border-t border-white/10 px-6 py-5 flex items-center justify-end gap-3 flex-shrink-0">
                 <button
                   onClick={() => { setShowModal(false); setSelectedProduct(null); }}
                   className="px-6 py-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all duration-300 font-semibold"

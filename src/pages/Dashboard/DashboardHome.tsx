@@ -46,7 +46,7 @@ interface StaticService {
 export default function DashboardHome() {
   const { user } = useUser();
   // const { wallet } = useWallet();
-  const { totalEarnings, activeReferrals, tier } = useReferral();
+  const { totalEarnings, activeReferrals, tier, loading: referralsLoading } = useReferral();
   const { userRankInfo } = useUserRank();
   const { affiliateStatus, joinAffiliateProgram, getAffiliateBadgeText, getAffiliateStatusText } = useAffiliateStatus();
   const navigate = useNavigate();
@@ -63,6 +63,9 @@ export default function DashboardHome() {
 
   // Real-time wallet subscription for dashboard balances
   const [usdtTotal, setUsdtTotal] = useState(0);
+  const [walletLoading, setWalletLoading] = useState(true);
+  const [totalSpent, setTotalSpent] = useState(0);
+  const [totalEarningsComprehensive, setTotalEarningsComprehensive] = useState(0);
 
   // Check for first-time user and show affiliate modal
   useEffect(() => {
@@ -92,22 +95,97 @@ export default function DashboardHome() {
     }
   };
   const [inrMain, setInrMain] = useState(0);
+  // Real-time wallet data fetching - SYNCED WITH WALLET PAGE
   useEffect(() => {
-    if (!user?.id) return;
-    (async () => {
-      const { doc, onSnapshot: onSnap } = await import('firebase/firestore');
-      const uref = doc(firestore, 'users', user.id);
-      const unsub = onSnap(uref, (snap) => {
+    if (!user?.id) {
+      setWalletLoading(false);
+      return;
+    }
+    
+    setWalletLoading(true);
+    const userDoc = doc(firestore, 'users', user.id);
+    const unsub = onSnapshot(userDoc, (snap) => {
+      try {
+        if (!snap.exists()) {
+          console.warn('User document does not exist');
+          setUsdtTotal(0);
+          setInrMain(0);
+          setWalletLoading(false);
+          return;
+        }
+
         const data = snap.data() as any || {};
         const w = data.wallet || {};
         const main = Number(w.main || 0);
         const purchase = Number(w.purchase || 0);
+        
+        // USDT Balance: Combined main + purchase (same as wallet page)
         setUsdtTotal(main + purchase);
+        
+        // INR Balance: From main wallet (same as wallet page)
         setInrMain(main);
-      });
-      return () => { try { unsub(); } catch {} };
-    })();
+        
+        setWalletLoading(false);
+        console.log('Dashboard wallet data updated:', { main, purchase, usdtTotal: main + purchase, inrMain: main });
+      } catch (error) {
+        console.error('Error processing wallet data:', error);
+        setUsdtTotal(0);
+        setInrMain(0);
+        setWalletLoading(false);
+      }
+    }, (err) => {
+      console.error('Dashboard wallet stream failed:', err);
+      setUsdtTotal(0);
+      setInrMain(0);
+      setWalletLoading(false);
+    });
+    return () => { try { unsub(); } catch {} };
   }, [user?.id]);
+
+  // Fetch total spent amount from orders for level progress
+  useEffect(() => {
+    if (!user?.id) return;
+    
+    const ordersQuery = query(
+      collection(firestore, 'orders'),
+      where('userId', '==', user.id),
+      where('status', '==', 'paid')
+    );
+    
+    const unsub = onSnapshot(ordersQuery, (snap) => {
+      let totalSpentAmount = 0;
+      let totalEarningsAmount = 0;
+      
+      snap.forEach((doc) => {
+        const data = doc.data() as any;
+        const amount = Number(data.amountUsd || data.priceInUsd || 0);
+        totalSpentAmount += amount;
+        
+        // Add commission earnings if this user is an affiliate
+        if (data.affiliateId === user.id) {
+          const commission = amount * 0.25; // 25% commission rate
+          totalEarningsAmount += commission;
+        }
+      });
+      
+      setTotalSpent(totalSpentAmount);
+      
+      // Calculate comprehensive total earnings (referral earnings + commission earnings)
+      const comprehensiveTotal = (totalEarnings || 0) + totalEarningsAmount;
+      setTotalEarningsComprehensive(comprehensiveTotal);
+      
+      console.log('Total spent and earnings updated:', { 
+        totalSpent: totalSpentAmount, 
+        totalEarnings: comprehensiveTotal 
+      });
+    }, (err) => {
+      console.error('Orders stream failed:', err);
+      setTotalSpent(0);
+      setTotalEarningsComprehensive(0);
+    });
+    
+    return () => { try { unsub(); } catch {} };
+  }, [user?.id, totalEarnings]);
 
   // Ensure required Firestore docs exist for this user
   useEffect(() => {
@@ -310,28 +388,60 @@ export default function DashboardHome() {
     return () => { try { unsub(); } catch {} };
   }, [user?.id]);
 
-  // Compute progress towards next level based on referrals and orders
+  // Compute progress towards next level based on total spent amount
   useEffect(() => {
     const r = activeReferrals || 0;
-    const o = ordersCount || 0;
+    const spent = totalSpent || 0; // Use actual total spent amount
 
-    // Targets vary by tier: Starter -> Silver, Silver -> Gold
-    const targets = tier === 1
-      ? { referrals: 5, orders: 5 }
-      : tier === 2
-      ? { referrals: 20, orders: 30 }
-      : { referrals: 0, orders: 0 };
+    // Rank progression thresholds based on total spent amount
+    const rankThresholds = {
+      'starter': { minSpending: 0, minReferrals: 0 },
+      'dlx-associate': { minSpending: 400, minReferrals: 5 }, // $400 spent → DLX Associate
+      'dlx-executive': { minSpending: 2000, minReferrals: 15 }, // $2000 spent → DLX Executive  
+      'dlx-director': { minSpending: 10000, minReferrals: 30 }, // $10000 spent → DLX Director
+      'dlx-president': { minSpending: 50000, minReferrals: 50 } // $50000 spent → DLX President
+    };
 
-    if (tier >= 3) {
+    // Determine current rank based on spending
+    let currentRank = 'starter';
+    let nextRank = 'dlx-associate';
+    let nextThreshold = rankThresholds['dlx-associate'];
+
+    if (spent >= rankThresholds['dlx-president'].minSpending && r >= rankThresholds['dlx-president'].minReferrals) {
+      currentRank = 'dlx-president';
       setProgress(100);
       return;
+    } else if (spent >= rankThresholds['dlx-director'].minSpending && r >= rankThresholds['dlx-director'].minReferrals) {
+      currentRank = 'dlx-director';
+      nextRank = 'dlx-president';
+      nextThreshold = rankThresholds['dlx-president'];
+    } else if (spent >= rankThresholds['dlx-executive'].minSpending && r >= rankThresholds['dlx-executive'].minReferrals) {
+      currentRank = 'dlx-executive';
+      nextRank = 'dlx-director';
+      nextThreshold = rankThresholds['dlx-director'];
+    } else if (spent >= rankThresholds['dlx-associate'].minSpending && r >= rankThresholds['dlx-associate'].minReferrals) {
+      currentRank = 'dlx-associate';
+      nextRank = 'dlx-executive';
+      nextThreshold = rankThresholds['dlx-executive'];
     }
 
-    const rPct = targets.referrals > 0 ? Math.min(1, r / targets.referrals) : 0;
-    const oPct = targets.orders > 0 ? Math.min(1, o / targets.orders) : 0;
-    const pct = Math.min(100, ((rPct + oPct) / 2) * 100);
+    // Calculate progress towards next rank
+    const currentThreshold = rankThresholds[currentRank as keyof typeof rankThresholds];
+    const spendingProgress = Math.min(1, spent / nextThreshold.minSpending);
+    const referralProgress = Math.min(1, r / nextThreshold.minReferrals);
+    
+    // Progress is based on both spending and referrals (both must be met)
+    const pct = Math.min(100, Math.min(spendingProgress, referralProgress) * 100);
     setProgress(Number(pct.toFixed(1)));
-  }, [activeReferrals, ordersCount, tier]);
+    
+    console.log('Level progress updated:', { 
+      currentRank, 
+      nextRank, 
+      spent, 
+      referrals: r, 
+      progress: pct 
+    });
+  }, [activeReferrals, totalSpent, tier]);
 
   const levelLabel = tier === 1 ? 'Starter' : tier === 2 ? 'Silver' : 'Gold';
 
@@ -393,12 +503,6 @@ export default function DashboardHome() {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                <div className="px-3 py-2 rounded-xl bg-slate-800/60 backdrop-blur-sm shadow-lg border border-slate-700/50">
-                  <p className="text-xs text-slate-400 mb-0.5">Tier Level</p>
-                  <p className="text-sm sm:text-lg font-bold bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">
-                    {levelLabel}
-                  </p>
-                </div>
                 <div className={`px-3 py-2 rounded-xl backdrop-blur-sm shadow-lg border ${userRankInfo.bgColor} ${userRankInfo.borderColor}`}>
                   <p className="text-xs text-slate-400 mb-0.5">Current Rank</p>
                   <p className={`text-sm sm:text-lg font-bold ${userRankInfo.textColor}`}>
@@ -444,9 +548,9 @@ export default function DashboardHome() {
                 </div>
                 <h3 className="text-sm font-medium text-slate-400 mb-1">Total Earnings</h3>
                 <p className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
-                  ${Number(totalEarnings || 0).toFixed(2)}
+                  ${Number(totalEarningsComprehensive || 0).toFixed(2)}
                 </p>
-                <p className="text-xs text-slate-500 mt-2">Referral Earnings</p>
+                <p className="text-xs text-slate-500 mt-2">Referral + Commission Earnings</p>
               </div>
               <div className="h-1 bg-gradient-to-r from-cyan-500 to-blue-600"></div>
             </div>
@@ -466,7 +570,7 @@ export default function DashboardHome() {
                 </div>
                 <h3 className="text-sm font-medium text-slate-400 mb-1">USDT Balance</h3>
                 <p className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-green-400 bg-clip-text text-transparent">
-                  ${Number(usdtTotal || 0).toFixed(2)}
+                  {walletLoading ? 'Loading...' : `$${Number(usdtTotal || 0).toFixed(2)}`}
                 </p>
                 <p className="text-xs text-slate-500 mt-2">Available in Wallet</p>
               </div>
@@ -486,7 +590,7 @@ export default function DashboardHome() {
                 </div>
                 <h3 className="text-sm font-medium text-slate-400 mb-1">INR Balance</h3>
                 <p className="text-3xl font-bold bg-gradient-to-r from-orange-400 to-amber-400 bg-clip-text text-transparent">
-                  ₹{Number(inrMain || 0).toFixed(2)}
+                  {walletLoading ? 'Loading...' : `₹${Number(inrMain || 0).toFixed(2)}`}
                 </p>
                 <p className="text-xs text-slate-500 mt-2">Available in Wallet</p>
               </div>
@@ -507,7 +611,7 @@ export default function DashboardHome() {
                 </div>
                 <h3 className="text-sm font-medium text-slate-400 mb-1">Active Referrals</h3>
                 <p className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-                  {activeReferrals || 0}
+                  {referralsLoading ? 'Loading...' : (activeReferrals || 0)}
                 </p>
                 <p className="text-xs text-slate-500 mt-2">Total Referrals • Orders: {ordersCount}</p>
               </div>
@@ -748,15 +852,17 @@ export default function DashboardHome() {
                       </p>
                     </div>
 
-                    {/* Commission Info */}
-                    <div className="mb-3 sm:mb-4 p-2 sm:p-3 rounded-lg bg-slate-700/30 border border-slate-600/30">
-                      <div className="text-center">
-                        <p className="text-xs text-slate-400 mb-1">Your Commission</p>
-                        <p className={`text-lg sm:text-2xl font-bold ${userRankInfo.textColor}`}>
-                          {userRankInfo.commissionPercentage}%
-                        </p>
+                    {/* Commission Info - Only for Affiliates */}
+                    {affiliateStatus.isApproved && (
+                      <div className="mb-3 sm:mb-4 p-2 sm:p-3 rounded-lg bg-slate-700/30 border border-slate-600/30">
+                        <div className="text-center">
+                          <p className="text-xs text-slate-400 mb-1">Your Commission</p>
+                          <p className={`text-lg sm:text-2xl font-bold ${userRankInfo.textColor}`}>
+                            {userRankInfo.commissionPercentage}%
+                          </p>
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     {/* Share Button for Affiliates */}
                     {affiliateStatus.isApproved && (

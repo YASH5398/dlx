@@ -60,6 +60,7 @@ export interface AdminNotification {
   id: string;
   requestId: string;
   userId: string;
+  userName?: string;
   message: string;
   createdAt: number;
   read?: boolean;
@@ -86,80 +87,14 @@ class SupportService {
     }
   ): Promise<string> {
     try {
-      if (type === 'ai_agent') {
-        // 1) Create ticket via backend API
-        const res = await fetch(`${API_BASE}/api/tickets`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user_id: userId,
-            subject: metadata?.title || 'AI Agent Support Request',
-            category: metadata?.category || 'general',
-            description: initialMessage,
-            priority: metadata?.priority || 'medium',
-          })
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err?.error || 'Failed to create ticket');
-        }
-        const ticket = await res.json();
-        const requestId = ticket?.id as string;
-
-        // 2) Mirror into Firestore support_requests for UI and subscriptions
-        const requestData: Omit<SupportRequest, 'id'> = {
-          userId,
-          userName,
-          userEmail,
-          status: 'pending',
-          type,
-          title: metadata?.title || 'AI Agent Support Request',
-          category: metadata?.category || 'general',
-          priority: metadata?.priority || 'medium',
-          createdAt: serverTimestamp(),
-          lastMessageAt: serverTimestamp(),
-          metadata: {
-            userAgent: metadata?.userAgent || navigator?.userAgent || 'Unknown',
-            referrer: metadata?.referrer || document?.referrer || 'Unknown',
-            sessionId: metadata?.sessionId || `session_${Date.now()}`,
-          },
-        };
-
-        // Create the document with the specific ID
-        await setDoc(doc(firestore, 'support_requests', requestId), requestData);
-
-        // 3) Add initial message to Firestore thread
-        await this.addMessage(requestId, {
-          sender: 'user',
-          senderName: userName,
-          senderId: userId,
-          text: initialMessage,
-          type: 'ai_request',
-          status: 'sent',
-        });
-
-        // 4) Notify admins
-        await this.createAdminNotification({
-          type: 'new_request',
-          requestId,
-          userId,
-          userName,
-          message: `New AI Agent request from ${userName}`,
-          read: false,
-        });
-
-        console.log(`Support ticket created via backend: ${requestId}`);
-        return requestId;
-      }
-
-      // Default: Live chat request handled entirely in Firestore
+      // Create support request directly in Firestore (no backend API dependency)
       const requestData: Omit<SupportRequest, 'id'> = {
         userId,
         userName,
         userEmail,
         status: 'pending',
         type,
-        title: metadata?.title || 'Live Chat Request',
+        title: metadata?.title || `${type === 'ai_agent' ? 'AI Agent' : 'Live Chat'} Support Request`,
         category: metadata?.category || 'general',
         priority: metadata?.priority || 'medium',
         createdAt: serverTimestamp(),
@@ -172,27 +107,41 @@ class SupportService {
       };
 
       const docRef = await addDoc(this.supportRequestsRef, requestData);
+      const requestId = docRef.id;
 
-      await this.addMessage(docRef.id, {
+      // Add initial message to Firestore thread
+      await this.addMessage(requestId, {
         sender: 'user',
         senderName: userName,
         senderId: userId,
         text: initialMessage,
-        type: 'message',
+        type: type === 'ai_agent' ? 'ai_request' : 'message',
         status: 'sent',
       });
 
+      // Notify admins
       await this.createAdminNotification({
-        type: 'new_request',
-        requestId: docRef.id,
+        requestId,
         userId,
         userName,
-        message: `New Live Chat request from ${userName}`,
+        message: `New ${type === 'ai_agent' ? 'AI Agent' : 'Live Chat'} request from ${userName}`,
         read: false,
       });
 
-      console.log(`Support request created: ${docRef.id}`);
-      return docRef.id;
+      // For AI Agent requests, add a system message about waiting for agent
+      if (type === 'ai_agent') {
+        await this.addMessage(requestId, {
+          sender: 'admin',
+          senderName: 'System',
+          senderId: 'system',
+          text: 'Your request has been submitted to our AI Agent support team. An agent will connect with you shortly. Please wait while we process your request.',
+          type: 'system',
+          status: 'sent',
+        });
+      }
+
+      console.log(`Support request created: ${requestId}`);
+      return requestId;
     } catch (error) {
       console.error('Error creating support request:', error);
       throw new Error('Failed to create support request');
@@ -223,7 +172,6 @@ class SupportService {
       // Create notification for admin if message is from user
       if (messageData.sender === 'user') {
         await this.createAdminNotification({
-          type: 'new_message',
           requestId,
           userId: messageData.senderId,
           userName: messageData.senderName,
@@ -336,7 +284,7 @@ class SupportService {
     notification: Omit<AdminNotification, 'id' | 'createdAt'>
   ): Promise<string> {
     try {
-      const docRef = await addDoc(this.notificationsRef, {
+      const docRef = await addDoc(this.adminNotificationsRef, {
         ...notification,
         createdAt: serverTimestamp()
       });
@@ -375,20 +323,8 @@ class SupportService {
     message: string
   ): Promise<{ success: boolean; reply?: string; error?: string }> {
     try {
-      // Call backend AI endpoint
-      const res = await fetch(`${API_BASE}/api/ai-chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: message, userId }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err?.error || 'AI service unavailable');
-      }
-
-      const data = await res.json();
-      const reply = (data?.reply as string) || `Thanks, ${userName}! I understand you're asking: "${message}".`;
+      // Simulate AI response with intelligent fallback
+      const reply = this.generateAIResponse(message, userName);
 
       // Save to support_requests collection for history under a generic chatbot session
       const chatSessionId = `chatbot_${userId}`;
@@ -449,6 +385,44 @@ class SupportService {
       console.error('Error handling AI chat message:', error);
       return { success: false, error: 'Failed to process AI chat message' };
     }
+  }
+
+  // Generate AI response based on message content
+  private generateAIResponse(message: string, userName: string): string {
+    const lowerMessage = message.toLowerCase();
+    
+    // Greeting responses
+    if (lowerMessage.includes('hello') || lowerMessage.includes('hi') || lowerMessage.includes('hey')) {
+      return `Hello ${userName}! 👋 I'm your AI assistant. How can I help you today? I can assist with questions about our services, pricing, account issues, or general inquiries.`;
+    }
+    
+    // Service-related questions
+    if (lowerMessage.includes('service') || lowerMessage.includes('what do you offer')) {
+      return `We offer a comprehensive range of digital services including:\n\n• 🪙 Crypto Token Creation ($2,999)\n• 🎨 Website Development ($1,499)\n• 💬 Chatbot Development ($999)\n• 📱 Mobile App Development ($250)\n• 🤖 Telegram Bot Development ($799)\n• 🔍 Smart Contract Audits ($2,499)\n• 🛒 E-commerce Store Setup ($190)\n• 📈 TradingView Indicators ($30)\n• 📊 Social Media Management ($20/month)\n• 🎬 Video Editing Services ($15)\n\nWould you like more details about any specific service?`;
+    }
+    
+    // Pricing questions
+    if (lowerMessage.includes('price') || lowerMessage.includes('cost') || lowerMessage.includes('how much')) {
+      return `Our pricing varies by service complexity:\n\n💰 **Starting Prices:**\n• Basic services: $15-$50\n• Development services: $250-$999\n• Premium services: $1,499-$2,999\n\n💳 **Payment Options:**\n• USDT (crypto)\n• INR (Indian Rupees)\n• Multiple wallet options\n\n🎯 **Affiliate Program:**\n• Earn 20-40% commission\n• Refer clients and earn\n• No upfront costs\n\nWould you like a custom quote for your specific needs?`;
+    }
+    
+    // Account/technical issues
+    if (lowerMessage.includes('account') || lowerMessage.includes('login') || lowerMessage.includes('password')) {
+      return `I can help with account-related issues:\n\n🔐 **Account Problems:**\n• Password reset\n• Login issues\n• Profile updates\n• Security concerns\n\n💼 **Account Features:**\n• Wallet management\n• Order tracking\n• Referral system\n• Mining rewards\n\nFor urgent account issues, I can connect you with our support team. What specific account problem are you experiencing?`;
+    }
+    
+    // Mining/rewards questions
+    if (lowerMessage.includes('mining') || lowerMessage.includes('reward') || lowerMessage.includes('dlx')) {
+      return `Mining System Overview:\n\n⛏️ **Daily Mining:**\n• Claim daily rewards\n• Build mining streaks\n• Earn DLX tokens\n\n🎯 **Task Rewards:**\n• Telegram task: 25 DLX\n• Twitter task: 25 DLX\n• Total: 50 DLX per day\n\n💎 **DLX Token:**\n• Current value: $0.10\n• Tradeable on exchanges\n• Multiple earning methods\n\nNeed help with mining or want to start earning?`;
+    }
+    
+    // Support/help requests
+    if (lowerMessage.includes('help') || lowerMessage.includes('support') || lowerMessage.includes('problem')) {
+      return `I'm here to help! 🛠️\n\n**Common Solutions:**\n• Check our FAQ section\n• Review account settings\n• Verify payment methods\n• Clear browser cache\n\n**Contact Options:**\n• AI Chatbot (me!) - instant responses\n• AI Agent - human support\n• Support tickets - detailed help\n\nWhat specific issue can I help you resolve?`;
+    }
+    
+    // Default response
+    return `Thanks for your message, ${userName}! 🤖\n\nI understand you're asking: "${message}"\n\nI'm here to help with:\n• Service information\n• Pricing details\n• Account support\n• Technical issues\n• Mining questions\n• General inquiries\n\nCould you provide more specific details about what you need help with?`;
   }
 
   /**

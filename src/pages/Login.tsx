@@ -9,15 +9,12 @@ import { useUser } from '../context/UserContext';
  */
 
 const Login: React.FC = () => {
-  const { login, loginWithGoogle, sendPhoneOtp, verifyPhoneOtp, resetPassword, isAuthenticated } = useUser();
+  const { login, loginWithGoogle, resetPassword, isAuthenticated } = useUser();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showPhoneLogin, setShowPhoneLogin] = useState(false);
 
   // If already authenticated, redirect to dashboard overview
   useEffect(() => {
@@ -61,32 +58,6 @@ const Login: React.FC = () => {
     }
   };
 
-  const handleSendOtp = async () => {
-    setError(null);
-    if (!/^\d{10}$/.test(phone)) return setError('Enter valid 10-digit phone');
-    try {
-      setLoading(true);
-      await sendPhoneOtp(phone);
-    } catch (e: any) {
-      setError(e?.message ?? 'Failed to send OTP');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerifyOtp = async () => {
-    setError(null);
-    if (!otp) return setError('Enter the 6-digit OTP');
-    try {
-      setLoading(true);
-      await verifyPhoneOtp(otp);
-      navigate('/dashboard');
-    } catch (e: any) {
-      setError(e?.message ?? 'Invalid OTP');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleResetPassword = async () => {
     setError(null);
@@ -169,12 +140,6 @@ const Login: React.FC = () => {
               </svg>
               Continue with Google
             </button>
-            <button className="social-btn phone" onClick={() => setShowPhoneLogin(true)}>
-              <svg className="social-icon" viewBox="0 0 24 24">
-                <path fill="currentColor" d="M6.62 10.79a15.05 15.05 0 006.59 6.59l1.5-1.5a1 1 0 011.11-.27 11.36 11.36 0 003.55.57 1 1 0 011 1v3.5a1 1 0 01-1 1A19 19 0 013 5a1 1 0 011-1h3.5a1 1 0 011 1 11.36 11.36 0 00.57 3.55 1 1 0 01-.27 1.11z"/>
-              </svg>
-              Continue with Phone
-            </button>
           </div>
 
           <div className="divider">
@@ -227,36 +192,6 @@ const Login: React.FC = () => {
               {loading ? 'Signing in...' : 'Sign in'}
             </button>
 
-            {/* Phone OTP login (hidden until toggled) */}
-            <div className={`phone-login-panel ${showPhoneLogin ? 'open' : ''}`}>
-              <div className="form-group" style={{ marginTop: '1rem' }}>
-                <label className="form-label">Phone (10 digits)</label>
-                <div className="password-wrapper">
-                  <input 
-                    type="tel" 
-                    className="form-input"
-                    placeholder="9876543210"
-                    value={phone}
-                    onChange={(e)=>setPhone(e.target.value.replace(/[^\d]/g, '').slice(0,10))}
-                  />
-                  <button type="button" className="forgot-link" onClick={handleSendOtp}>Send OTP</button>
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Enter OTP</label>
-                <div className="password-wrapper">
-                  <input 
-                    type="text" 
-                    className="form-input"
-                    placeholder="6-digit OTP"
-                    value={otp}
-                    onChange={(e)=>setOtp(e.target.value.replace(/[^\d]/g, '').slice(0,6))}
-                  />
-                  <button type="button" className="btn-signin" onClick={handleVerifyOtp} style={{ padding: '0.6rem 1rem' }}>Verify OTP</button>
-                </div>
-              </div>
-            </div>
           </form>
 
           {/* Sign Up Link */}
@@ -442,7 +377,7 @@ const Login: React.FC = () => {
         /* Social Login */
         .social-login {
           display: grid;
-          grid-template-columns: 1fr 1fr;
+          grid-template-columns: 1fr;
           gap: 1rem;
           margin-bottom: 2rem;
         }
@@ -474,29 +409,6 @@ const Login: React.FC = () => {
           height: 20px;
         }
 
-        .social-btn.phone {
-          background: rgba(100, 116, 139, 0.2);
-          border-color: rgba(100, 116, 139, 0.3);
-        }
-
-        .social-btn.phone:hover {
-          background: rgba(102, 126, 234, 0.2);
-          border-color: rgba(102, 126, 234, 0.5);
-        }
-
-        .phone-login-panel {
-          max-height: 0;
-          opacity: 0;
-          overflow: hidden;
-          transform: translateY(-8px);
-          transition: max-height 0.4s ease, opacity 0.3s ease, transform 0.3s ease;
-        }
-
-        .phone-login-panel.open {
-          max-height: 350px;
-          opacity: 1;
-          transform: translateY(0);
-        }
 
         /* Divider */
         .divider {
@@ -708,9 +620,6 @@ const Login: React.FC = () => {
             font-size: 2rem;
           }
 
-          .social-login {
-            grid-template-columns: 1fr;
-          }
 
           .social-btn {
             font-size: 0.9rem;

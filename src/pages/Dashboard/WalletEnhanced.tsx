@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useWallet } from '../../hooks/useWallet';
+import { useReferral } from '../../hooks/useReferral';
 import { firestore } from '../../firebase';
 import { 
   doc, 
@@ -10,7 +11,8 @@ import {
   orderBy, 
   serverTimestamp,
   where,
-  getDocs
+  getDocs,
+  getDoc
 } from 'firebase/firestore';
 import { useUser } from '../../context/UserContext';
 import { useNotifications } from '../../context/NotificationContext';
@@ -63,6 +65,7 @@ export default function WalletEnhanced() {
   const { wallet } = useWallet();
   const { user } = useUser();
   const { addNotification } = useNotifications();
+  const { totalEarnings, activeReferrals } = useReferral();
   const uid = user?.id;
   
   const [activeFlow, setActiveFlow] = useState<FlowType>(null);
@@ -91,6 +94,19 @@ export default function WalletEnhanced() {
   const [mainInr, setMainInr] = useState(0);
   const [purchaseUsdt, setPurchaseUsdt] = useState(0);
   const [purchaseInr, setPurchaseInr] = useState(0);
+  
+  // User document fields for wallet
+  const [miningBalance, setMiningBalance] = useState(0);
+  const [mainBalance, setMainBalance] = useState(0);
+  const [purchaseBalance, setPurchaseBalance] = useState(0);
+  const [totalMinedDLX, setTotalMinedDLX] = useState(0);
+  
+  // Enhanced wallet data for dashboard sync
+  const [totalEarningsUsd, setTotalEarningsUsd] = useState(0);
+  const [referralEarnings, setReferralEarnings] = useState(0);
+  const [totalReferrals, setTotalReferrals] = useState(0);
+  const [totalReferralOrders, setTotalReferralOrders] = useState(0);
+  const [inrBalance, setInrBalance] = useState(0);
 
   const dlxUsdRate = 0.1;
   const dlxUsdValue = useMemo(() => (wallet?.dlx ?? 0) * dlxUsdRate, [wallet?.dlx]);
@@ -119,6 +135,120 @@ export default function WalletEnhanced() {
       setPurchaseInr(0);
     });
     return () => { try { unsub(); } catch {} };
+  }, [uid]);
+
+  // Stream user document for wallet fields - SYNCED WITH DASHBOARD
+  useEffect(() => {
+    if (!uid) return;
+    const userDoc = doc(firestore, 'users', uid);
+    const unsub = onSnapshot(userDoc, (snap) => {
+      const data = (snap.data() as any) || {};
+      const w = data.wallet || {};
+      const main = Number(w.main || 0);
+      const purchase = Number(w.purchase || 0);
+      
+      // Set wallet balances to match dashboard exactly
+      setMainBalance(main);
+      setPurchaseBalance(purchase);
+      setMiningBalance(Number(w.miningBalance || 0));
+      
+      // Enhanced wallet data for dashboard sync
+      setTotalEarningsUsd(Number(data.totalEarningsUsd || 0));
+      setReferralEarnings(Number(data.referralEarnings || 0));
+      setTotalReferrals(Number(data.referralCount || 0));
+      setInrBalance(main); // INR balance from main wallet (same as dashboard)
+      
+      // Update USDT totals to match dashboard calculation
+      setMainUsdt(main);
+      setPurchaseUsdt(purchase);
+    }, (err) => {
+      console.error('User document stream failed:', err);
+      setMiningBalance(0);
+      setMainBalance(0);
+      setPurchaseBalance(0);
+      setTotalEarningsUsd(0);
+      setReferralEarnings(0);
+      setTotalReferrals(0);
+      setInrBalance(0);
+      setMainUsdt(0);
+      setPurchaseUsdt(0);
+    });
+    return () => { try { unsub(); } catch {} };
+  }, [uid]);
+
+  // Stream referral data for real-time updates
+  useEffect(() => {
+    if (!uid) return;
+    const referralDoc = doc(firestore, 'referrals', uid);
+    const unsub = onSnapshot(referralDoc, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data() as any;
+        setReferralEarnings(Number(data.totalEarningsUsd || 0));
+        setTotalReferrals(Number(data.referralCount || 0));
+      }
+    }, (err) => {
+      console.error('Referral document stream failed:', err);
+    });
+    return () => { try { unsub(); } catch {} };
+  }, [uid]);
+
+  // Stream referral orders for total count
+  useEffect(() => {
+    if (!uid) return;
+    const ordersQuery = query(
+      collection(firestore, 'orders'),
+      where('affiliateId', '==', uid)
+    );
+    const unsub = onSnapshot(ordersQuery, (snap) => {
+      setTotalReferralOrders(snap.size);
+    }, (err) => {
+      console.error('Referral orders stream failed:', err);
+    });
+    return () => { try { unsub(); } catch {} };
+  }, [uid]);
+
+  // Calculate total mined DLX from mining history
+  useEffect(() => {
+    if (!uid) return;
+    
+    const calculateTotalMinedDLX = async () => {
+      try {
+        // Get mining history from user document
+        const userDoc = doc(firestore, 'users', uid);
+        const userSnap = await getDoc(userDoc);
+        const userData = userSnap.exists() ? userSnap.data() as any : {};
+        
+        // Get mining transactions from transactions collection
+        const transactionsRef = collection(firestore, 'transactions');
+        const q = query(
+          transactionsRef,
+          where('userId', '==', uid),
+          where('type', '==', 'mining')
+        );
+        
+        const transactionsSnap = await getDocs(q);
+        let totalMined = 0;
+        
+        transactionsSnap.forEach((doc) => {
+          const data = doc.data() as any;
+          if (data.amount && data.type === 'mining') {
+            totalMined += Number(data.amount || 0);
+          }
+        });
+        
+        // Also check user document for mining balance
+        if (userData?.miningBalance) {
+          totalMined += Number(userData.miningBalance || 0);
+        }
+        
+        setTotalMinedDLX(totalMined);
+      } catch (error) {
+        console.error('Error calculating total mined DLX:', error);
+        setTotalMinedDLX(0);
+      }
+    };
+    
+    calculateTotalMinedDLX();
   }, [uid]);
 
   // Stream user's deposit requests
@@ -208,7 +338,7 @@ export default function WalletEnhanced() {
         amount: req.amount.toFixed(2),
         currency: req.currency || 'USDT',
         status: req.status === 'pending' ? 'pending' : 
-                req.status === 'approved' ? 'success' :
+                req.status === 'approved' ? 'approved' :
                 req.status === 'rejected' ? 'failed' : 'completed',
         description: `Deposit via ${req.method} ${req.status === 'pending' ? '(Awaiting verification)' : 
                      req.status === 'approved' ? '(Approved and Credited)' :
@@ -228,7 +358,7 @@ export default function WalletEnhanced() {
         amount: req.amount.toFixed(2),
         currency: req.currency || 'USDT',
         status: req.status === 'pending' ? 'pending' : 
-                req.status === 'approved' ? 'success' :
+                req.status === 'approved' ? 'approved' :
                 req.status === 'rejected' ? 'failed' : 'completed',
         description: `Withdrawal to ${req.method} ${req.status === 'pending' ? '(Awaiting verification)' : 
                      req.status === 'approved' ? '(Approved and Processed)' :
@@ -408,23 +538,69 @@ export default function WalletEnhanced() {
 
   return (
     <div className="space-y-6">
-      {/* Wallet Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg p-4 text-white">
-          <div className="text-sm opacity-90">Main USDT</div>
-          <div className="text-2xl font-bold">{mainUsdt.toFixed(2)}</div>
+      {/* Main Wallet Section - Synced with Dashboard */}
+      <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-lg p-6 border border-slate-700">
+        <h3 className="text-xl font-semibold text-white mb-4">Main Wallet</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg p-4 text-white">
+            <div className="text-sm opacity-90">USDT Balance</div>
+            <div className="text-2xl font-bold">${(mainUsdt + purchaseUsdt).toFixed(2)}</div>
+          </div>
+          <div className="bg-gradient-to-r from-green-600 to-green-700 rounded-lg p-4 text-white">
+            <div className="text-sm opacity-90">INR Balance</div>
+            <div className="text-2xl font-bold">₹{inrBalance.toFixed(2)}</div>
+          </div>
+          <div className="bg-gradient-to-r from-purple-600 to-purple-700 rounded-lg p-4 text-white">
+            <div className="text-sm opacity-90">Total Earnings</div>
+            <div className="text-2xl font-bold">${totalEarningsUsd.toFixed(2)}</div>
+          </div>
+          <div className="bg-gradient-to-r from-orange-600 to-orange-700 rounded-lg p-4 text-white">
+            <div className="text-sm opacity-90">Referral Earnings</div>
+            <div className="text-2xl font-bold">${referralEarnings.toFixed(2)}</div>
+          </div>
         </div>
-        <div className="bg-gradient-to-r from-green-600 to-green-700 rounded-lg p-4 text-white">
-          <div className="text-sm opacity-90">Purchase USDT</div>
-          <div className="text-2xl font-bold">{purchaseUsdt.toFixed(2)}</div>
+      </div>
+
+      {/* Referral Stats Section */}
+      <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-lg p-6 border border-slate-700">
+        <h3 className="text-xl font-semibold text-white mb-4">Referral Statistics</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-gradient-to-r from-cyan-600 to-cyan-700 rounded-lg p-4 text-white">
+            <div className="text-sm opacity-90">Active Referrals</div>
+            <div className="text-2xl font-bold">{activeReferrals}</div>
+          </div>
+          <div className="bg-gradient-to-r from-pink-600 to-pink-700 rounded-lg p-4 text-white">
+            <div className="text-sm opacity-90">Total Referrals</div>
+            <div className="text-2xl font-bold">{totalReferrals}</div>
+          </div>
+          <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 rounded-lg p-4 text-white">
+            <div className="text-sm opacity-90">Referral Orders</div>
+            <div className="text-2xl font-bold">{totalReferralOrders}</div>
+          </div>
+          <div className="bg-gradient-to-r from-yellow-600 to-yellow-700 rounded-lg p-4 text-white">
+            <div className="text-sm opacity-90">DLX Tokens</div>
+            <div className="text-2xl font-bold">{wallet?.dlx?.toFixed(2) || '0.00'}</div>
+          </div>
         </div>
-        <div className="bg-gradient-to-r from-purple-600 to-purple-700 rounded-lg p-4 text-white">
-          <div className="text-sm opacity-90">DLX Tokens</div>
-          <div className="text-2xl font-bold">{wallet?.dlx?.toFixed(2) || '0.00'}</div>
+      </div>
+
+      {/* Additional Wallet Fields */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-gradient-to-r from-cyan-600 to-cyan-700 rounded-lg p-4 text-white">
+          <div className="text-sm opacity-90">Main Balance</div>
+          <div className="text-2xl font-bold">{mainBalance.toFixed(2)}</div>
         </div>
-        <div className="bg-gradient-to-r from-orange-600 to-orange-700 rounded-lg p-4 text-white">
-          <div className="text-sm opacity-90">DLX Value (USD)</div>
-          <div className="text-2xl font-bold">${dlxUsdValue.toFixed(2)}</div>
+        <div className="bg-gradient-to-r from-pink-600 to-pink-700 rounded-lg p-4 text-white">
+          <div className="text-sm opacity-90">Purchase Balance</div>
+          <div className="text-2xl font-bold">{purchaseBalance.toFixed(2)}</div>
+        </div>
+        <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 rounded-lg p-4 text-white">
+          <div className="text-sm opacity-90">Mining Balance</div>
+          <div className="text-2xl font-bold">{miningBalance.toFixed(2)}</div>
+        </div>
+        <div className="bg-gradient-to-r from-yellow-600 to-yellow-700 rounded-lg p-4 text-white">
+          <div className="text-sm opacity-90">Total Mined DLX</div>
+          <div className="text-2xl font-bold">{totalMinedDLX.toFixed(2)}</div>
         </div>
       </div>
 
