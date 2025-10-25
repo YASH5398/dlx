@@ -16,16 +16,18 @@ import SecretAdminLayout from './pages/SecretAdmin/SecretAdminLayout';
 import AdminLogin from './pages/SecretAdmin/AdminLogin';
 import AdminInviteAccept from './pages/SecretAdmin/AdminInviteAccept';
 import AdminDashboard from './pages/SecretAdmin/AdminDashboard';
-import SecretAdminUsers from './pages/SecretAdmin/AdminUsers2';
+import SecretAdminUsers from './pages/SecretAdmin/AdminUsersEnhanced';
+import AdminUserRanks from './pages/SecretAdmin/AdminUserRanks';
 import SecretAdminOrders from './pages/SecretAdmin/AdminOrders';
-import SecretAdminProducts from './pages/SecretAdmin/AdminProducts';
-import SecretAdminTransactions from './pages/SecretAdmin/AdminTransactions2';
-import SecretAdminSupport from './pages/SecretAdmin/AdminSupport';
+import SecretAdminProducts from './pages/SecretAdmin/AdminProductsEnhanced';
+import SecretAdminTransactions from './pages/SecretAdmin/AdminTransactionsEnhanced';
+import AdminDepositRequests from './pages/SecretAdmin/AdminDepositRequests';
+import AdminWithdrawalRequests from './pages/SecretAdmin/AdminWithdrawalRequests';
+import SecretAdminSupport from './pages/SecretAdmin/AdminServiceRequestsEnhanced';
 import SecretAdminSettings from './pages/SecretAdmin/AdminSettings';
 import SecretAdminReferrals from './pages/SecretAdmin/AdminReferrals';
 import SecretAdminAffiliates from './pages/SecretAdmin/AdminAffiliates';
 import SecretAdminNotifications from './pages/SecretAdmin/AdminNotifications';
-import AdminServiceRequests from './pages/SecretAdmin/AdminServiceRequests';
 
 // Public pages
 // Removed public pages: Exchanges, Pricing, Tutorials, Docs, Blogs, Apply
@@ -39,6 +41,7 @@ import PhoneSignup from './pages/PhoneSignup';
 import DashboardHome from './pages/Dashboard/DashboardHome';
 import Commission from './pages/Dashboard/Commission';
 import Orders from './pages/Dashboard/Orders';
+import OrdersEnhanced from './pages/Dashboard/OrdersEnhanced';
 import Mining2 from './pages/Dashboard/Mining';
 import Tasks from './pages/Dashboard/tasks';
 import Referrals from './pages/Dashboard/Referrals';
@@ -88,7 +91,7 @@ function App() {
       >
         <Route path="/dashboard" element={<DashboardHome />} />
         <Route path="/commission" element={<Commission />} />
-        <Route path="/orders" element={<Orders />} />
+        <Route path="/orders" element={<OrdersEnhanced />} />
         <Route path="/orders/:orderId/invoice" element={<OrderInvoice />} />
         <Route path="/mining" element={<Mining2 />} />
         <Route path="/dashboard/tasks" element={<Tasks />} />
@@ -115,14 +118,17 @@ function App() {
       >
         <Route path="/secret-admin" element={<AdminDashboard />} />
         <Route path="/secret-admin/users" element={<SecretAdminUsers />} />
+        <Route path="/secret-admin/user-ranks" element={<AdminUserRanks />} />
         <Route path="/secret-admin/orders" element={<SecretAdminOrders />} />
         <Route path="/secret-admin/products" element={<SecretAdminProducts />} />
         <Route path="/secret-admin/transactions" element={<SecretAdminTransactions />} />
+        <Route path="/secret-admin/transactions/deposit-requests" element={<AdminDepositRequests />} />
+        <Route path="/secret-admin/transactions/withdrawal-requests" element={<AdminWithdrawalRequests />} />
         <Route path="/secret-admin/referrals" element={<SecretAdminReferrals />} />
         <Route path="/secret-admin/affiliates" element={<SecretAdminAffiliates />} />
         <Route path="/secret-admin/support" element={<SecretAdminSupport />} />
         <Route path="/secret-admin/notifications" element={<SecretAdminNotifications />} />
-        <Route path="/secret-admin/service-requests" element={<AdminServiceRequests />} />
+        <Route path="/secret-admin/service-requests" element={<SecretAdminSupport />} />
         <Route path="/secret-admin/settings" element={<SecretAdminSettings />} />
       </Route>
 

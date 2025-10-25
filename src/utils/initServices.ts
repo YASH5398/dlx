@@ -25,14 +25,14 @@ export interface StepDef {
 
 // ====== Default Services ======
 const defaultServices: ServiceItem[] = [
-  { id: 'token', title: 'Token Creation', description: 'Create crypto token', price: '$100', category: 'Crypto', icon: '🪙', isActive: true },
-  { id: 'website', title: 'Website Development', description: 'Build website', price: '$200', category: 'Web', icon: '🌐', isActive: true },
-  { id: 'chatbot', title: 'Chatbot Development', description: 'Custom chatbot', price: '$150', category: 'Automation', icon: '🤖', isActive: true },
-  { id: 'mlm', title: 'MLM Platform', description: 'Design MLM system', price: '$500', category: 'Business', icon: '📈', isActive: true },
-  { id: 'mobile', title: 'Mobile App', description: 'iOS/Android app', price: '$300', category: 'App', icon: '📱', isActive: true },
-  { id: 'automation', title: 'Automation', description: 'Automate processes', price: '$100', category: 'Automation', icon: '⚙️', isActive: true },
-  { id: 'telegram', title: 'Telegram Bot', description: 'Custom telegram bot', price: '$80', category: 'Bot', icon: '💬', isActive: true },
-  { id: 'audit', title: 'Audit', description: 'Smart contract or token audit', price: '$200', category: 'Security', icon: '🛡️', isActive: true },
+  { id: 'token', title: 'Token Creation', description: 'Create crypto token', price: '$100 / ₹8,800', category: 'Crypto', icon: '🪙', isActive: true },
+  { id: 'website', title: 'Website Development', description: 'Build website', price: '$200 / ₹17,600', category: 'Web', icon: '🌐', isActive: true },
+  { id: 'chatbot', title: 'Chatbot Development', description: 'Custom chatbot', price: '$150 / ₹13,200', category: 'Automation', icon: '🤖', isActive: true },
+  { id: 'mlm', title: 'MLM Platform', description: 'Design MLM system', price: '$350 / ₹30,800', category: 'Business', icon: '📈', isActive: true },
+  { id: 'mobile', title: 'Mobile App', description: 'iOS/Android app', price: '$250 / ₹22,000', category: 'App', icon: '📱', isActive: true },
+  { id: 'automation', title: 'Automation', description: 'Automate processes', price: '$100 / ₹8,800', category: 'Automation', icon: '⚙️', isActive: true },
+  { id: 'telegram', title: 'Telegram Bot', description: 'Custom telegram bot', price: '$80 / ₹7,040', category: 'Bot', icon: '💬', isActive: true },
+  { id: 'audit', title: 'Audit', description: 'Smart contract or token audit', price: '$200 / ₹17,600', category: 'Security', icon: '🛡️', isActive: true },
   // New high-ticket services
   { id: 'landing-page', title: 'Landing Page Creation', description: 'Create a responsive and high-converting landing page with custom design, layout, and hosting-ready setup.', price: '$45 / ₹4,000', category: 'Web Development', icon: '🎨', isActive: true },
   { id: 'ecommerce-store', title: 'E-commerce Store Setup', description: 'Launch a full-featured e-commerce store with payment integration, product setup, and basic SEO optimization.', price: '$190 / ₹16,000', category: 'Web Development', icon: '🛒', isActive: true },

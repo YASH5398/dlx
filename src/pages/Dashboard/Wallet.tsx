@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useWallet } from '../../hooks/useWallet';
 import { firestore } from '../../firebase';
-import { doc, collection, onSnapshot, addDoc, query, orderBy } from 'firebase/firestore';
+import { doc, collection, onSnapshot, addDoc, query, orderBy, serverTimestamp } from 'firebase/firestore';
 import { useUser } from '../../context/UserContext';
 import { useNotifications } from '../../context/NotificationContext';
 
@@ -16,7 +16,7 @@ interface Transaction {
   type: 'deposit' | 'withdraw' | 'swap';
   amount: string;
   currency: string;
-  status: 'completed' | 'pending' | 'failed';
+  status: 'completed' | 'pending' | 'failed' | 'success' | 'approved' | 'rejected';
   description: string;
   createdAt?: number;
 }
@@ -61,15 +61,22 @@ export default function Wallet() {
     trc20: 'TH1s69X1MqxJJme6BVPU3XFXhk8QwSXa7M'
   };
 
-  // Stream wallet from Firestore users doc
+  // Stream wallet from Firestore wallets collection
   useEffect(() => {
     if (!uid) return;
-    const udoc = doc(firestore, 'users', uid);
-    const unsub = onSnapshot(udoc, (snap) => {
+    const walletDoc = doc(firestore, 'wallets', uid);
+    const unsub = onSnapshot(walletDoc, (snap) => {
       const d = (snap.data() as any) || {};
-      const w = d.wallet || {};
-      setMainUsdt(Number(w.main || 0));
-      setPurchaseUsdt(Number(w.purchase || 0));
+      setMainUsdt(Number(d.mainUsdt || 0));
+      setPurchaseUsdt(Number(d.purchaseUsdt || 0));
+      setMainInr(Number(d.mainInr || 0));
+      setPurchaseInr(Number(d.purchaseInr || 0));
+    }, (err) => {
+      console.error('Wallet stream failed:', err);
+      setMainUsdt(0);
+      setPurchaseUsdt(0);
+      setMainInr(0);
+      setPurchaseInr(0);
     });
     return () => { try { unsub(); } catch {} };
   }, [uid]);
@@ -131,23 +138,26 @@ export default function Wallet() {
   const handleDeposit = async () => {
     const amt = parseFloat(depositAmount);
     if (!uid || !amt || amt <= 0) return;
+    if (depositMethod === 'usdt' && !txHash) return;
+    if (depositMethod === 'inr' && !upi) return;
     
     setIsProcessing(true);
-    const now = Date.now();
     const currency = depositMethod === 'inr' ? 'INR' : 'USDT';
-    const description = depositMethod === 'inr' 
-      ? 'Deposit via UPI' 
-      : `Deposit via ${blockchain?.toUpperCase()}`;
+    const method = depositMethod === 'usdt' ? `usdt-${blockchain}` : 'inr-upi';
+    const notes = depositMethod === 'inr' ? `UPI: ${upi}` : `Network: ${String(blockchain).toUpperCase()}`;
 
     try {
-      const txCol = collection(firestore, 'wallets', uid, 'transactions');
-      await addDoc(txCol, {
-        type: 'deposit',
+      // Use atomic API for deposit request creation
+      const { createDepositRequest } = await import('../../utils/transactionAPI');
+      
+      await createDepositRequest({
+        userId: uid,
         amount: amt,
+        method,
         currency,
-        status: 'pending',
-        description: `${description} (Admin Verification Pending)`,
-        createdAt: now,
+        fees: 0,
+        txnId: depositMethod === 'usdt' ? txHash : undefined,
+        notes
       });
       
       try { 
@@ -173,23 +183,32 @@ export default function Wallet() {
   const handleWithdraw = async () => {
     const amt = parseFloat(withdrawAmount);
     if (!uid || !amt || amt <= 0) return;
+    if (withdrawMethod === 'usdt' && (!walletAddress || !blockchain)) return;
+    if (withdrawMethod === 'inr' && !upi) return;
     
     setIsProcessing(true);
-    const now = Date.now();
     const currency = withdrawMethod === 'inr' ? 'INR' : 'USDT';
     const description = withdrawMethod === 'inr' 
       ? 'Withdrawal to UPI' 
       : `Withdrawal to ${blockchain?.toUpperCase()}`;
 
     try {
-      const txCol = collection(firestore, 'wallets', uid, 'transactions');
-      await addDoc(txCol, {
-        type: 'withdraw',
+      // Use atomic API for withdrawal request creation
+      const { createWithdrawalRequest } = await import('../../utils/transactionAPI');
+      
+      const method = withdrawMethod === 'usdt' ? `usdt-${blockchain}` : 'inr-upi';
+      const notes = withdrawMethod === 'usdt' 
+        ? `Address: ${walletAddress} | Network: ${String(blockchain).toUpperCase()}` 
+        : `UPI: ${upi}`;
+      
+      await createWithdrawalRequest({
+        userId: uid,
         amount: amt,
+        method,
+        walletType: 'main',
         currency,
-        status: 'pending',
-        description: `${description} (Admin Verification Pending)`,
-        createdAt: now,
+        fees: 0,
+        notes
       });
       
       try { 
@@ -253,9 +272,12 @@ export default function Wallet() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'completed': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+      case 'completed': 
+      case 'success': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+      case 'approved': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
       case 'pending': return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
-      case 'failed': return 'bg-rose-500/20 text-rose-400 border-rose-500/30';
+      case 'failed': 
+      case 'rejected': return 'bg-rose-500/20 text-rose-400 border-rose-500/30';
       default: return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
     }
   };

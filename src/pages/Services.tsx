@@ -1,24 +1,65 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import ServiceCard from '../components/ServiceCard';
-import ServiceRequestModal from '../components/ServiceRequestModal';
+import ServiceRequestModalEnhanced from '../components/ServiceRequestModalEnhanced';
+import { collection, getDocs } from 'firebase/firestore';
+import { firestore } from '../firebase';
 
-const services = [
-  { title: 'Crypto Token Creation', price: '$2,999' },
-  { title: 'Smart Contract Development' },
-  { title: 'Website Development', price: '$1,499' },
-  { title: 'Chatbot', price: '$999' },
-  { title: 'MLM Plan', price: '$3,999' },
-  { title: 'Mobile App', price: '$4,999' },
-  { title: 'Business Automation', price: '$1,999' },
-  { title: 'Telegram Bot', price: '$799' },
-  { title: 'Crypto Audit', price: '$2,499' },
-];
+interface Service {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  price: string;
+  icon: string;
+  isActive: boolean;
+}
 
 export default function Services() {
   const [modalOpen, setModalOpen] = useState(false);
-  const [selectedService, setSelectedService] = useState<string>('');
+  const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [services, setServices] = useState<Service[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadServices();
+  }, []);
+
+  const loadServices = async () => {
+    try {
+      setLoading(true);
+      const servicesSnapshot = await getDocs(collection(firestore, 'services'));
+      const servicesData = servicesSnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as Service))
+        .filter(service => service.isActive);
+      
+      setServices(servicesData);
+    } catch (error) {
+      console.error('Failed to load services:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleServiceClick = (service: Service) => {
+    setSelectedService(service);
+    setModalOpen(true);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen">
+        <Header />
+        <main className="container-padded py-10">
+          <div className="flex items-center justify-center h-64">
+            <div className="text-lg">Loading services...</div>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">
@@ -27,22 +68,24 @@ export default function Services() {
         <h1 className="section-title">Our Services</h1>
         <p className="text-sm text-gray-600 mt-2">Choose a service and get started.</p>
         <div className="mt-6 grid md:grid-cols-3 gap-4">
-          {services.map((s) => (
+          {services.map((service) => (
             <ServiceCard 
-              key={s.title} 
-              title={s.title} 
-              price={s.price} 
-              onGetService={() => { setSelectedService(s.title); setModalOpen(true); }}
+              key={service.id} 
+              title={service.title} 
+              price={service.price} 
+              onGetService={() => handleServiceClick(service)}
             />
           ))}
         </div>
       </main>
       <Footer />
-      <ServiceRequestModal 
-        open={modalOpen} 
-        onClose={() => setModalOpen(false)} 
-        serviceName={selectedService}
-      />
+      {selectedService && (
+        <ServiceRequestModalEnhanced 
+          open={modalOpen} 
+          onClose={() => setModalOpen(false)} 
+          service={selectedService}
+        />
+      )}
     </div>
   );
 }
