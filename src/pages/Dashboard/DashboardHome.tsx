@@ -95,7 +95,7 @@ export default function DashboardHome() {
     }
   };
   const [inrMain, setInrMain] = useState(0);
-  // Real-time wallet data fetching - SYNCED WITH WALLET PAGE
+  // Real-time wallet data fetching - CANONICAL WALLETS COLLECTION
   useEffect(() => {
     if (!user?.id) {
       setWalletLoading(false);
@@ -103,11 +103,11 @@ export default function DashboardHome() {
     }
     
     setWalletLoading(true);
-    const userDoc = doc(firestore, 'users', user.id);
-    const unsub = onSnapshot(userDoc, (snap) => {
+    const walletDoc = doc(firestore, 'wallets', user.id);
+    const unsub = onSnapshot(walletDoc, (snap) => {
       try {
         if (!snap.exists()) {
-          console.warn('User document does not exist');
+          console.warn('Wallet document does not exist');
           setUsdtTotal(0);
           setInrMain(0);
           setWalletLoading(false);
@@ -115,18 +115,29 @@ export default function DashboardHome() {
         }
 
         const data = snap.data() as any || {};
-        const w = data.wallet || {};
-        const main = Number(w.main || 0);
-        const purchase = Number(w.purchase || 0);
+        const usdt = data.usdt || {};
+        const inr = data.inr || {};
         
-        // USDT Balance: Combined main + purchase (same as wallet page)
-        setUsdtTotal(main + purchase);
+        const mainUsdt = Number(usdt.mainUsdt || 0);
+        const purchaseUsdt = Number(usdt.purchaseUsdt || 0);
+        const mainInr = Number(inr.mainInr || 0);
+        const purchaseInr = Number(inr.purchaseInr || 0);
         
-        // INR Balance: From main wallet (same as wallet page)
-        setInrMain(main);
+        // USDT Balance: Combined main + purchase (canonical calculation)
+        setUsdtTotal(mainUsdt + purchaseUsdt);
+        
+        // INR Balance: Combined main + purchase (canonical calculation)
+        setInrMain(mainInr + purchaseInr);
         
         setWalletLoading(false);
-        console.log('Dashboard wallet data updated:', { main, purchase, usdtTotal: main + purchase, inrMain: main });
+        console.log('Dashboard wallet data updated (canonical):', { 
+          mainUsdt, 
+          purchaseUsdt, 
+          usdtTotal: mainUsdt + purchaseUsdt,
+          mainInr,
+          purchaseInr,
+          inrMain: mainInr + purchaseInr
+        });
       } catch (error) {
         console.error('Error processing wallet data:', error);
         setUsdtTotal(0);
@@ -186,6 +197,34 @@ export default function DashboardHome() {
     
     return () => { try { unsub(); } catch {} };
   }, [user?.id, totalEarnings]);
+
+  // Fetch additional earnings data from user document
+  useEffect(() => {
+    if (!user?.id) return;
+    
+    const userDoc = doc(firestore, 'users', user.id);
+    const unsub = onSnapshot(userDoc, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data() as any;
+        const totalEarningsFromUser = Number(data.totalEarningsUsd || 0);
+        const referralEarningsFromUser = Number(data.referralEarnings || 0);
+        
+        // Update comprehensive total earnings with user document data
+        const comprehensiveTotal = totalEarningsFromUser + (totalEarningsComprehensive - (totalEarnings || 0));
+        setTotalEarningsComprehensive(comprehensiveTotal);
+        
+        console.log('User earnings data updated:', { 
+          totalEarningsFromUser,
+          referralEarningsFromUser,
+          comprehensiveTotal
+        });
+      }
+    }, (err) => {
+      console.error('User document stream failed:', err);
+    });
+    
+    return () => { try { unsub(); } catch {} };
+  }, [user?.id, totalEarningsComprehensive, totalEarnings]);
 
   // Ensure required Firestore docs exist for this user
   useEffect(() => {
