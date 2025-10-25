@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { 
   getServiceRequests, 
   submitAdminProposal,
@@ -14,6 +14,7 @@ import {
   type Inquiry
 } from '../../utils/serviceRequestsAPI';
 import { useUser } from '../../context/UserContext';
+import { useAdminSocket } from '../../context/AdminSocketContext';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card.tsx';
@@ -36,7 +37,20 @@ import {
   Calendar,
   Copy,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Filter,
+  SortAsc,
+  SortDesc,
+  CreditCard,
+  Download,
+  Eye,
+  RefreshCw,
+  MoreHorizontal,
+  Settings,
+  Tag,
+  Hash,
+  X,
+  Bell
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -45,16 +59,24 @@ interface AdminServiceRequestsEnhancedProps {}
 
 export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnhancedProps) {
   const { user } = useUser();
+  const { notifications, isConnected } = useAdminSocket();
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'overview' | 'chat' | 'actions'>('overview');
+  const [supportType, setSupportType] = useState<'all' | 'service_requests' | 'tickets' | 'ai_chat' | 'live_chat'>('all');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Filters
+  // Filters and sorting
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState<'date' | 'status' | 'name'>('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [dateFilter, setDateFilter] = useState<string>('all');
 
   // Proposal form
   const [proposalForm, setProposalForm] = useState({
@@ -91,6 +113,12 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
       loadChatMessages(selectedRequest.id!);
     }
   }, [selectedRequest]);
+
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages]);
 
   const loadRequests = async () => {
     try {
@@ -274,6 +302,30 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
     }
   };
 
+  const handleConnectToUser = async () => {
+    if (!selectedRequest || !user) return;
+    try {
+      setSaving(true);
+      
+      // Send a connection message to the user
+      await sendChatMessage(
+        selectedRequest.id!,
+        user.id,
+        user.name,
+        'admin',
+        `Admin ${user.name} has connected to help you with your request. How can I assist you?`
+      );
+      
+      await loadChatMessages(selectedRequest.id!);
+      toast.success('Connected to user successfully!');
+    } catch (error) {
+      console.error('Failed to connect to user:', error);
+      toast.error('Failed to connect to user. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const addLineItem = () => {
     setProposalForm(prev => ({
       ...prev,
@@ -315,7 +367,48 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
       request.serviceTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
       request.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       request.userEmail.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesStatus && matchesSearch;
+    
+    let matchesDate = true;
+    if (dateFilter !== 'all') {
+      const requestDate = request.createdAt?.toDate ? request.createdAt.toDate() : new Date(request.createdAt as any);
+      const now = new Date();
+      const daysDiff = Math.floor((now.getTime() - requestDate.getTime()) / (1000 * 60 * 60 * 24));
+      
+      switch (dateFilter) {
+        case 'today':
+          matchesDate = daysDiff === 0;
+          break;
+        case 'week':
+          matchesDate = daysDiff <= 7;
+          break;
+        case 'month':
+          matchesDate = daysDiff <= 30;
+          break;
+        case 'older':
+          matchesDate = daysDiff > 30;
+          break;
+      }
+    }
+    
+    return matchesStatus && matchesSearch && matchesDate;
+  }).sort((a, b) => {
+    let comparison = 0;
+    
+    switch (sortBy) {
+      case 'date':
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt as any);
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt as any);
+        comparison = dateA.getTime() - dateB.getTime();
+        break;
+      case 'status':
+        comparison = a.status.localeCompare(b.status);
+        break;
+      case 'name':
+        comparison = a.userName.localeCompare(b.userName);
+        break;
+    }
+    
+    return sortOrder === 'asc' ? comparison : -comparison;
   });
 
   const getStatusColor = (status: string) => {
@@ -334,82 +427,189 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="text-lg text-gray-700 flex items-center gap-3"
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center"
         >
-          <svg className="animate-spin h-6 w-6 text-blue-600" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-          </svg>
-          Loading service requests...
+          <div className="relative">
+            <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
+            <div className="w-16 h-16 border-4 border-transparent border-t-blue-400 rounded-full animate-spin mx-auto absolute top-0 left-0" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}></div>
+          </div>
+          <h3 className="text-xl font-semibold text-gray-800 mb-2">Loading Service Requests</h3>
+          <p className="text-gray-600">Please wait while we fetch your data...</p>
         </motion.div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        {/* Header */}
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+      {/* Mobile Header */}
+      <div className="lg:hidden bg-white/80 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-50">
+        <div className="flex items-center justify-between p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
+              <FileText className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-gray-900">Support Requests</h1>
+              <p className="text-xs text-gray-600">{filteredRequests.length} requests</p>
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className="p-2"
+          >
+            <MoreHorizontal className="w-5 h-5" />
+          </Button>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-10">
+        {/* Desktop Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="mb-10"
+          className="hidden lg:block mb-8"
         >
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-4xl font-bold text-gray-900 tracking-tight">Service Requests</h1>
-              <p className="text-gray-600 text-base mt-2">Efficiently manage and process service requests</p>
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+                Support Requests
+              </h1>
+              <p className="text-gray-600 text-lg mt-2">Manage all support requests, tickets, and AI interactions</p>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-              <span className="text-sm text-gray-600">Live updates</span>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 px-3 py-2 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+                <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+                {isConnected ? 'Live updates' : 'Disconnected'}
+              </div>
+              {notifications.length > 0 && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
+                  <Bell className="w-4 h-4" />
+                  {notifications.length} notifications
+                </div>
+              )}
+              <Button
+                onClick={loadRequests}
+                variant="outline"
+                size="sm"
+                className="gap-2"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Refresh
+              </Button>
             </div>
           </div>
         </motion.div>
 
-        {/* Filters */}
-        <Card className="mb-10 bg-white border-gray-200 shadow-sm rounded-xl sticky top-0 z-10">
-          <CardContent className="p-6">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex-1">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                  <Input
-                    type="text"
-                    placeholder="Search by title, name, or email..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 bg-gray-100 border-gray-300 text-gray-900 placeholder:text-gray-500 rounded-lg focus:ring-2 focus:ring-blue-600 transition-all duration-300"
-                    aria-label="Search service requests"
-                  />
+        {/* Enhanced Filters */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+          className="mb-8"
+        >
+          <Card className="bg-white/80 backdrop-blur-sm border-gray-200 shadow-lg rounded-2xl">
+            <CardContent className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Search */}
+                <div className="lg:col-span-2">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                    <Input
+                      type="text"
+                      placeholder="Search by title, name, or email..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10 bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-500 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300 h-12"
+                    />
+                  </div>
                 </div>
-              </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full sm:w-48 bg-gray-100 border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-600">
-                  <SelectValue placeholder="Filter by status" />
-                </SelectTrigger>
-                <SelectContent className="bg-white border-gray-200 text-gray-900">
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="proposal_sent">Proposal Sent</SelectItem>
-                  <SelectItem value="awaiting_payment">Awaiting Payment</SelectItem>
-                  <SelectItem value="payment_review">Payment Review</SelectItem>
-                  <SelectItem value="processing">Processing</SelectItem>
-                  <SelectItem value="in_progress">In Progress</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+                {/* Status Filter */}
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="bg-gray-50 border-gray-200 text-gray-900 rounded-xl focus:ring-2 focus:ring-blue-500 h-12">
+                    <SelectValue placeholder="Filter by status" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border-gray-200 text-gray-900 rounded-xl">
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="proposal_sent">Proposal Sent</SelectItem>
+                    <SelectItem value="awaiting_payment">Awaiting Payment</SelectItem>
+                    <SelectItem value="payment_review">Payment Review</SelectItem>
+                    <SelectItem value="processing">Processing</SelectItem>
+                    <SelectItem value="in_progress">In Progress</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {/* Date Filter */}
+                <Select value={dateFilter} onValueChange={setDateFilter}>
+                  <SelectTrigger className="bg-gray-50 border-gray-200 text-gray-900 rounded-xl focus:ring-2 focus:ring-blue-500 h-12">
+                    <SelectValue placeholder="Filter by date" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border-gray-200 text-gray-900 rounded-xl">
+                    <SelectItem value="all">All Time</SelectItem>
+                    <SelectItem value="today">Today</SelectItem>
+                    <SelectItem value="week">This Week</SelectItem>
+                    <SelectItem value="month">This Month</SelectItem>
+                    <SelectItem value="older">Older</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {/* Support Type Filter */}
+                <Select value={supportType} onValueChange={(value: string) => setSupportType(value as 'all' | 'service_requests' | 'tickets' | 'ai_chat' | 'live_chat')}>
+                  <SelectTrigger className="bg-gray-50 border-gray-200 text-gray-900 rounded-xl focus:ring-2 focus:ring-blue-500 h-12">
+                    <SelectValue placeholder="Filter by type" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border-gray-200 text-gray-900 rounded-xl">
+                    <SelectItem value="all">All Support</SelectItem>
+                    <SelectItem value="service_requests">Service Requests</SelectItem>
+                    <SelectItem value="tickets">Support Tickets</SelectItem>
+                    <SelectItem value="ai_chat">AI Chatbot</SelectItem>
+                    <SelectItem value="live_chat">Live Chat</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Advanced Filters */}
+              <div className="flex flex-wrap items-center gap-4 mt-4 pt-4 border-t border-gray-200">
+                <div className="flex items-center gap-2">
+                  <Filter className="w-4 h-4 text-gray-500" />
+                  <span className="text-sm font-medium text-gray-700">Sort by:</span>
+                </div>
+                <Select value={sortBy} onValueChange={(value) => setSortBy(value as any)}>
+                  <SelectTrigger className="w-32 bg-gray-50 border-gray-200 text-gray-900 rounded-lg">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border-gray-200 text-gray-900">
+                    <SelectItem value="date">Date</SelectItem>
+                    <SelectItem value="status">Status</SelectItem>
+                    <SelectItem value="name">Name</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                  className="gap-2"
+                >
+                  {sortOrder === 'asc' ? <SortAsc className="w-4 h-4" /> : <SortDesc className="w-4 h-4" />}
+                  {sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-8">
           {/* Requests List */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
@@ -417,76 +617,99 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
             transition={{ duration: 0.5 }}
             className="lg:col-span-1"
           >
-            <Card className="bg-white border-gray-200 shadow-sm rounded-xl sticky top-24">
-              <CardHeader>
-                <CardTitle className="text-gray-900 text-xl flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-blue-600" />
-                  Service Requests
-                  <Badge variant="outline" className="border-blue-200 text-blue-600">
+            <Card className="bg-white/80 backdrop-blur-sm border-gray-200 shadow-lg rounded-2xl sticky top-24">
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-gray-900 text-xl flex items-center gap-3">
+                    <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
+                      <FileText className="w-5 h-5 text-white" />
+                    </div>
+                    Support Requests
+                  </CardTitle>
+                  <Badge variant="outline" className="border-blue-200 text-blue-600 bg-blue-50">
                     {filteredRequests.length}
                   </Badge>
-                </CardTitle>
-                <CardDescription className="text-gray-600">
+                </div>
+                <CardDescription className="text-gray-600 mt-2">
                   Select a request to view and manage details
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4 max-h-[calc(100vh-250px)] overflow-y-auto">
-                  {filteredRequests.map((request) => (
-                    <motion.div
-                      key={request.id}
-                      whileHover={{ scale: 1.02 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <Card
-                        className={`cursor-pointer transition-all duration-300 ${
-                          selectedRequest?.id === request.id 
-                            ? 'bg-blue-50 border-blue-300 shadow-md' 
-                            : 'bg-white border-gray-200 hover:shadow-md hover:border-blue-300'
-                        } rounded-lg`}
-                        onClick={() => setSelectedRequest(request)}
-                        role="button"
-                        aria-label={`Select request: ${request.serviceTitle}`}
+              <CardContent className="pt-0">
+                <div className="space-y-3 max-h-[calc(100vh-300px)] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+                  {filteredRequests.length === 0 ? (
+                    <div className="text-center py-8">
+                      <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <FileText className="w-8 h-8 text-gray-400" />
+                      </div>
+                      <p className="text-gray-500 text-sm">No requests found</p>
+                      <p className="text-gray-400 text-xs mt-1">Try adjusting your filters</p>
+                    </div>
+                  ) : (
+                    filteredRequests.map((request) => (
+                      <motion.div
+                        key={request.id}
+                        whileHover={{ scale: 1.02, y: -2 }}
+                        transition={{ duration: 0.2 }}
                       >
-                        <CardContent className="p-5">
-                          <div className="flex justify-between items-start mb-3">
-                            <h3 className="font-semibold text-gray-900 text-lg">{request.serviceTitle}</h3>
-                            <Badge className={getStatusColor(request.status)}>
-                              {request.status.replace('_', ' ')}
-                            </Badge>
-                          </div>
-                          <div className="space-y-2 text-sm text-gray-600">
-                            <div className="flex items-center gap-2">
-                              <User className="w-4 h-4 text-gray-500" />
-                              <span>{request.userName}</span>
+                        <Card
+                          className={`cursor-pointer transition-all duration-300 ${
+                            selectedRequest?.id === request.id 
+                              ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-300 shadow-lg ring-2 ring-blue-200' 
+                              : 'bg-white border-gray-200 hover:shadow-lg hover:border-blue-300 hover:bg-blue-50/30'
+                          } rounded-xl`}
+                          onClick={() => setSelectedRequest(request)}
+                          role="button"
+                          aria-label={`Select request: ${request.serviceTitle}`}
+                        >
+                          <CardContent className="p-4">
+                            <div className="flex justify-between items-start mb-3">
+                              <h3 className="font-semibold text-gray-900 text-base leading-tight">{request.serviceTitle}</h3>
+                              <Badge className={`${getStatusColor(request.status)} text-xs font-medium`}>
+                                {request.status.replace('_', ' ')}
+                              </Badge>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <Mail className="w-4 h-4 text-gray-500" />
-                              <span className="truncate">{request.userEmail}</span>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => copyToClipboard(request.userEmail)}
-                                className="ml-1 p-1"
-                              >
-                                <Copy className="w-4 h-4 text-gray-500" />
-                              </Button>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <FileText className="w-4 h-4 text-gray-500" />
-                              <span>{request.serviceCategory}</span>
-                            </div>
-                            {request.adminProposal && (
+                            <div className="space-y-2 text-sm text-gray-600">
                               <div className="flex items-center gap-2">
-                                <DollarSign className="w-4 h-4 text-gray-500" />
-                                <span>{request.adminProposal.currency} {request.adminProposal.totalPrice}</span>
+                                <User className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                                <span className="truncate">{request.userName}</span>
                               </div>
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </motion.div>
-                  ))}
+                              <div className="flex items-center gap-2">
+                                <Mail className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                                <span className="truncate flex-1">{request.userEmail}</span>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    copyToClipboard(request.userEmail);
+                                  }}
+                                  className="ml-1 p-1 h-6 w-6"
+                                >
+                                  <Copy className="w-3 h-3 text-gray-500" />
+                                </Button>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Tag className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                                <span className="truncate">{request.serviceCategory}</span>
+                              </div>
+                              {request.adminProposal && (
+                                <div className="flex items-center gap-2">
+                                  <DollarSign className="w-4 h-4 text-green-600 flex-shrink-0" />
+                                  <span className="font-medium text-green-700">
+                                    {request.adminProposal.currency} {request.adminProposal.totalPrice}
+                                  </span>
+                                </div>
+                              )}
+                              <div className="flex items-center gap-2 text-xs text-gray-500">
+                                <Calendar className="w-3 h-3" />
+                                <span>{request.createdAt?.toDate ? request.createdAt.toDate().toLocaleDateString() : new Date(request.createdAt as any).toLocaleDateString()}</span>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </motion.div>
+                    ))
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -500,662 +723,954 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
               transition={{ duration: 0.5 }}
               className="lg:col-span-3"
             >
-              <Card className="bg-white border-gray-200 shadow-sm rounded-xl">
-                <CardHeader>
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <CardTitle className="text-gray-900 text-2xl font-semibold tracking-tight">{selectedRequest.serviceTitle}</CardTitle>
-                      <CardDescription className="text-gray-600">{selectedRequest.serviceCategory}</CardDescription>
+              <Card className="bg-white/80 backdrop-blur-sm border-gray-200 shadow-lg rounded-2xl">
+                <CardHeader className="pb-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex-1">
+                      <CardTitle className="text-2xl font-bold text-gray-900 mb-2">{selectedRequest.serviceTitle}</CardTitle>
+                      <div className="flex items-center gap-3">
+                        <Badge className={`${getStatusColor(selectedRequest.status)} text-sm font-medium`}>
+                          {selectedRequest.status.replace('_', ' ')}
+                        </Badge>
+                        <span className="text-gray-500 text-sm">{selectedRequest.serviceCategory}</span>
+                        <span className="text-gray-400 text-sm">
+                          {selectedRequest.createdAt?.toDate ? selectedRequest.createdAt.toDate().toLocaleDateString() : new Date(selectedRequest.createdAt as any).toLocaleDateString()}
+                        </span>
+                      </div>
                     </div>
-                    <Badge className={getStatusColor(selectedRequest.status)}>
-                      {selectedRequest.status.replace('_', ' ')}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedRequest(null)}
+                        className="lg:hidden"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-8">
-                  {/* User Information */}
-                  <Card className="bg-gray-50 border-gray-200 rounded-lg">
-                    <CardHeader>
-                      <CardTitle className="text-gray-900 text-lg flex items-center gap-2">
-                        <User className="w-5 h-5 text-blue-600" />
-                        User Information
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3 text-sm text-gray-600">
-                      <div className="flex items-center gap-2">
-                        <User className="w-4 h-4 text-gray-500" />
-                        <span>Name: {selectedRequest.userName}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Mail className="w-4 h-4 text-gray-500" />
-                        <span>Email: {selectedRequest.userEmail}</span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => copyToClipboard(selectedRequest.userEmail)}
-                          className="ml-1 p-1"
+                  {/* Mobile Tabs */}
+                  <div className="lg:hidden">
+                    <div className="flex border-b border-gray-200">
+                      {[
+                        { id: 'overview', label: 'Overview', icon: Eye },
+                        { id: 'chat', label: 'Chat', icon: MessageSquare },
+                        { id: 'actions', label: 'Actions', icon: Settings }
+                      ].map((tab) => (
+                        <button
+                          key={tab.id}
+                          onClick={() => setActiveTab(tab.id as any)}
+                          className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 text-sm font-medium border-b-2 transition-colors ${
+                            activeTab === tab.id
+                              ? 'border-blue-500 text-blue-600'
+                              : 'border-transparent text-gray-500 hover:text-gray-700'
+                          }`}
                         >
-                          <Copy className="w-4 h-4 text-gray-500" />
-                        </Button>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <FileText className="w-4 h-4 text-gray-500" />
-                        <span>User ID: {selectedRequest.userId}</span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => copyToClipboard(selectedRequest.userId)}
-                          className="ml-1 p-1"
-                        >
-                          <Copy className="w-4 h-4 text-gray-500" />
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
+                          <tab.icon className="w-4 h-4" />
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
-                  {/* Request Details (Accordion) */}
-                  <Card className="bg-gray-50 border-gray-200 rounded-lg">
-                    <CardHeader>
-                      <CardTitle className="text-gray-900 text-lg flex items-center gap-2">
-                        <FileText className="w-5 h-5 text-blue-600" />
-                        Request Details
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      {selectedRequest.requestDetails && (
-                        <div>
-                          <button
-                            className="w-full flex justify-between items-center text-left text-sm font-medium text-gray-900"
-                            onClick={() => setExpandedSection(expandedSection === 'details' ? null : 'details')}
-                            aria-expanded={expandedSection === 'details'}
-                            aria-controls="request-details-content"
-                          >
-                            <span>Request Description</span>
-                            {expandedSection === 'details' ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                          </button>
-                          <AnimatePresence>
-                            {expandedSection === 'details' && (
-                              <motion.div
-                                id="request-details-content"
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                transition={{ duration: 0.3 }}
-                                className="mt-2 text-sm text-gray-600"
-                              >
-                                <p className="whitespace-pre-wrap">{selectedRequest.requestDetails}</p>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => copyToClipboard(selectedRequest.requestDetails)}
-                                  className="mt-2"
-                                >
-                                  <Copy className="w-4 h-4 mr-1" />
-                                  Copy
-                                </Button>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </div>
-                      )}
-                      {selectedRequest.serviceCategory && (
-                        <div>
-                          <button
-                            className="w-full flex justify-between items-center text-left text-sm font-medium text-gray-900"
-                            onClick={() => setExpandedSection(expandedSection === 'category' ? null : 'category')}
-                            aria-expanded={expandedSection === 'category'}
-                            aria-controls="category-content"
-                          >
-                            <span>Category</span>
-                            {expandedSection === 'category' ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                          </button>
-                          <AnimatePresence>
-                            {expandedSection === 'category' && (
-                              <motion.div
-                                id="category-content"
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                transition={{ duration: 0.3 }}
-                                className="mt-2 text-sm text-gray-600"
-                              >
-                                <p>{selectedRequest.serviceCategory}</p>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </div>
-                      )}
-                      {selectedRequest.adminProposal && (
-                        <div>
-                          <button
-                            className="w-full flex justify-between items-center text-left text-sm font-medium text-gray-900"
-                            onClick={() => setExpandedSection(expandedSection === 'proposal' ? null : 'proposal')}
-                            aria-expanded={expandedSection === 'proposal'}
-                            aria-controls="proposal-content"
-                          >
-                            <span>Proposal</span>
-                            {expandedSection === 'proposal' ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                          </button>
-                          <AnimatePresence>
-                            {expandedSection === 'proposal' && (
-                              <motion.div
-                                id="proposal-content"
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                transition={{ duration: 0.3 }}
-                                className="mt-2 text-sm text-gray-600"
-                              >
-                                <p>{selectedRequest.adminProposal.currency} {selectedRequest.adminProposal.totalPrice}</p>
-                                <p className="mt-1">{selectedRequest.adminProposal.description}</p>
-                                {selectedRequest.adminProposal.estimatedDelivery && (
-                                  <p className="mt-1">Estimated Delivery: {selectedRequest.adminProposal.estimatedDelivery}</p>
-                                )}
-                                {selectedRequest.adminProposal.lineItems?.length > 0 && (
-                                  <div className="mt-2">
-                                    <h4 className="text-sm font-medium text-gray-700">Line Items:</h4>
-                                    <ul className="list-disc pl-5 text-sm">
-                                      {selectedRequest.adminProposal.lineItems.map((item, index) => (
-                                        <li key={index}>
-                                          {item.name}: {item.quantity} x {item.unitPrice} = {item.totalPrice}
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </div>
-                      )}
-                      {selectedRequest.payment && (
-                        <div>
-                          <button
-                            className="w-full flex justify-between items-center text-left text-sm font-medium text-gray-900"
-                            onClick={() => setExpandedSection(expandedSection === 'payment' ? null : 'payment')}
-                            aria-expanded={expandedSection === 'payment'}
-                            aria-controls="payment-content"
-                          >
-                            <span>Payment</span>
-                            {expandedSection === 'payment' ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                          </button>
-                          <AnimatePresence>
-                            {expandedSection === 'payment' && (
-                              <motion.div
-                                id="payment-content"
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                transition={{ duration: 0.3 }}
-                                className="mt-2 text-sm text-gray-600"
-                              >
-                                <p>{selectedRequest.payment.currency} {selectedRequest.payment.amount} - {selectedRequest.payment.status}</p>
-                                {selectedRequest.payment.upiDetails && (
-                                  <div className="mt-2">
-                                    <p>UPI ID: {selectedRequest.payment.upiDetails.upiId}</p>
-                                    {selectedRequest.payment.upiDetails.transactionId && (
-                                      <p>Transaction ID: {selectedRequest.payment.upiDetails.transactionId}</p>
-                                    )}
-                                    {selectedRequest.payment.upiDetails.utr && (
-                                      <p>UTR: {selectedRequest.payment.upiDetails.utr}</p>
-                                    )}
-                                  </div>
-                                )}
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                  {/* Desktop Tabs */}
+                  <div className="hidden lg:flex border-b border-gray-200">
+                    {[
+                      { id: 'overview', label: 'Overview', icon: Eye },
+                      { id: 'chat', label: 'Chat', icon: MessageSquare },
+                      { id: 'actions', label: 'Actions', icon: Settings }
+                    ].map((tab) => (
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id as any)}
+                        className={`flex items-center gap-2 py-3 px-6 text-sm font-medium border-b-2 transition-colors ${
+                          activeTab === tab.id
+                            ? 'border-blue-500 text-blue-600'
+                            : 'border-transparent text-gray-500 hover:text-gray-700'
+                        }`}
+                      >
+                        <tab.icon className="w-4 h-4" />
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
 
-                  {/* Admin Actions */}
-                  <div className="space-y-8">
-                    {/* Submit Proposal */}
-                    {selectedRequest.status === 'pending' && (
-                      <Card className="bg-gray-50 border-gray-200 rounded-lg">
-                        <CardHeader>
-                          <CardTitle className="text-gray-900 flex items-center gap-2">
-                            <DollarSign className="w-5 h-5 text-blue-600" />
-                            Submit Proposal
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-6">
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">Total Price</label>
-                              <Input
-                                type="number"
-                                value={proposalForm.totalPrice}
-                                onChange={(e) => setProposalForm(prev => ({ ...prev, totalPrice: e.target.value }))}
-                                className="bg-gray-100 border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-600"
-                                placeholder="Enter total price"
-                                aria-label="Total price"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">Currency</label>
-                              <Select
-                                value={proposalForm.currency}
-                                onValueChange={(value) => setProposalForm(prev => ({ ...prev, currency: value as 'USD' | 'INR' }))}
-                              >
-                                <SelectTrigger className="bg-gray-100 border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-600">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent className="bg-white border-gray-200 text-gray-900">
-                                  <SelectItem value="USD">USD</SelectItem>
-                                  <SelectItem value="INR">INR</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                            <textarea
-                              value={proposalForm.description}
-                              onChange={(e) => setProposalForm(prev => ({ ...prev, description: e.target.value }))}
-                              className="w-full bg-gray-100 border-gray-300 text-gray-900 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-600 transition-all duration-300"
-                              rows={5}
-                              placeholder="Describe the proposal details"
-                              aria-label="Proposal description"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Estimated Delivery</label>
-                            <Input
-                              type="date"
-                              value={proposalForm.estimatedDelivery}
-                              onChange={(e) => setProposalForm(prev => ({ ...prev, estimatedDelivery: e.target.value }))}
-                              className="bg-gray-100 border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-600"
-                              aria-label="Estimated delivery date"
-                            />
-                          </div>
-                          <div>
-                            <div className="flex justify-between items-center mb-4">
-                              <label className="block text-sm font-medium text-gray-700">Line Items</label>
-                              <Button
-                                type="button"
-                                onClick={addLineItem}
-                                size="sm"
-                                className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
-                              >
-                                <Plus className="w-4 h-4 mr-2" />
-                                Add Item
-                              </Button>
-                            </div>
-                            <div className="space-y-3">
-                              {proposalForm.lineItems.map((item, index) => (
-                                <div key={item.id} className="grid grid-cols-5 gap-3 items-center">
-                                  <Input
-                                    type="text"
-                                    value={item.name}
-                                    onChange={(e) => updateLineItem(index, 'name', e.target.value)}
-                                    className="bg-gray-100 border-gray-300 text-gray-900 text-sm rounded-lg"
-                                    placeholder="Item name"
-                                    aria-label={`Line item ${index + 1} name`}
-                                  />
-                                  <Input
-                                    type="text"
-                                    value={item.description}
-                                    onChange={(e) => updateLineItem(index, 'description', e.target.value)}
-                                    className="bg-gray-100 border-gray-300 text-gray-900 text-sm rounded-lg"
-                                    placeholder="Description"
-                                    aria-label={`Line item ${index + 1} description`}
-                                  />
-                                  <Input
-                                    type="number"
-                                    value={item.quantity}
-                                    onChange={(e) => updateLineItem(index, 'quantity', Number(e.target.value))}
-                                    className="bg-gray-100 border-gray-300 text-gray-900 text-sm rounded-lg"
-                                    placeholder="Qty"
-                                    aria-label={`Line item ${index + 1} quantity`}
-                                  />
-                                  <Input
-                                    type="number"
-                                    value={item.unitPrice}
-                                    onChange={(e) => updateLineItem(index, 'unitPrice', Number(e.target.value))}
-                                    className="bg-gray-100 border-gray-300 text-gray-900 text-sm rounded-lg"
-                                    placeholder="Unit price"
-                                    aria-label={`Line item ${index + 1} unit price`}
-                                  />
-                                  <Button
-                                    type="button"
-                                    onClick={() => removeLineItem(index)}
-                                    variant="destructive"
-                                    size="sm"
-                                    className="rounded-lg"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
+                  {/* Tab Content */}
+                  <AnimatePresence mode="wait">
+                    {activeTab === 'overview' && (
+                      <motion.div
+                        key="overview"
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        transition={{ duration: 0.3 }}
+                        className="space-y-6"
+                      >
+                        {/* User Information */}
+                        <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 rounded-xl">
+                          <CardHeader className="pb-4">
+                            <CardTitle className="text-gray-900 text-lg flex items-center gap-3">
+                              <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
+                                <User className="w-5 h-5 text-white" />
+                              </div>
+                              User Information
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200">
+                                <User className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                                <div>
+                                  <p className="text-sm text-gray-500">Name</p>
+                                  <p className="font-medium text-gray-900">{selectedRequest.userName}</p>
                                 </div>
-                              ))}
+                              </div>
+                              <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200">
+                                <Mail className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm text-gray-500">Email</p>
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-medium text-gray-900 truncate">{selectedRequest.userEmail}</p>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => copyToClipboard(selectedRequest.userEmail)}
+                                      className="p-1 h-6 w-6 flex-shrink-0"
+                                    >
+                                      <Copy className="w-3 h-3 text-gray-500" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                          <Button
-                            onClick={handleSubmitProposal}
-                            disabled={saving || !proposalForm.totalPrice || !proposalForm.description}
-                            className="w-full bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50 transition-all duration-300"
-                          >
-                            {saving ? 'Submitting...' : 'Submit Proposal'}
-                          </Button>
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {/* Payment Review */}
-                    {selectedRequest.status === 'payment_review' && selectedRequest.payment && (
-                      <Card className="bg-gray-50 border-gray-200 rounded-lg">
-                        <CardHeader>
-                          <CardTitle className="text-gray-900 flex items-center gap-2">
-                            <DollarSign className="w-5 h-5 text-blue-600" />
-                            Payment Review
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="space-y-3 mb-6 text-sm text-gray-600">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium">Method:</span>
-                              <span>{selectedRequest.payment.method}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium">Amount:</span>
-                              <span>{selectedRequest.payment.currency} {selectedRequest.payment.amount}</span>
-                            </div>
-                            {selectedRequest.payment.upiDetails && (
-                              <div className="space-y-2">
+                            <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200">
+                              <Hash className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm text-gray-500">User ID</p>
                                 <div className="flex items-center gap-2">
-                                  <span className="font-medium">UPI ID:</span>
-                                  <span>{selectedRequest.payment.upiDetails.upiId}</span>
+                                  <p className="font-medium text-gray-900 truncate">{selectedRequest.userId}</p>
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => copyToClipboard(selectedRequest.payment.upiDetails.upiId)}
-                                    className="ml-1 p-1"
+                                    onClick={() => copyToClipboard(selectedRequest.userId)}
+                                    className="p-1 h-6 w-6 flex-shrink-0"
                                   >
-                                    <Copy className="w-4 h-4 text-gray-500" />
+                                    <Copy className="w-3 h-3 text-gray-500" />
                                   </Button>
                                 </div>
-                                {selectedRequest.payment.upiDetails.transactionId && (
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-medium">Transaction ID:</span>
-                                    <span>{selectedRequest.payment.upiDetails.transactionId}</span>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => copyToClipboard(selectedRequest.payment.upiDetails.transactionId)}
-                                      className="ml-1 p-1"
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+
+                        {/* Request Details */}
+                        <Card className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 rounded-xl">
+                          <CardHeader className="pb-4">
+                            <CardTitle className="text-gray-900 text-lg flex items-center gap-3">
+                              <div className="w-8 h-8 bg-gradient-to-r from-green-600 to-emerald-600 rounded-lg flex items-center justify-center">
+                                <FileText className="w-5 h-5 text-white" />
+                              </div>
+                              Request Details
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            {selectedRequest.requestDetails && (
+                              <div className="bg-white rounded-lg border border-gray-200 p-4">
+                                <button
+                                  className="w-full flex justify-between items-center text-left font-medium text-gray-900 mb-3"
+                                  onClick={() => setExpandedSection(expandedSection === 'details' ? null : 'details')}
+                                  aria-expanded={expandedSection === 'details'}
+                                >
+                                  <span className="flex items-center gap-2">
+                                    <FileText className="w-4 h-4 text-green-600" />
+                                    Request Description
+                                  </span>
+                                  {expandedSection === 'details' ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                                </button>
+                                <AnimatePresence>
+                                  {expandedSection === 'details' && (
+                                    <motion.div
+                                      initial={{ height: 0, opacity: 0 }}
+                                      animate={{ height: 'auto', opacity: 1 }}
+                                      exit={{ height: 0, opacity: 0 }}
+                                      transition={{ duration: 0.3 }}
+                                      className="text-sm text-gray-600"
                                     >
-                                      <Copy className="w-4 h-4 text-gray-500" />
-                                    </Button>
+                                      <div className="bg-gray-50 rounded-lg p-3 mb-3">
+                                        <p className="whitespace-pre-wrap">{selectedRequest.requestDetails}</p>
+                                      </div>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => copyToClipboard(selectedRequest.requestDetails)}
+                                        className="gap-2"
+                                      >
+                                        <Copy className="w-4 h-4" />
+                                        Copy Description
+                                      </Button>
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
+                              </div>
+                            )}
+
+                            {selectedRequest.serviceCategory && (
+                              <div className="bg-white rounded-lg border border-gray-200 p-4">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Tag className="w-4 h-4 text-green-600" />
+                                  <span className="font-medium text-gray-900">Category</span>
+                                </div>
+                                <p className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3">{selectedRequest.serviceCategory}</p>
+                              </div>
+                            )}
+
+                            {selectedRequest.adminProposal && (
+                              <div className="bg-white rounded-lg border border-gray-200 p-4">
+                                <button
+                                  className="w-full flex justify-between items-center text-left font-medium text-gray-900 mb-3"
+                                  onClick={() => setExpandedSection(expandedSection === 'proposal' ? null : 'proposal')}
+                                  aria-expanded={expandedSection === 'proposal'}
+                                >
+                                  <span className="flex items-center gap-2">
+                                    <DollarSign className="w-4 h-4 text-green-600" />
+                                    Proposal Details
+                                  </span>
+                                  {expandedSection === 'proposal' ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                                </button>
+                                <AnimatePresence>
+                                  {expandedSection === 'proposal' && (
+                                    <motion.div
+                                      initial={{ height: 0, opacity: 0 }}
+                                      animate={{ height: 'auto', opacity: 1 }}
+                                      exit={{ height: 0, opacity: 0 }}
+                                      transition={{ duration: 0.3 }}
+                                      className="text-sm text-gray-600 space-y-3"
+                                    >
+                                      <div className="bg-gray-50 rounded-lg p-3">
+                                        <div className="flex items-center justify-between mb-2">
+                                          <span className="font-medium">Total Price:</span>
+                                          <span className="font-bold text-green-700">
+                                            {selectedRequest.adminProposal.currency} {selectedRequest.adminProposal.totalPrice}
+                                          </span>
+                                        </div>
+                                        <p className="mb-2">{selectedRequest.adminProposal.description}</p>
+                                        {selectedRequest.adminProposal.estimatedDelivery && (
+                                          <div className="flex items-center gap-2 text-sm">
+                                            <Calendar className="w-4 h-4 text-gray-500" />
+                                            <span>Estimated Delivery: {selectedRequest.adminProposal.estimatedDelivery}</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                      {selectedRequest.adminProposal.lineItems?.length > 0 && (
+                                        <div>
+                                          <h4 className="font-medium text-gray-700 mb-2">Line Items:</h4>
+                                          <div className="space-y-2">
+                                            {selectedRequest.adminProposal.lineItems.map((item, index) => (
+                                              <div key={index} className="bg-gray-50 rounded-lg p-3">
+                                                <div className="flex justify-between items-start">
+                                                  <div>
+                                                    <p className="font-medium">{item.name}</p>
+                                                    <p className="text-sm text-gray-500">{item.description}</p>
+                                                  </div>
+                                                  <div className="text-right">
+                                                    <p className="font-medium">{item.quantity} x {item.unitPrice}</p>
+                                                    <p className="text-sm text-green-600 font-medium">{item.totalPrice}</p>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
+                              </div>
+                            )}
+
+                            {selectedRequest.payment && (
+                              <div className="bg-white rounded-lg border border-gray-200 p-4">
+                                <button
+                                  className="w-full flex justify-between items-center text-left font-medium text-gray-900 mb-3"
+                                  onClick={() => setExpandedSection(expandedSection === 'payment' ? null : 'payment')}
+                                  aria-expanded={expandedSection === 'payment'}
+                                >
+                                  <span className="flex items-center gap-2">
+                                    <CreditCard className="w-4 h-4 text-green-600" />
+                                    Payment Information
+                                  </span>
+                                  {expandedSection === 'payment' ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                                </button>
+                                <AnimatePresence>
+                                  {expandedSection === 'payment' && (
+                                    <motion.div
+                                      initial={{ height: 0, opacity: 0 }}
+                                      animate={{ height: 'auto', opacity: 1 }}
+                                      exit={{ height: 0, opacity: 0 }}
+                                      transition={{ duration: 0.3 }}
+                                      className="text-sm text-gray-600 space-y-3"
+                                    >
+                                      <div className="bg-gray-50 rounded-lg p-3">
+                                        <div className="grid grid-cols-2 gap-4">
+                                          <div>
+                                            <span className="text-gray-500">Method:</span>
+                                            <p className="font-medium">{selectedRequest.payment.method}</p>
+                                          </div>
+                                          <div>
+                                            <span className="text-gray-500">Amount:</span>
+                                            <p className="font-medium">{selectedRequest.payment.currency} {selectedRequest.payment.amount}</p>
+                                          </div>
+                                        </div>
+                                        <div className="mt-3">
+                                          <span className="text-gray-500">Status:</span>
+                                          <Badge className={`ml-2 ${getStatusColor(selectedRequest.payment.status)}`}>
+                                            {selectedRequest.payment.status}
+                                          </Badge>
+                                        </div>
+                                      </div>
+                                      {selectedRequest.payment?.upiDetails && (
+                                        <div className="bg-gray-50 rounded-lg p-3">
+                                          <h4 className="font-medium text-gray-700 mb-2">UPI Details:</h4>
+                                          <div className="space-y-2">
+                                            <div className="flex items-center justify-between">
+                                              <span className="text-gray-500">UPI ID:</span>
+                                              <div className="flex items-center gap-2">
+                                                <span className="font-medium">{selectedRequest.payment.upiDetails.upiId}</span>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => copyToClipboard(selectedRequest.payment?.upiDetails?.upiId || '')}
+                                            className="p-1 h-6 w-6"
+                                          >
+                                            <Copy className="w-3 h-3" />
+                                          </Button>
+                                              </div>
+                                            </div>
+                                            {selectedRequest.payment?.upiDetails?.transactionId && (
+                                              <div className="flex items-center justify-between">
+                                                <span className="text-gray-500">Transaction ID:</span>
+                                                <div className="flex items-center gap-2">
+                                                  <span className="font-medium">{selectedRequest.payment.upiDetails.transactionId}</span>
+                                                <Button
+                                                  variant="ghost"
+                                                  size="sm"
+                                                  onClick={() => copyToClipboard(selectedRequest.payment?.upiDetails?.transactionId || '')}
+                                                  className="p-1 h-6 w-6"
+                                                >
+                                                  <Copy className="w-3 h-3" />
+                                                </Button>
+                                                </div>
+                                              </div>
+                                            )}
+                                            {selectedRequest.payment?.upiDetails?.utr && (
+                                              <div className="flex items-center justify-between">
+                                                <span className="text-gray-500">UTR:</span>
+                                                <div className="flex items-center gap-2">
+                                                  <span className="font-medium">{selectedRequest.payment.upiDetails.utr}</span>
+                                                  <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => copyToClipboard(selectedRequest.payment?.upiDetails?.utr || '')}
+                                                    className="p-1 h-6 w-6"
+                                                  >
+                                                    <Copy className="w-3 h-3" />
+                                                  </Button>
+                                                </div>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      </motion.div>
+                    )}
+
+                    {activeTab === 'chat' && (
+                      <motion.div
+                        key="chat"
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        transition={{ duration: 0.3 }}
+                        className="space-y-6"
+                      >
+                        {/* Chat Section */}
+                        <Card className="bg-gradient-to-r from-purple-50 to-pink-50 border-purple-200 rounded-xl">
+                          <CardHeader className="pb-4">
+                            <CardTitle className="text-gray-900 text-lg flex items-center gap-3">
+                              <div className="w-8 h-8 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg flex items-center justify-center">
+                                <MessageSquare className="w-5 h-5 text-white" />
+                              </div>
+                              Live Chat
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-4">
+                              <div className="h-96 overflow-y-auto border border-gray-200 rounded-xl p-4 bg-white scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+                                {chatMessages.length === 0 ? (
+                                  <div className="flex items-center justify-center h-full text-gray-500">
+                                    <div className="text-center">
+                                      <MessageSquare className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                                      <p className="text-sm">No messages yet</p>
+                                      <p className="text-xs text-gray-400">Start a conversation with the user</p>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  chatMessages.map((message) => (
+                                    <motion.div
+                                      key={message.id}
+                                      initial={{ opacity: 0, y: 10 }}
+                                      animate={{ opacity: 1, y: 0 }}
+                                      transition={{ duration: 0.3 }}
+                                      className={`mb-4 ${message.senderType === 'admin' ? 'text-right' : 'text-left'}`}
+                                    >
+                                      <div
+                                        className={`inline-block p-4 rounded-2xl max-w-lg ${
+                                          message.senderType === 'admin' 
+                                            ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white' 
+                                            : 'bg-gray-100 text-gray-900'
+                                        }`}
+                                      >
+                                        <div className="text-xs font-medium opacity-75 mb-1">
+                                          {message.senderName}
+                                        </div>
+                                        <div className="text-sm">{message.message}</div>
+                                        <div className="text-xs opacity-75 mt-1">
+                                          {message.createdAt?.toDate ? message.createdAt.toDate().toLocaleTimeString() : new Date(message.createdAt as any).toLocaleTimeString()}
+                                        </div>
+                                      </div>
+                                    </motion.div>
+                                  ))
+                                )}
+                                <div ref={chatEndRef} />
+                              </div>
+                              <div className="flex gap-3">
+                                <Input
+                                  type="text"
+                                  value={newMessage}
+                                  onChange={(e) => setNewMessage(e.target.value)}
+                                  className="flex-1 bg-gray-50 border-gray-200 text-gray-900 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 h-12"
+                                  placeholder="Type a message..."
+                                  onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                                />
+                                <Button
+                                  onClick={handleConnectToUser}
+                                  disabled={saving}
+                                  className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-xl disabled:opacity-50 transition-all duration-300 h-12 px-6"
+                                >
+                                  <User className="w-4 h-4 mr-2" />
+                                  Connect
+                                </Button>
+                                <Button
+                                  onClick={handleSendMessage}
+                                  disabled={saving || !newMessage.trim()}
+                                  className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl disabled:opacity-50 transition-all duration-300 h-12 px-6"
+                                >
+                                  <Send className="w-4 h-4 mr-2" />
+                                  Send
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </motion.div>
+                    )}
+
+                    {activeTab === 'actions' && (
+                      <motion.div
+                        key="actions"
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        transition={{ duration: 0.3 }}
+                        className="space-y-6"
+                      >
+                        {/* Submit Proposal */}
+                        {selectedRequest.status === 'pending' && (
+                          <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 rounded-xl">
+                            <CardHeader className="pb-4">
+                              <CardTitle className="text-gray-900 text-lg flex items-center gap-3">
+                                <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
+                                  <DollarSign className="w-5 h-5 text-white" />
+                                </div>
+                                Submit Proposal
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-6">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">Total Price</label>
+                                  <Input
+                                    type="number"
+                                    value={proposalForm.totalPrice}
+                                    onChange={(e) => setProposalForm(prev => ({ ...prev, totalPrice: e.target.value }))}
+                                    className="bg-white border-gray-200 text-gray-900 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 h-12"
+                                    placeholder="Enter total price"
+                                    aria-label="Total price"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">Currency</label>
+                                  <Select
+                                    value={proposalForm.currency}
+                                    onValueChange={(value) => setProposalForm(prev => ({ ...prev, currency: value as 'USD' | 'INR' }))}
+                                  >
+                                    <SelectTrigger className="bg-white border-gray-200 text-gray-900 rounded-xl focus:ring-2 focus:ring-blue-500 h-12">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-white border-gray-200 text-gray-900 rounded-xl">
+                                      <SelectItem value="USD">USD</SelectItem>
+                                      <SelectItem value="INR">INR</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                                <textarea
+                                  value={proposalForm.description}
+                                  onChange={(e) => setProposalForm(prev => ({ ...prev, description: e.target.value }))}
+                                  className="w-full bg-white border-gray-200 text-gray-900 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 transition-all duration-300"
+                                  rows={5}
+                                  placeholder="Describe the proposal details"
+                                  aria-label="Proposal description"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Estimated Delivery</label>
+                                <Input
+                                  type="date"
+                                  value={proposalForm.estimatedDelivery}
+                                  onChange={(e) => setProposalForm(prev => ({ ...prev, estimatedDelivery: e.target.value }))}
+                                  className="bg-white border-gray-200 text-gray-900 rounded-xl focus:ring-2 focus:ring-blue-500 h-12"
+                                  aria-label="Estimated delivery date"
+                                />
+                              </div>
+                              <div>
+                                <div className="flex justify-between items-center mb-4">
+                                  <label className="block text-sm font-medium text-gray-700">Line Items</label>
+                                  <Button
+                                    type="button"
+                                    onClick={addLineItem}
+                                    size="sm"
+                                    className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl gap-2"
+                                  >
+                                    <Plus className="w-4 h-4" />
+                                    Add Item
+                                  </Button>
+                                </div>
+                                <div className="space-y-3">
+                                  {proposalForm.lineItems.map((item, index) => (
+                                    <div key={item.id} className="grid grid-cols-1 sm:grid-cols-5 gap-3 items-center p-4 bg-white rounded-xl border border-gray-200">
+                                      <Input
+                                        type="text"
+                                        value={item.name}
+                                        onChange={(e) => updateLineItem(index, 'name', e.target.value)}
+                                        className="bg-gray-50 border-gray-200 text-gray-900 text-sm rounded-lg h-10"
+                                        placeholder="Item name"
+                                        aria-label={`Line item ${index + 1} name`}
+                                      />
+                                      <Input
+                                        type="text"
+                                        value={item.description}
+                                        onChange={(e) => updateLineItem(index, 'description', e.target.value)}
+                                        className="bg-gray-50 border-gray-200 text-gray-900 text-sm rounded-lg h-10"
+                                        placeholder="Description"
+                                        aria-label={`Line item ${index + 1} description`}
+                                      />
+                                      <Input
+                                        type="number"
+                                        value={item.quantity}
+                                        onChange={(e) => updateLineItem(index, 'quantity', Number(e.target.value))}
+                                        className="bg-gray-50 border-gray-200 text-gray-900 text-sm rounded-lg h-10"
+                                        placeholder="Qty"
+                                        aria-label={`Line item ${index + 1} quantity`}
+                                      />
+                                      <Input
+                                        type="number"
+                                        value={item.unitPrice}
+                                        onChange={(e) => updateLineItem(index, 'unitPrice', Number(e.target.value))}
+                                        className="bg-gray-50 border-gray-200 text-gray-900 text-sm rounded-lg h-10"
+                                        placeholder="Unit price"
+                                        aria-label={`Line item ${index + 1} unit price`}
+                                      />
+                                      <Button
+                                        type="button"
+                                        onClick={() => removeLineItem(index)}
+                                        variant="destructive"
+                                        size="sm"
+                                        className="rounded-lg h-10"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </Button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                              <Button
+                                onClick={handleSubmitProposal}
+                                disabled={saving || !proposalForm.totalPrice || !proposalForm.description}
+                                className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-xl disabled:opacity-50 transition-all duration-300 h-12"
+                              >
+                                {saving ? (
+                                  <div className="flex items-center gap-2">
+                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                    Submitting...
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-2">
+                                    <CheckCircle className="w-4 h-4" />
+                                    Submit Proposal
                                   </div>
                                 )}
-                                {selectedRequest.payment.upiDetails.utr && (
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-medium">UTR:</span>
-                                    <span>{selectedRequest.payment.upiDetails.utr}</span>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => copyToClipboard(selectedRequest.payment.upiDetails.utr)}
-                                      className="ml-1 p-1"
-                                    >
-                                      <Copy className="w-4 h-4 text-gray-500" />
-                                    </Button>
+                              </Button>
+                            </CardContent>
+                          </Card>
+                        )}
+
+                        {/* Payment Review */}
+                        {selectedRequest.status === 'payment_review' && selectedRequest.payment && (
+                          <Card className="bg-gradient-to-r from-orange-50 to-red-50 border-orange-200 rounded-xl">
+                            <CardHeader className="pb-4">
+                              <CardTitle className="text-gray-900 text-lg flex items-center gap-3">
+                                <div className="w-8 h-8 bg-gradient-to-r from-orange-600 to-red-600 rounded-lg flex items-center justify-center">
+                                  <CreditCard className="w-5 h-5 text-white" />
+                                </div>
+                                Payment Review
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="space-y-4 mb-6">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                  <div className="bg-white rounded-lg p-4 border border-gray-200">
+                                    <p className="text-sm text-gray-500 mb-1">Payment Method</p>
+                                    <p className="font-medium text-gray-900">{selectedRequest.payment.method}</p>
+                                  </div>
+                                  <div className="bg-white rounded-lg p-4 border border-gray-200">
+                                    <p className="text-sm text-gray-500 mb-1">Amount</p>
+                                    <p className="font-medium text-gray-900">{selectedRequest.payment.currency} {selectedRequest.payment.amount}</p>
+                                  </div>
+                                </div>
+                                {selectedRequest.payment.upiDetails && (
+                                  <div className="bg-white rounded-lg p-4 border border-gray-200">
+                                    <h4 className="font-medium text-gray-700 mb-3">UPI Details</h4>
+                                    <div className="space-y-3">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-sm text-gray-500">UPI ID:</span>
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-medium">{selectedRequest.payment.upiDetails.upiId}</span>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => copyToClipboard(selectedRequest.payment?.upiDetails?.upiId || '')}
+                                            className="p-1 h-6 w-6"
+                                          >
+                                            <Copy className="w-3 h-3" />
+                                          </Button>
+                                        </div>
+                                      </div>
+                                      {selectedRequest.payment.upiDetails.transactionId && (
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-sm text-gray-500">Transaction ID:</span>
+                                          <div className="flex items-center gap-2">
+                                            <span className="font-medium">{selectedRequest.payment.upiDetails.transactionId}</span>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => copyToClipboard(selectedRequest.payment?.upiDetails?.transactionId || '')}
+                                              className="p-1 h-6 w-6"
+                                            >
+                                              <Copy className="w-3 h-3" />
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      )}
+                                      {selectedRequest.payment.upiDetails.utr && (
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-sm text-gray-500">UTR:</span>
+                                          <div className="flex items-center gap-2">
+                                            <span className="font-medium">{selectedRequest.payment.upiDetails.utr}</span>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => copyToClipboard(selectedRequest.payment?.upiDetails?.utr || '')}
+                                              className="p-1 h-6 w-6"
+                                            >
+                                              <Copy className="w-3 h-3" />
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
                                 )}
                               </div>
-                            )}
-                          </div>
-                          <div className="flex gap-3">
-                            <Button
-                              onClick={() => handleReviewPayment('approve')}
-                              disabled={saving}
-                              className="bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50 transition-all duration-300"
-                            >
-                              <CheckCircle className="w-4 h-4 mr-2" />
-                              {saving ? 'Processing...' : 'Approve Payment'}
-                            </Button>
-                            <Button
-                              onClick={() => handleReviewPayment('reject')}
-                              disabled={saving}
-                              variant="destructive"
-                              className="rounded-lg disabled:opacity-50 transition-all duration-300"
-                            >
-                              <XCircle className="w-4 h-4 mr-2" />
-                              {saving ? 'Processing...' : 'Reject Payment'}
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {/* Status Update */}
-                    {['processing', 'in_progress'].includes(selectedRequest.status) && (
-                      <Card className="bg-gray-50 border-gray-200 rounded-lg">
-                        <CardHeader>
-                          <CardTitle className="text-gray-900 flex items-center gap-2">
-                            <Clock className="w-5 h-5 text-blue-600" />
-                            Update Status
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="flex gap-3">
-                            <Button
-                              onClick={() => handleUpdateStatus('in_progress')}
-                              disabled={saving}
-                              className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 transition-all duration-300"
-                            >
-                              <Clock className="w-4 h-4 mr-2" />
-                              {saving ? 'Updating...' : 'Mark In Progress'}
-                            </Button>
-                            <Button
-                              onClick={() => handleUpdateStatus('completed')}
-                              disabled={saving}
-                              className="bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50 transition-all duration-300"
-                            >
-                              <CheckCircle className="w-4 h-4 mr-2" />
-                              {saving ? 'Updating...' : 'Mark Completed'}
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {/* Release Deliverables */}
-                    {selectedRequest.status === 'completed' && (
-                      <Card className="bg-gray-50 border-gray-200 rounded-lg">
-                        <CardHeader>
-                          <CardTitle className="text-gray-900 flex items-center gap-2">
-                            <FileText className="w-5 h-5 text-blue-600" />
-                            Release Deliverables
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-6">
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">Website Link</label>
-                              <Input
-                                type="url"
-                                value={deliverables.websiteLink}
-                                onChange={(e) => setDeliverables(prev => ({ ...prev, websiteLink: e.target.value }))}
-                                className="bg-gray-100 border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-600"
-                                placeholder="https://example.com"
-                                aria-label="Website link"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">Admin Panel Link</label>
-                              <Input
-                                type="url"
-                                value={deliverables.adminPanelLink}
-                                onChange={(e) => setDeliverables(prev => ({ ...prev, adminPanelLink: e.target.value }))}
-                                className="bg-gray-100 border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-600"
-                                placeholder="https://admin.example.com"
-                                aria-label="Admin panel link"
-                              />
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">Username</label>
-                              <Input
-                                type="text"
-                                value={deliverables.username}
-                                onChange={(e) => setDeliverables(prev => ({ ...prev, username: e.target.value }))}
-                                className="bg-gray-100 border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-600"
-                                placeholder="Enter username"
-                                aria-label="Username"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-                              <Input
-                                type="password"
-                                value={deliverables.password}
-                                onChange={(e) => setDeliverables(prev => ({ ...prev, password: e.target.value }))}
-                                className="bg-gray-100 border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-600"
-                                placeholder="Enter password"
-                                aria-label="Password"
-                              />
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Files</label>
-                            <Input
-                              type="file"
-                              multiple
-                              onChange={(e) => {
-                                const files = Array.from(e.target.files || []).map(file => file.name);
-                                setDeliverables(prev => ({ ...prev, files }));
-                              }}
-                              className="bg-gray-100 border-gray-300 text-gray-900 rounded-lg"
-                              aria-label="Upload files"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
-                            <textarea
-                              value={deliverables.notes}
-                              onChange={(e) => setDeliverables(prev => ({ ...prev, notes: e.target.value }))}
-                              className="w-full bg-gray-100 border-gray-300 text-gray-900 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-600"
-                              rows={5}
-                              placeholder="Additional notes for the user"
-                              aria-label="Deliverable notes"
-                            />
-                          </div>
-                          <Button
-                            onClick={handleReleaseDeliverables}
-                            disabled={saving}
-                            className="w-full bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50 transition-all duration-300"
-                          >
-                            {saving ? 'Releasing...' : 'Release Deliverables'}
-                          </Button>
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {/* Chat */}
-                    <Card className="bg-gray-50 border-gray-200 rounded-lg">
-                      <CardHeader>
-                        <CardTitle className="text-gray-900 flex items-center gap-2">
-                          <MessageSquare className="w-5 h-5 text-blue-600" />
-                          Chat
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-6">
-                          <div className="h-96 overflow-y-auto border border-gray-200 rounded-lg p-4 bg-white">
-                            {chatMessages.map((message) => (
-                              <motion.div
-                                key={message.id}
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ duration: 0.3 }}
-                                className={`mb-4 ${message.senderType === 'admin' ? 'text-right' : 'text-left'}`}
-                              >
-                                <div
-                                  className={`inline-block p-3 rounded-lg max-w-lg ${
-                                    message.senderType === 'admin' 
-                                      ? 'bg-blue-100 text-blue-900 border border-blue-200' 
-                                      : 'bg-gray-100 text-gray-900 border border-gray-200'
-                                  }`}
+                              <div className="flex gap-3">
+                                <Button
+                                  onClick={() => handleReviewPayment('approve')}
+                                  disabled={saving}
+                                  className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-xl disabled:opacity-50 transition-all duration-300 h-12 px-6"
                                 >
-                                  <div className="text-xs font-medium text-gray-600 mb-1">{message.senderName}</div>
-                                  <div className="text-sm">{message.message}</div>
-                                </div>
-                              </motion.div>
-                            ))}
-                          </div>
-                          <div className="flex gap-3">
-                            <Input
-                              type="text"
-                              value={newMessage}
-                              onChange={(e) => setNewMessage(e.target.value)}
-                              className="flex-1 bg-gray-100 border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-600"
-                              placeholder="Type a message..."
-                              onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                              aria-label="Chat message"
-                            />
-                            <Button
-                              onClick={handleSendMessage}
-                              disabled={saving || !newMessage.trim()}
-                              className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 transition-all duration-300"
-                            >
-                              <Send className="w-4 h-4 mr-2" />
-                              Send
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                                  {saving ? (
+                                    <div className="flex items-center gap-2">
+                                      <RefreshCw className="w-4 h-4 animate-spin" />
+                                      Processing...
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-2">
+                                      <CheckCircle className="w-4 h-4" />
+                                      Approve Payment
+                                    </div>
+                                  )}
+                                </Button>
+                                <Button
+                                  onClick={() => handleReviewPayment('reject')}
+                                  disabled={saving}
+                                  variant="destructive"
+                                  className="rounded-xl disabled:opacity-50 transition-all duration-300 h-12 px-6"
+                                >
+                                  {saving ? (
+                                    <div className="flex items-center gap-2">
+                                      <RefreshCw className="w-4 h-4 animate-spin" />
+                                      Processing...
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-2">
+                                      <XCircle className="w-4 h-4" />
+                                      Reject Payment
+                                    </div>
+                                  )}
+                                </Button>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )}
 
-                    {/* Inquiry */}
-                    <Card className="bg-gray-50 border-gray-200 rounded-lg">
-                      <CardHeader>
-                        <CardTitle className="text-gray-900 flex items-center gap-2">
-                          <AlertCircle className="w-5 h-5 text-blue-600" />
-                          Submit Inquiry
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-6">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
-                          <Select
-                            value={newInquiry.type}
-                            onValueChange={(value) => setNewInquiry(prev => ({ ...prev, type: value as any }))}
-                          >
-                            <SelectTrigger className="bg-gray-100 border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-600">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent className="bg-white border-gray-200 text-gray-900">
-                              <SelectItem value="question">Question</SelectItem>
-                              <SelectItem value="concern">Concern</SelectItem>
-                              <SelectItem value="request">Request</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Message</label>
-                          <textarea
-                            value={newInquiry.message}
-                            onChange={(e) => setNewInquiry(prev => ({ ...prev, message: e.target.value }))}
-                            className="w-full bg-gray-100 border-gray-300 text-gray-900 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-600 transition-all duration-300"
-                            rows={5}
-                            placeholder="Enter your inquiry..."
-                            aria-label="Inquiry message"
-                          />
-                        </div>
-                        <Button
-                          onClick={handleSubmitInquiry}
-                          disabled={saving || !newInquiry.message.trim()}
-                          className="w-full bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50 transition-all duration-300"
-                        >
-                          <AlertCircle className="w-4 h-4 mr-2" />
-                          {saving ? 'Submitting...' : 'Submit Inquiry'}
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  </div>
+                        {/* Status Update */}
+                        {['processing', 'in_progress'].includes(selectedRequest.status) && (
+                          <Card className="bg-gradient-to-r from-yellow-50 to-orange-50 border-yellow-200 rounded-xl">
+                            <CardHeader className="pb-4">
+                              <CardTitle className="text-gray-900 text-lg flex items-center gap-3">
+                                <div className="w-8 h-8 bg-gradient-to-r from-yellow-600 to-orange-600 rounded-lg flex items-center justify-center">
+                                  <Clock className="w-5 h-5 text-white" />
+                                </div>
+                                Update Status
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="flex flex-col sm:flex-row gap-3">
+                                <Button
+                                  onClick={() => handleUpdateStatus('in_progress')}
+                                  disabled={saving}
+                                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl disabled:opacity-50 transition-all duration-300 h-12 px-6"
+                                >
+                                  {saving ? (
+                                    <div className="flex items-center gap-2">
+                                      <RefreshCw className="w-4 h-4 animate-spin" />
+                                      Updating...
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-2">
+                                      <Clock className="w-4 h-4" />
+                                      Mark In Progress
+                                    </div>
+                                  )}
+                                </Button>
+                                <Button
+                                  onClick={() => handleUpdateStatus('completed')}
+                                  disabled={saving}
+                                  className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-xl disabled:opacity-50 transition-all duration-300 h-12 px-6"
+                                >
+                                  {saving ? (
+                                    <div className="flex items-center gap-2">
+                                      <RefreshCw className="w-4 h-4 animate-spin" />
+                                      Updating...
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-2">
+                                      <CheckCircle className="w-4 h-4" />
+                                      Mark Completed
+                                    </div>
+                                  )}
+                                </Button>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )}
+
+                        {/* Release Deliverables */}
+                        {selectedRequest.status === 'completed' && (
+                          <Card className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 rounded-xl">
+                            <CardHeader className="pb-4">
+                              <CardTitle className="text-gray-900 text-lg flex items-center gap-3">
+                                <div className="w-8 h-8 bg-gradient-to-r from-green-600 to-emerald-600 rounded-lg flex items-center justify-center">
+                                  <Download className="w-5 h-5 text-white" />
+                                </div>
+                                Release Deliverables
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-6">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">Website Link</label>
+                                  <Input
+                                    type="url"
+                                    value={deliverables.websiteLink}
+                                    onChange={(e) => setDeliverables(prev => ({ ...prev, websiteLink: e.target.value }))}
+                                    className="bg-white border-gray-200 text-gray-900 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 h-12"
+                                    placeholder="https://example.com"
+                                    aria-label="Website link"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">Admin Panel Link</label>
+                                  <Input
+                                    type="url"
+                                    value={deliverables.adminPanelLink}
+                                    onChange={(e) => setDeliverables(prev => ({ ...prev, adminPanelLink: e.target.value }))}
+                                    className="bg-white border-gray-200 text-gray-900 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 h-12"
+                                    placeholder="https://admin.example.com"
+                                    aria-label="Admin panel link"
+                                  />
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">Username</label>
+                                  <Input
+                                    type="text"
+                                    value={deliverables.username}
+                                    onChange={(e) => setDeliverables(prev => ({ ...prev, username: e.target.value }))}
+                                    className="bg-white border-gray-200 text-gray-900 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 h-12"
+                                    placeholder="Enter username"
+                                    aria-label="Username"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                                  <Input
+                                    type="password"
+                                    value={deliverables.password}
+                                    onChange={(e) => setDeliverables(prev => ({ ...prev, password: e.target.value }))}
+                                    className="bg-white border-gray-200 text-gray-900 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 h-12"
+                                    placeholder="Enter password"
+                                    aria-label="Password"
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Files</label>
+                                <Input
+                                  type="file"
+                                  multiple
+                                  onChange={(e) => {
+                                    const files = Array.from(e.target.files || []).map(file => file.name);
+                                    setDeliverables(prev => ({ ...prev, files }));
+                                  }}
+                                  className="bg-white border-gray-200 text-gray-900 rounded-xl h-12"
+                                  aria-label="Upload files"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+                                <textarea
+                                  value={deliverables.notes}
+                                  onChange={(e) => setDeliverables(prev => ({ ...prev, notes: e.target.value }))}
+                                  className="w-full bg-white border-gray-200 text-gray-900 rounded-xl px-4 py-3 focus:ring-2 focus:ring-green-500 transition-all duration-300"
+                                  rows={5}
+                                  placeholder="Additional notes for the user"
+                                  aria-label="Deliverable notes"
+                                />
+                              </div>
+                              <Button
+                                onClick={handleReleaseDeliverables}
+                                disabled={saving}
+                                className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-xl disabled:opacity-50 transition-all duration-300 h-12"
+                              >
+                                {saving ? (
+                                  <div className="flex items-center gap-2">
+                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                    Releasing...
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-2">
+                                    <Download className="w-4 h-4" />
+                                    Release Deliverables
+                                  </div>
+                                )}
+                              </Button>
+                            </CardContent>
+                          </Card>
+                        )}
+
+                        {/* Submit Inquiry */}
+                        <Card className="bg-gradient-to-r from-purple-50 to-pink-50 border-purple-200 rounded-xl">
+                          <CardHeader className="pb-4">
+                            <CardTitle className="text-gray-900 text-lg flex items-center gap-3">
+                              <div className="w-8 h-8 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg flex items-center justify-center">
+                                <AlertCircle className="w-5 h-5 text-white" />
+                              </div>
+                              Submit Inquiry
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-6">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
+                              <Select
+                                value={newInquiry.type}
+                                onValueChange={(value) => setNewInquiry(prev => ({ ...prev, type: value as any }))}
+                              >
+                                <SelectTrigger className="bg-white border-gray-200 text-gray-900 rounded-xl focus:ring-2 focus:ring-purple-500 h-12">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent className="bg-white border-gray-200 text-gray-900 rounded-xl">
+                                  <SelectItem value="question">Question</SelectItem>
+                                  <SelectItem value="concern">Concern</SelectItem>
+                                  <SelectItem value="request">Request</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Message</label>
+                              <textarea
+                                value={newInquiry.message}
+                                onChange={(e) => setNewInquiry(prev => ({ ...prev, message: e.target.value }))}
+                                className="w-full bg-white border-gray-200 text-gray-900 rounded-xl px-4 py-3 focus:ring-2 focus:ring-purple-500 transition-all duration-300"
+                                rows={5}
+                                placeholder="Enter your inquiry..."
+                                aria-label="Inquiry message"
+                              />
+                            </div>
+                            <Button
+                              onClick={handleSubmitInquiry}
+                              disabled={saving || !newInquiry.message.trim()}
+                              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl disabled:opacity-50 transition-all duration-300 h-12"
+                            >
+                              {saving ? (
+                                <div className="flex items-center gap-2">
+                                  <RefreshCw className="w-4 h-4 animate-spin" />
+                                  Submitting...
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <AlertCircle className="w-4 h-4" />
+                                  Submit Inquiry
+                                </div>
+                              )}
+                            </Button>
+                          </CardContent>
+                        </Card>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </CardContent>
               </Card>
             </motion.div>

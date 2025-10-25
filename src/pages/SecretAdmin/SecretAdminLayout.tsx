@@ -4,6 +4,7 @@ import { auth, firestore } from '../../firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { Dialog, Transition } from '@headlessui/react';
+import { AdminSocketProvider } from '../../context/AdminSocketContext';
 import { 
   Bars3Icon, 
   XMarkIcon, 
@@ -188,6 +189,7 @@ export default function SecretAdminLayout() {
     { to: '/secret-admin/users', label: 'Users', icon: UsersIcon, badge: 0 },
     { to: '/secret-admin/user-ranks', label: 'User Ranks', icon: UserGroupIcon },
     { to: '/secret-admin/orders', label: 'Orders', icon: ShoppingBagIcon, badge: 0 },
+    { to: '/secret-admin/support-requests', label: 'Support Requests', icon: ChatBubbleLeftRightIcon, badge: 0 },
     { to: '/secret-admin/service-requests', label: 'Service Requests', icon: WrenchScrewdriverIcon, badge: 3 },
     { to: '/secret-admin/products', label: 'Products', icon: CubeIcon },
     { 
@@ -206,7 +208,8 @@ export default function SecretAdminLayout() {
   ];
 
   return (
-    <div className={`min-h-screen ${darkMode ? 'bg-gray-950' : 'bg-gray-50'} text-white flex`}>
+    <AdminSocketProvider>
+      <div className={`min-h-screen ${darkMode ? 'bg-gray-950' : 'bg-gray-50'} text-white flex`}>
       {/* Sidebar (desktop) */}
       <aside className={`${sidebarCollapsed ? 'w-16' : 'w-64'} shrink-0 bg-gradient-to-b from-gray-900 to-gray-850 border-r border-gray-800/50 hidden md:flex md:flex-col shadow-xl transition-all duration-300`}>
         <div className="h-16 flex items-center px-6 border-b border-gray-800/50">
@@ -434,5 +437,6 @@ export default function SecretAdminLayout() {
         </main>
       </div>
     </div>
+    </AdminSocketProvider>
   );
 }

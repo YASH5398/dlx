@@ -151,7 +151,7 @@ export default function AdminTransactionsEnhanced() {
       // Update local state
       setTransactions(prev => prev.map(t => 
         t.id === transactionId 
-          ? { ...t, status: newStatus, adminNotes: adminNotes || '', updatedAt: new Date() }
+          ? { ...t, status: newStatus as 'pending' | 'approved' | 'rejected' | 'completed', adminNotes: adminNotes || '', updatedAt: new Date() }
           : t
       ));
       

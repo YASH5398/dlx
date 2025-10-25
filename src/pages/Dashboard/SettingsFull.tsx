@@ -7,6 +7,8 @@ import ToggleSwitch from '../../components/ToggleSwitch.jsx';
 import toast from 'react-hot-toast';
 import { ShieldCheckIcon, Cog6ToothIcon, UserIcon, PhotoIcon, WalletIcon, ArrowDownTrayIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { useI18n } from '../../context/I18nContext';
+import { firestore } from '../../firebase';
+import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 
 export default function SettingsFull() {
   const { user, logout, resetPassword } = useUser();
@@ -30,11 +32,34 @@ export default function SettingsFull() {
   const [avatar, setAvatar] = useState(savedProfile.avatar || '');
   const [connectedWallet, setConnectedWallet] = useState(savedProfile.connectedWallet || '');
 
-  const [theme, setTheme] = useState(localStorage.getItem('preferences.theme') || 'dark');
-  const [language, setLanguage] = useState(localStorage.getItem('preferences.language') || 'English');
-  const [notifEmail, setNotifEmail] = useState(() => JSON.parse(localStorage.getItem('preferences.notifEmail') || 'true'));
-  const [notifSms, setNotifSms] = useState(() => JSON.parse(localStorage.getItem('preferences.notifSms') || 'false'));
-  const [notifPush, setNotifPush] = useState(() => JSON.parse(localStorage.getItem('preferences.notifPush') || 'true'));
+  // Firestore user document fields
+  const [userDoc, setUserDoc] = useState<any>(null);
+  const [theme, setTheme] = useState('dark');
+  const [language, setLanguage] = useState('English');
+  const [notifEmail, setNotifEmail] = useState(true);
+  const [notifSms, setNotifSms] = useState(false);
+  const [notifPush, setNotifPush] = useState(true);
+
+  // Fetch user document from Firestore
+  useEffect(() => {
+    if (!user?.id) return;
+    
+    const userRef = doc(firestore, 'users', user.id);
+    const unsub = onSnapshot(userRef, (snap) => {
+      const data = snap.data() as any || {};
+      setUserDoc(data);
+      const preferences = data.preferences || {};
+      setTheme(preferences.theme || 'dark');
+      setLanguage(preferences.language || 'English');
+      setNotifEmail(preferences.notifEmail ?? true);
+      setNotifSms(preferences.notifSms ?? false);
+      setNotifPush(preferences.notifPush ?? true);
+    }, (err) => {
+      console.error('User document stream failed:', err);
+    });
+    
+    return () => { try { unsub(); } catch {} };
+  }, [user?.id]);
 
   const [profileVisible, setProfileVisible] = useState(() => JSON.parse(localStorage.getItem('privacy.profileVisible') || 'true'));
   const [showEmail, setShowEmail] = useState(() => JSON.parse(localStorage.getItem('privacy.showEmail') || 'false'));
@@ -93,13 +118,23 @@ export default function SettingsFull() {
     toast.success('Profile customization saved');
   };
 
-  const savePreferences = () => {
-    localStorage.setItem('preferences.theme', theme);
-    localStorage.setItem('preferences.language', language);
-    localStorage.setItem('preferences.notifEmail', JSON.stringify(notifEmail));
-    localStorage.setItem('preferences.notifSms', JSON.stringify(notifSms));
-    localStorage.setItem('preferences.notifPush', JSON.stringify(notifPush));
-    toast.success('Preferences saved');
+  const savePreferences = async () => {
+    if (!user?.id) return;
+    
+    try {
+      const userRef = doc(firestore, 'users', user.id);
+      await updateDoc(userRef, {
+        'preferences.theme': theme,
+        'preferences.language': language,
+        'preferences.notifEmail': notifEmail,
+        'preferences.notifSms': notifSms,
+        'preferences.notifPush': notifPush
+      });
+      toast.success('Preferences saved to Firestore');
+    } catch (error) {
+      console.error('Error saving preferences:', error);
+      toast.error('Failed to save preferences');
+    }
   };
 
   const savePrivacy = () => {
@@ -122,7 +157,6 @@ export default function SettingsFull() {
     localStorage.removeItem('privacy.showPhone');
     await logout();
     toast.success('Account session cleared');
-    navigate('/login');
   };
 
   const downloadData = () => {

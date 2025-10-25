@@ -169,6 +169,15 @@ io.on('connection', (socket) => {
       const relevant = retrieveContext(site, content);
       // Record user prompt in history for AI chat
       await Message.create({ chat_id: `ai:${userId}`, sender_type: 'user', content, timestamp: Date.now() });
+      
+      // Notify admins about new AI chat message
+      notifyAdmins('ai:chat:new', { 
+        userId, 
+        content, 
+        timestamp: Date.now(),
+        type: 'ai_chat'
+      });
+      
       const answer = await generateAnswer(content, relevant);
       const msg = await Message.create({ chat_id: `ai:${userId}`, sender_type: 'AI', content: answer, timestamp: Date.now() });
       socket.emit('ai:response', msg);

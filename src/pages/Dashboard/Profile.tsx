@@ -3,10 +3,11 @@ import { useUser } from '../../context/UserContext';
 import Button from '../../components/Button';
 import InputField from '../../components/InputField.jsx';
 import ToggleSwitch from '../../components/ToggleSwitch.jsx';
-import { auth, db } from '../../firebase';
+import { auth, db, firestore } from '../../firebase';
 import { updateProfile } from 'firebase/auth';
 import { ref, update } from 'firebase/database';
-import { IdentificationIcon, UserCircleIcon, EnvelopeIcon, PhoneIcon, WalletIcon, MapPinIcon, ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline';
+import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { IdentificationIcon, UserCircleIcon, EnvelopeIcon, PhoneIcon, WalletIcon, MapPinIcon, ClipboardDocumentCheckIcon, ShieldCheckIcon, StarIcon } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import { useAffiliateApproval } from '../../hooks/useAffiliateApproval';
 
@@ -27,11 +28,42 @@ export default function ProfileDashboard() {
   const [location, setLocation] = useState<string>(saved.location || '');
   const [copied, setCopied] = useState(false);
   const [detecting, setDetecting] = useState(false);
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState<string>('');
+  const [saving, setSaving] = useState(false);
 
-  const referralCode = useMemo(() => {
-    if (!uid) return 'DLX0000';
-    const suffix = uid.slice(-4).toUpperCase();
-    return `DLX${suffix}`;
+  // Firestore user document fields
+  const [userDoc, setUserDoc] = useState<any>(null);
+  const [role, setRole] = useState<string>('');
+  const [rank, setRank] = useState<string>('');
+  const [status, setStatus] = useState<string>('');
+  const [referralCode, setReferralCode] = useState<string>('');
+  const [referrerCode, setReferrerCode] = useState<string>('');
+  const [referralCount, setReferralCount] = useState<number>(0);
+  const [activeReferrals, setActiveReferrals] = useState<number>(0);
+  const [username, setUsername] = useState<string>('');
+
+  // Fetch user document from Firestore
+  useEffect(() => {
+    if (!uid) return;
+    
+    const userRef = doc(firestore, 'users', uid);
+    const unsub = onSnapshot(userRef, (snap) => {
+      const data = snap.data() as any || {};
+      setUserDoc(data);
+      setRole(data.role || 'user');
+      setRank(data.rank || 'starter');
+      setStatus(data.status || 'inactive');
+      setReferralCode(data.referralCode || '');
+      setReferrerCode(data.referrerCode || '');
+      setReferralCount(data.referralCount || 0);
+      setActiveReferrals(data.activeReferrals || 0);
+      setUsername(data.username || '');
+    }, (err) => {
+      console.error('User document stream failed:', err);
+    });
+    
+    return () => { try { unsub(); } catch {} };
   }, [uid]);
 
   const memberSince = useMemo(() => {
@@ -127,6 +159,53 @@ export default function ProfileDashboard() {
     }
   };
 
+  const startEditing = (field: string, currentValue: string) => {
+    setEditingField(field);
+    setEditValue(currentValue || '');
+  };
+
+  const cancelEditing = () => {
+    setEditingField(null);
+    setEditValue('');
+  };
+
+  const saveField = async (field: string) => {
+    if (!uid) return;
+    
+    setSaving(true);
+    try {
+      const userRef = doc(firestore, 'users', uid);
+      const updateData: any = { [field]: editValue.trim() };
+      
+      await updateDoc(userRef, updateData);
+      
+      // Update local state
+      switch (field) {
+        case 'phone':
+          setPhone(editValue.trim());
+          break;
+        case 'location':
+          setLocation(editValue.trim());
+          break;
+        case 'walletAddress':
+          setWalletAddress(editValue.trim());
+          break;
+        case 'username':
+          setUsername(editValue.trim());
+          break;
+      }
+      
+      toast.success(`${field.charAt(0).toUpperCase() + field.slice(1)} updated successfully`);
+      setEditingField(null);
+      setEditValue('');
+    } catch (error) {
+      console.error('Error updating field:', error);
+      toast.error('Failed to update field. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto px-4 md:px-6 lg:px-8 py-6">
       {/* Header */}
@@ -140,7 +219,7 @@ export default function ProfileDashboard() {
 
       {/* User Info Card */}
       <div className="bg-white/5 border border-white/10 rounded-xl p-5 mb-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div className="flex items-center gap-3">
             <IdentificationIcon className="w-5 h-5 text-gray-300" />
             <div>
@@ -153,7 +232,7 @@ export default function ProfileDashboard() {
             <div>
               <div className="text-sm text-gray-400">Referral Code</div>
               <div className="flex items-center gap-2">
-                <span className="text-white font-medium">{referralCode}</span>
+                <span className="text-white font-medium">{referralCode || 'Loading...'}</span>
                 <Button variant="secondary" onClick={copyReferral} className="px-2 py-1 text-xs">{copied ? 'Copied' : 'Copy'}</Button>
               </div>
             </div>
@@ -166,31 +245,229 @@ export default function ProfileDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <PhoneIcon className="w-5 h-5 text-gray-300" />
-            <div>
-              <div className="text-sm text-gray-400">Phone</div>
-              <div className="text-white font-medium">{phone || 'Not set'}</div>
+            <UserCircleIcon className="w-5 h-5 text-gray-300" />
+            <div className="flex-1">
+              <div className="text-sm text-gray-400">Username</div>
+              {editingField === 'username' ? (
+                <div className="flex items-center gap-2 mt-1">
+                  <input
+                    type="text"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    className="flex-1 px-3 py-1 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter username"
+                    autoFocus
+                  />
+                  <button
+                    onClick={() => saveField('username')}
+                    disabled={saving}
+                    className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {saving ? 'Saving...' : 'Save'}
+                  </button>
+                  <button
+                    onClick={cancelEditing}
+                    className="px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <div className="text-white font-medium">{username || 'Not set'}</div>
+                  <button
+                    onClick={() => startEditing('username', username)}
+                    className="px-2 py-1 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 text-xs rounded-lg transition-colors"
+                  >
+                    {username ? 'Edit' : 'Set'}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <WalletIcon className="w-5 h-5 text-gray-300" />
+            <PhoneIcon className="w-5 h-5 text-gray-300" />
+            <div className="flex-1">
+              <div className="text-sm text-gray-400">Phone</div>
+              {editingField === 'phone' ? (
+                <div className="flex items-center gap-2 mt-1">
+                  <input
+                    type="tel"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    className="flex-1 px-3 py-1 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter phone number"
+                    autoFocus
+                  />
+                  <button
+                    onClick={() => saveField('phone')}
+                    disabled={saving}
+                    className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {saving ? 'Saving...' : 'Save'}
+                  </button>
+                  <button
+                    onClick={cancelEditing}
+                    className="px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <div className="text-white font-medium">{phone || 'Not set'}</div>
+                  <button
+                    onClick={() => startEditing('phone', phone)}
+                    className="px-2 py-1 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 text-xs rounded-lg transition-colors"
+                  >
+                    {phone ? 'Edit' : 'Set'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <ShieldCheckIcon className="w-5 h-5 text-gray-300" />
             <div>
-              <div className="text-sm text-gray-400">Wallet Address</div>
-              <div className="text-white font-medium truncate max-w-[240px]">{walletAddress || 'Not set'}</div>
+              <div className="text-sm text-gray-400">Role</div>
+              <div className="text-white font-medium capitalize">{role || 'Loading...'}</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <StarIcon className="w-5 h-5 text-gray-300" />
+            <div>
+              <div className="text-sm text-gray-400">Rank</div>
+              <div className="text-white font-medium capitalize">{rank || 'Loading...'}</div>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <UserCircleIcon className="w-5 h-5 text-gray-300" />
             <div>
-              <div className="text-sm text-gray-400">Member Since</div>
-              <div className="text-white font-medium">{memberSince}</div>
+              <div className="text-sm text-gray-400">Status</div>
+              <div className={`font-medium capitalize ${
+                status === 'active' ? 'text-green-400' : 
+                status === 'inactive' ? 'text-yellow-400' : 
+                'text-gray-400'
+              }`}>
+                {status || 'Loading...'}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <WalletIcon className="w-5 h-5 text-gray-300" />
+            <div className="flex-1">
+              <div className="text-sm text-gray-400">Wallet Address</div>
+              {editingField === 'walletAddress' ? (
+                <div className="flex items-center gap-2 mt-1">
+                  <input
+                    type="text"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    className="flex-1 px-3 py-1 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter wallet address"
+                    autoFocus
+                  />
+                  <button
+                    onClick={() => saveField('walletAddress')}
+                    disabled={saving}
+                    className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {saving ? 'Saving...' : 'Save'}
+                  </button>
+                  <button
+                    onClick={cancelEditing}
+                    className="px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <div className="text-white font-medium truncate max-w-[240px]">{walletAddress || 'Not set'}</div>
+                  <button
+                    onClick={() => startEditing('walletAddress', walletAddress)}
+                    className="px-2 py-1 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 text-xs rounded-lg transition-colors"
+                  >
+                    {walletAddress ? 'Edit' : 'Set'}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-3">
             <MapPinIcon className="w-5 h-5 text-gray-300" />
-            <div>
+            <div className="flex-1">
               <div className="text-sm text-gray-400">Location</div>
-              <div className="text-white font-medium">{location || 'Not set'}</div>
+              {editingField === 'location' ? (
+                <div className="flex items-center gap-2 mt-1">
+                  <input
+                    type="text"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    className="flex-1 px-3 py-1 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter location"
+                    autoFocus
+                  />
+                  <button
+                    onClick={() => saveField('location')}
+                    disabled={saving}
+                    className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {saving ? 'Saving...' : 'Save'}
+                  </button>
+                  <button
+                    onClick={cancelEditing}
+                    className="px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <div className="text-white font-medium">{location || 'Not set'}</div>
+                  <button
+                    onClick={() => startEditing('location', location)}
+                    className="px-2 py-1 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 text-xs rounded-lg transition-colors"
+                  >
+                    {location ? 'Edit' : 'Set'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Referral Information Card */}
+      <div className="bg-white/5 border border-white/10 rounded-xl p-5 mb-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Referral Information</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="flex items-center gap-3">
+            <ClipboardDocumentCheckIcon className="w-5 h-5 text-gray-300" />
+            <div>
+              <div className="text-sm text-gray-400">Your Referral Code</div>
+              <div className="text-white font-medium">{referralCode || 'Loading...'}</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <UserCircleIcon className="w-5 h-5 text-gray-300" />
+            <div>
+              <div className="text-sm text-gray-400">Referred By</div>
+              <div className="text-white font-medium">{referrerCode || 'No referrer'}</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <StarIcon className="w-5 h-5 text-gray-300" />
+            <div>
+              <div className="text-sm text-gray-400">Total Referrals</div>
+              <div className="text-white font-medium">{referralCount || 0}</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <ShieldCheckIcon className="w-5 h-5 text-gray-300" />
+            <div>
+              <div className="text-sm text-gray-400">Active Referrals</div>
+              <div className="text-white font-medium">{activeReferrals || 0}</div>
             </div>
           </div>
         </div>

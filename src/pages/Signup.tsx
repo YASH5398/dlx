@@ -36,11 +36,11 @@ const Signup: React.FC = () => {
   }, []);
 
   const validate = () => {
-    if (!name.trim() || !email || !password || !confirm) return 'Please fill all required fields';
+    if (!name.trim() || !email || !phone || !password || !confirm) return 'Please fill all required fields';
     if (!/^([^\s@]+)@([^\s@]+)\.[^\s@]+$/.test(email)) return 'Enter a valid email address';
     if (password.length < 6) return 'Password must be at least 6 characters';
     if (password !== confirm) return 'Passwords must match';
-    if (phone && !/^\d{10}$/.test(phone)) return 'Phone must be 10 digits';
+    if (!/^\d{10}$/.test(phone)) return 'Phone must be 10 digits';
     if (!agreeTerms) return 'Please agree to the Terms and Privacy Policy';
     return null;
   };
@@ -80,8 +80,7 @@ const Signup: React.FC = () => {
     setError(null);
     try {
       setLoading(true);
-      await loginWithGoogle();
-      navigate('/dashboard');
+      navigate('/google-referral-signup');
     } catch (e: any) {
       setError(e?.message ?? 'Google sign-up failed');
     } finally {
@@ -146,7 +145,7 @@ const Signup: React.FC = () => {
               </button>
 
               <button 
-                onClick={() => navigate('/phone-signup')}
+                onClick={() => alert('📱 Feature coming soon!')}
                 disabled={loading}
                 className="w-full group flex items-center justify-center gap-3 bg-gradient-to-r from-slate-800 to-slate-700 hover:from-slate-700 hover:to-slate-600 text-white font-semibold py-3.5 px-5 rounded-2xl transition-all duration-300 transform hover:scale-[1.02] hover:shadow-xl border border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
               >
@@ -205,7 +204,21 @@ const Signup: React.FC = () => {
                 />
               </div>
 
-              {/* Phone signup moved to dedicated page: /phone-signup */}
+              {/* Phone */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-300 mb-2.5">
+                  Phone Number
+                  <span className="text-slate-500 font-normal ml-1.5">(Required)</span>
+                </label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="Enter your phone number"
+                  className="w-full px-4 py-3.5 bg-slate-800/60 border border-slate-700/70 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all hover:border-slate-600"
+                  required
+                />
+              </div>
 
               {/* Referral Code */}
               <div>
