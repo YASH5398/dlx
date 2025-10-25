@@ -19,9 +19,18 @@ export function useWallet() {
 
     const unsubWallets = onSnapshot(walletsDoc, (snap) => {
       const d = (snap.data() as any) || {};
-      const usdt = Number(d.mainUsdt || 0) + Number(d.purchaseUsdt || 0);
-      const inr = Number(d.mainInr || 0) + Number(d.purchaseInr || 0);
-      setWallet((prev: WalletState) => ({ ...prev, usdt, inr }));
+      const usdt = d.usdt || {};
+      const inr = d.inr || {};
+      const usdtTotal = Number(usdt.mainUsdt || 0) + Number(usdt.purchaseUsdt || 0);
+      const inrTotal = Number(inr.mainInr || 0) + Number(inr.purchaseInr || 0);
+      setWallet((prev: WalletState) => ({ ...prev, usdt: usdtTotal, inr: inrTotal }));
+      
+      console.log('useWallet updated (canonical):', { 
+        usdtTotal, 
+        inrTotal,
+        usdt: usdt,
+        inr: inr
+      });
     }, () => {
       setWallet((prev: WalletState) => ({ ...prev, usdt: 0, inr: 0 }));
     });
@@ -51,11 +60,13 @@ export function useWallet() {
     const wData = wSnap.exists() ? (wSnap.data() as any) : {};
     const uData = uSnap.exists() ? (uSnap.data() as any) : {};
 
-    const usdt = Number(wData.mainUsdt || 0) + Number(wData.purchaseUsdt || 0);
-    const inr = Number(wData.mainInr || 0) + Number(wData.purchaseInr || 0);
+    const usdt = wData.usdt || {};
+    const inr = wData.inr || {};
+    const usdtTotal = Number(usdt.mainUsdt || 0) + Number(usdt.purchaseUsdt || 0);
+    const inrTotal = Number(inr.mainInr || 0) + Number(inr.purchaseInr || 0);
     const dlx = Number(uData.wallet?.miningBalance ?? 0);
 
-    setWallet({ dlx, usdt, inr });
+    setWallet({ dlx, usdt: usdtTotal, inr: inrTotal });
   };
 
   return { wallet, refresh };

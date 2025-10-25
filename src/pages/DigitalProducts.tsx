@@ -145,7 +145,7 @@ export default function DigitalProducts() {
     return () => unsub();
   }, []);
 
-  // Fetch wallet balances
+  // Fetch wallet balances from canonical structure
   useEffect(() => {
     if (!user) return;
     
@@ -153,11 +153,20 @@ export default function DigitalProducts() {
     const unsub = onSnapshot(walletRef, (snap) => {
       if (snap.exists()) {
         const data = snap.data() as any;
+        const usdt = data.usdt || {};
+        const inr = data.inr || {};
         setWalletBalances({
-          mainUsdt: Number(data.mainUsdt || 0),
-          purchaseUsdt: Number(data.purchaseUsdt || 0),
-          mainInr: Number(data.mainInr || 0),
-          purchaseInr: Number(data.purchaseInr || 0),
+          mainUsdt: Number(usdt.mainUsdt || 0),
+          purchaseUsdt: Number(usdt.purchaseUsdt || 0),
+          mainInr: Number(inr.mainInr || 0),
+          purchaseInr: Number(inr.purchaseInr || 0),
+        });
+        
+        console.log('DigitalProducts wallet updated (canonical):', { 
+          usdt, 
+          inr,
+          mainUsdt: usdt.mainUsdt,
+          purchaseUsdt: usdt.purchaseUsdt
         });
       }
     });

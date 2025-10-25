@@ -61,16 +61,26 @@ export default function Wallet() {
     trc20: 'TH1s69X1MqxJJme6BVPU3XFXhk8QwSXa7M'
   };
 
-  // Stream wallet from Firestore wallets collection
+  // Stream wallet from canonical Firestore wallets collection
   useEffect(() => {
     if (!uid) return;
     const walletDoc = doc(firestore, 'wallets', uid);
     const unsub = onSnapshot(walletDoc, (snap) => {
       const d = (snap.data() as any) || {};
-      setMainUsdt(Number(d.mainUsdt || 0));
-      setPurchaseUsdt(Number(d.purchaseUsdt || 0));
-      setMainInr(Number(d.mainInr || 0));
-      setPurchaseInr(Number(d.purchaseInr || 0));
+      const usdt = d.usdt || {};
+      const inr = d.inr || {};
+      
+      setMainUsdt(Number(usdt.mainUsdt || 0));
+      setPurchaseUsdt(Number(usdt.purchaseUsdt || 0));
+      setMainInr(Number(inr.mainInr || 0));
+      setPurchaseInr(Number(inr.purchaseInr || 0));
+      
+      console.log('Wallet data updated (canonical):', { 
+        mainUsdt: usdt.mainUsdt, 
+        purchaseUsdt: usdt.purchaseUsdt,
+        mainInr: inr.mainInr,
+        purchaseInr: inr.purchaseInr
+      });
     }, (err) => {
       console.error('Wallet stream failed:', err);
       setMainUsdt(0);
