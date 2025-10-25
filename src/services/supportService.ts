@@ -3,6 +3,8 @@ import {
   doc, 
   addDoc, 
   updateDoc, 
+  getDoc,
+  setDoc,
   onSnapshot, 
   query, 
   orderBy, 
@@ -12,6 +14,9 @@ import {
 } from 'firebase/firestore';
 import type { DocumentData, QuerySnapshot, FieldValue } from 'firebase/firestore';
 import { firestore } from '../firebase';
+
+// Backend API base URL
+const API_BASE = import.meta.env.VITE_SUPPORT_API_URL || 'http://localhost:4000';
 
 // Types for Support System
 export interface SupportRequest {
@@ -52,19 +57,17 @@ export interface SupportMessage {
 }
 
 export interface AdminNotification {
-  id?: string;
-  type: 'new_request' | 'new_message' | 'status_change';
+  id: string;
   requestId: string;
   userId: string;
-  userName: string;
   message: string;
-  read: boolean;
-  createdAt: Timestamp | Date | FieldValue;
+  createdAt: number;
+  read?: boolean;
 }
 
 class SupportService {
   private supportRequestsRef = collection(firestore, 'support_requests');
-  private notificationsRef = collection(firestore, 'admin_notifications');
+  private adminNotificationsRef = collection(firestore, 'admin_notifications');
 
   // Create a new support request (AI Agent flow)
   async createSupportRequest(
@@ -83,44 +86,109 @@ class SupportService {
     }
   ): Promise<string> {
     try {
+      if (type === 'ai_agent') {
+        // 1) Create ticket via backend API
+        const res = await fetch(`${API_BASE}/api/tickets`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: userId,
+            subject: metadata?.title || 'AI Agent Support Request',
+            category: metadata?.category || 'general',
+            description: initialMessage,
+            priority: metadata?.priority || 'medium',
+          })
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err?.error || 'Failed to create ticket');
+        }
+        const ticket = await res.json();
+        const requestId = ticket?.id as string;
+
+        // 2) Mirror into Firestore support_requests for UI and subscriptions
+        const requestData: Omit<SupportRequest, 'id'> = {
+          userId,
+          userName,
+          userEmail,
+          status: 'pending',
+          type,
+          title: metadata?.title || 'AI Agent Support Request',
+          category: metadata?.category || 'general',
+          priority: metadata?.priority || 'medium',
+          createdAt: serverTimestamp(),
+          lastMessageAt: serverTimestamp(),
+          metadata: {
+            userAgent: metadata?.userAgent || navigator?.userAgent || 'Unknown',
+            referrer: metadata?.referrer || document?.referrer || 'Unknown',
+            sessionId: metadata?.sessionId || `session_${Date.now()}`,
+          },
+        };
+
+        // Create the document with the specific ID
+        await setDoc(doc(firestore, 'support_requests', requestId), requestData);
+
+        // 3) Add initial message to Firestore thread
+        await this.addMessage(requestId, {
+          sender: 'user',
+          senderName: userName,
+          senderId: userId,
+          text: initialMessage,
+          type: 'ai_request',
+          status: 'sent',
+        });
+
+        // 4) Notify admins
+        await this.createAdminNotification({
+          type: 'new_request',
+          requestId,
+          userId,
+          userName,
+          message: `New AI Agent request from ${userName}`,
+          read: false,
+        });
+
+        console.log(`Support ticket created via backend: ${requestId}`);
+        return requestId;
+      }
+
+      // Default: Live chat request handled entirely in Firestore
       const requestData: Omit<SupportRequest, 'id'> = {
         userId,
         userName,
         userEmail,
         status: 'pending',
         type,
-        title: metadata?.title || `${type === 'ai_agent' ? 'AI Agent' : 'Live Chat'} Request`,
+        title: metadata?.title || 'Live Chat Request',
         category: metadata?.category || 'general',
         priority: metadata?.priority || 'medium',
         createdAt: serverTimestamp(),
         lastMessageAt: serverTimestamp(),
         metadata: {
-          userAgent: metadata?.userAgent,
-          referrer: metadata?.referrer,
-          sessionId: metadata?.sessionId || `session_${Date.now()}`
-        }
+          userAgent: metadata?.userAgent || navigator?.userAgent || 'Unknown',
+          referrer: metadata?.referrer || document?.referrer || 'Unknown',
+          sessionId: metadata?.sessionId || `session_${Date.now()}`,
+        },
       };
 
       const docRef = await addDoc(this.supportRequestsRef, requestData);
-      
-      // Add initial message
+
       await this.addMessage(docRef.id, {
         sender: 'user',
         senderName: userName,
         senderId: userId,
         text: initialMessage,
-        type: type === 'ai_agent' ? 'ai_request' : 'message',
-        status: 'sent'
+        type: 'message',
+        status: 'sent',
       });
 
-      // Create admin notification
       await this.createAdminNotification({
         type: 'new_request',
         requestId: docRef.id,
         userId,
         userName,
-        message: `New ${type === 'ai_agent' ? 'AI Agent' : 'Live Chat'} request from ${userName}`,
-        read: false
+        message: `New Live Chat request from ${userName}`,
+        read: false,
       });
 
       console.log(`Support request created: ${docRef.id}`);
@@ -279,31 +347,24 @@ class SupportService {
     }
   }
 
-  // Subscribe to admin notifications
-  subscribeToAdminNotifications(
-    adminId: string,
-    callback: (notifications: AdminNotification[]) => void
+  // Subscribe to a specific support request's status
+  subscribeToRequestStatus(
+    requestId: string,
+    callback: (status: SupportRequest['status'], assignedAdmin?: string) => void
   ): () => void {
-    const q = query(this.notificationsRef, where('read', '==', false), orderBy('createdAt', 'desc'));
+    const requestRef = doc(firestore, 'support_requests', requestId);
 
-    return onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
-      const notifications: AdminNotification[] = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as AdminNotification));
-      callback(notifications);
+    return onSnapshot(requestRef, (docSnapshot) => {
+      if (docSnapshot.exists()) {
+        const request = docSnapshot.data() as SupportRequest;
+        callback(request.status, request.assignedAdmin);
+      } else {
+        console.log("No such document!");
+        // Optionally, handle the case where the document might be deleted
+      }
     }, (error) => {
-      console.error('Error subscribing to admin notifications:', error);
+      console.error('Error subscribing to request status:', error);
     });
-  }
-
-  // Mark notification as read
-  async markNotificationAsRead(notificationId: string): Promise<void> {
-    try {
-      await updateDoc(doc(firestore, 'admin_notifications', notificationId), { read: true });
-    } catch (error) {
-      console.error('Error marking notification as read:', error);
-    }
   }
 
   // Simulate AI Chatbot message handling
@@ -314,14 +375,49 @@ class SupportService {
     message: string
   ): Promise<{ success: boolean; reply?: string; error?: string }> {
     try {
-      // Simulate response delay
-      await new Promise(resolve => setTimeout(resolve, 800));
+      // Call backend AI endpoint
+      const res = await fetch(`${API_BASE}/api/ai-chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: message, userId }),
+      });
 
-      // A simple hardcoded response - replace with actual AI service
-      const reply = `Thanks, ${userName}! I understand you're asking: "${message}". Our AI will assist you shortly.`;
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error || 'AI service unavailable');
+      }
+
+      const data = await res.json();
+      const reply = (data?.reply as string) || `Thanks, ${userName}! I understand you're asking: "${message}".`;
 
       // Save to support_requests collection for history under a generic chatbot session
       const chatSessionId = `chatbot_${userId}`;
+      
+      // Ensure the parent support request document exists
+      const chatSessionRef = doc(firestore, 'support_requests', chatSessionId);
+      const chatSessionDoc = await getDoc(chatSessionRef);
+      
+      if (!chatSessionDoc.exists()) {
+        // Create the parent document for the chatbot session
+        await setDoc(chatSessionRef, {
+          userId,
+          userName,
+          userEmail,
+          status: 'active',
+          type: 'ai_chatbot',
+          title: 'AI Chatbot Session',
+          category: 'general',
+          priority: 'medium',
+          createdAt: serverTimestamp(),
+          lastMessageAt: serverTimestamp(),
+          metadata: {
+            userAgent: navigator?.userAgent || 'Unknown',
+            referrer: document?.referrer || 'Unknown',
+            sessionId: chatSessionId,
+          },
+        });
+      }
+
       const messagesRef = collection(firestore, 'support_requests', chatSessionId, 'messages');
 
       // Save user message
@@ -333,7 +429,7 @@ class SupportService {
         text: message,
         timestamp: serverTimestamp(),
         type: 'message',
-        status: 'sent'
+        status: 'sent',
       });
 
       // Save AI reply
@@ -345,13 +441,53 @@ class SupportService {
         text: reply,
         timestamp: serverTimestamp(),
         type: 'message',
-        status: 'delivered'
+        status: 'delivered',
       });
 
       return { success: true, reply };
     } catch (error) {
       console.error('Error handling AI chat message:', error);
       return { success: false, error: 'Failed to process AI chat message' };
+    }
+  }
+
+  /**
+   * Subscribe to admin notifications, optionally filtering unread only.
+   */
+  subscribeToAdminNotifications(
+    adminId: string | undefined,
+    callback: (notifications: AdminNotification[]) => void,
+    options?: { unreadOnly?: boolean }
+  ) {
+    try {
+      const constraints: any[] = [orderBy('createdAt', 'desc')];
+      // Currently notifications don't have adminId; we stream all and let UI filter by request/user.
+      if (options?.unreadOnly) {
+        constraints.unshift(where('read', '==', false));
+      }
+      const q = query(this.adminNotificationsRef, ...constraints);
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const notifs: AdminNotification[] = snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+        callback(notifs);
+      }, (error) => {
+        console.error('subscribeToAdminNotifications error:', error);
+      });
+      return unsubscribe;
+    } catch (err) {
+      console.error('Failed to subscribe to admin notifications', err);
+      return () => {};
+    }
+  }
+
+  /**
+   * Mark a notification as read.
+   */
+  async markNotificationAsRead(notificationId: string) {
+    try {
+      await updateDoc(doc(firestore, 'admin_notifications', notificationId), { read: true });
+    } catch (err) {
+      console.error('Failed to mark admin notification as read', err);
+      throw err;
     }
   }
 }

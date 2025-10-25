@@ -1,0 +1,95 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users can read and write their own user document
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Users can read and write their own wallet document
+    match /wallets/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Users can read and write their own transaction subcollection
+    match /wallets/{userId}/transactions/{transactionId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Users can create deposit requests and read their own
+    match /depositRequests/{requestId} {
+      allow create: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+      allow read: if request.auth != null && 
+        (request.auth.uid == resource.data.userId || 
+         request.auth.token.admin == true);
+      allow update: if request.auth != null && 
+        request.auth.token.admin == true;
+    }
+    
+    // Users can create withdrawal requests and read their own
+    match /withdrawalRequests/{requestId} {
+      allow create: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+      allow read: if request.auth != null && 
+        (request.auth.uid == resource.data.userId || 
+         request.auth.token.admin == true);
+      allow update: if request.auth != null && 
+        request.auth.token.admin == true;
+    }
+    
+    // Only admins can read/write audit logs
+    match /audit_logs/{logId} {
+      allow read, write: if request.auth != null && 
+        request.auth.token.admin == true;
+    }
+    
+    // Only admins can read/write error logs
+    match /error_logs/{logId} {
+      allow read, write: if request.auth != null && 
+        request.auth.token.admin == true;
+    }
+    
+    // Users can read their own notifications
+    match /notifications/{notificationId} {
+      allow read, write: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+    }
+    
+    // Service requests - users can create and read their own
+    match /serviceRequests/{requestId} {
+      allow create: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+      allow read: if request.auth != null && 
+        (request.auth.uid == resource.data.userId || 
+         request.auth.token.admin == true);
+      allow update: if request.auth != null && 
+        request.auth.token.admin == true;
+    }
+    
+    // Orders - users can read their own orders
+    match /orders/{orderId} {
+      allow read: if request.auth != null && 
+        (request.auth.uid == resource.data.userId || 
+         request.auth.token.admin == true);
+      allow write: if request.auth != null && 
+        request.auth.token.admin == true;
+    }
+    
+    // Admin collections - only admins can access
+    match /adminUsers/{adminId} {
+      allow read, write: if request.auth != null && 
+        request.auth.token.admin == true;
+    }
+    
+    match /adminInvites/{inviteId} {
+      allow read, write: if request.auth != null && 
+        request.auth.token.admin == true;
+    }
+    
+    // Default deny all other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

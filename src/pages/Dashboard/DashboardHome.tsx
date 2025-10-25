@@ -6,6 +6,15 @@ import { firestore } from '../../firebase';
 import { collection, query, where, onSnapshot, getDocs, doc, deleteDoc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import ServiceRequestModal from '../../components/ServiceRequestModal';
+import TopEarnersWidget from '../../components/TopEarnersWidget';
+import { getRankInfo, getRankDisplayName } from '../../utils/rankSystem';
+import { useUserRank } from '../../hooks/useUserRank';
+import { useAffiliateStatus } from '../../hooks/useAffiliateStatus';
+import AffiliateJoinModal from '../../components/AffiliateJoinModal';
+import AffiliateCongratulationsModal from '../../components/AffiliateCongratulationsModal';
+import { Button } from '../../components/ui/button';
+import { Badge } from '../../components/ui/badge';
+import { Share2, Crown, Sparkles } from 'lucide-react';
 
 import type { ServiceItem } from '../../utils/services';
 import { restoreDefaultServiceForms } from '../../utils/services';
@@ -38,17 +47,50 @@ export default function DashboardHome() {
   const { user } = useUser();
   // const { wallet } = useWallet();
   const { totalEarnings, activeReferrals, tier } = useReferral();
+  const { userRankInfo } = useUserRank();
+  const { affiliateStatus, joinAffiliateProgram, getAffiliateBadgeText, getAffiliateStatusText } = useAffiliateStatus();
   const navigate = useNavigate();
   const [ordersCount, setOrdersCount] = useState(0);
   const [progress, setProgress] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [modalOpen, setModalOpen] = useState(false);
+  const [affiliateJoinModalOpen, setAffiliateJoinModalOpen] = useState(false);
+  const [affiliateCongratulationsModalOpen, setAffiliateCongratulationsModalOpen] = useState(false);
+  const [showFirstTimeModal, setShowFirstTimeModal] = useState(false);
   const [selectedService, setSelectedService] = useState<string | null>(null);
   const [services, setServices] = useState<ServiceItem[]>([]);
 
   // Real-time wallet subscription for dashboard balances
   const [usdtTotal, setUsdtTotal] = useState(0);
+
+  // Check for first-time user and show affiliate modal
+  useEffect(() => {
+    if (user && !affiliateStatus.isPartner) {
+      // Check if this is a first-time user (no previous visits)
+      const hasVisitedBefore = localStorage.getItem('dlx_user_visited');
+      if (!hasVisitedBefore) {
+        setShowFirstTimeModal(true);
+        localStorage.setItem('dlx_user_visited', 'true');
+      }
+    }
+  }, [user, affiliateStatus.isPartner]);
+
+  // Show congratulations modal when affiliate gets approved
+  useEffect(() => {
+    if (affiliateStatus.isApproved && affiliateStatus.isPartner) {
+      setAffiliateCongratulationsModalOpen(true);
+    }
+  }, [affiliateStatus.isApproved, affiliateStatus.isPartner]);
+
+  const handleJoinAffiliate = async () => {
+    const success = await joinAffiliateProgram();
+    if (success) {
+      setAffiliateJoinModalOpen(false);
+      setShowFirstTimeModal(false);
+      // Show success toast or notification
+    }
+  };
   const [inrMain, setInrMain] = useState(0);
   useEffect(() => {
     if (!user?.id) return;
@@ -161,7 +203,8 @@ export default function DashboardHome() {
             category: data.category ?? 'General',
           });
         });
-        setServices(items);
+        // If Firestore has no services, use static fallback
+        setServices(items.length ? items : staticServices);
 
         // Restore missing service form configs (idempotent)
         await restoreDefaultServiceForms(DEFAULT_SERVICE_FORMS);
@@ -211,190 +254,45 @@ export default function DashboardHome() {
                 category: data2.category ?? 'General',
               });
             });
-            setServices(items2);
+            setServices(items2.length ? items2 : staticServices);
           }
         }
       } catch (e) {
         console.warn('Failed to load services from Firestore', e);
+        // In case of error, still show static fallback
+        setServices(staticServices);
       }
     };
     load();
   }, []);
 
   // Fallback static list (used if backend is empty)
-  const staticServices: StaticService[] = [
-    {
-      id: '1',
-      name: 'Crypto Token Creation',
-      description: 'Launch your own cryptocurrency with smart contracts, custom tokenomics, and secure blockchain integration.',
-      startingPrice: '$2,999',
-      icon: '🪙',
-      gradient: 'from-orange-500 to-yellow-600',
-      features: ['Smart Contract Development', 'Token Economics Design', 'Audit & Security'],
-      category: 'blockchain'
-    },
-
-    {
-      id: '3',
-      name: 'Chatbot Development',
-      description: 'AI-powered chatbots for customer service, lead generation, and automated support systems.',
-      startingPrice: '$999',
-      icon: '💬',
-      gradient: 'from-cyan-500 to-teal-600',
-      features: ['AI Integration', 'Multi-platform Support', 'Natural Language Processing'],
-      category: 'ai'
-    },
-    {
-      id: '4',
-      name: 'MLM Plan Development',
-      description: 'Complete MLM software with multiple compensation plans, genealogy tree, and commission tracking.',
-      startingPrice: '$3,999',
-      icon: '📊',
-      gradient: 'from-pink-500 to-rose-600',
-      features: ['Compensation Plans', 'Genealogy System', 'E-wallet Integration'],
-      category: 'mlm'
-    },
-    {
-      id: '5',
-      name: 'Mobile App Development',
-      description: 'Native and cross-platform mobile applications with modern UI/UX and high performance.',
-      startingPrice: '$4,999',
-      icon: '📱',
-      gradient: 'from-blue-500 to-indigo-600',
-      features: ['Cross-platform Development', 'Native Performance', 'App Store Optimization'],
-      category: 'mobile'
-    },
-    {
-      id: '6',
-      name: 'Business Automation',
-      description: 'Automate your business processes and workflows with custom integration and smart automation.',
-      startingPrice: '$1,999',
-      icon: '⚙️',
-      gradient: 'from-emerald-500 to-green-600',
-      features: ['Process Automation', 'Workflow Design', 'Integration Services'],
-      category: 'automation'
-    },
-    {
-      id: '7',
-      name: 'Telegram Bot',
-      description: 'Custom Telegram bots with advanced features, payment integration, and user management.',
-      startingPrice: '$799',
-      icon: '🤖',
-      gradient: 'from-sky-500 to-blue-600',
-      features: ['Custom Commands', 'API Integration', 'User Management'],
-      category: 'bot'
-    },
-    {
-      id: '8',
-      name: 'Crypto Audit',
-      description: 'Comprehensive smart contract security audits with vulnerability assessment and detailed reports.',
-      startingPrice: '$2,499',
-      icon: '🔍',
-      gradient: 'from-red-500 to-orange-600',
-      features: ['Smart Contract Audit', 'Security Assessment', 'Vulnerability Testing'],
-      category: 'security'
-    },
-    {
-      id: '9',
-      name: 'Landing Page Creation',
-      description: 'Create a responsive and high-converting landing page with custom design, layout, and hosting-ready setup.',
-      startingPrice: '$45 / ₹4,000',
-      icon: '🎨',
-      gradient: 'from-purple-500 to-pink-600',
-      features: ['Custom Layout Design', 'Responsive Web Development', 'Hosting & Deployment'],
-      category: 'Web Development'
-    },
-    {
-      id: '10',
-      name: 'E-commerce Store Setup',
-      description: 'Launch a full-featured e-commerce store with payment integration, product setup, and basic SEO optimization.',
-      startingPrice: '$190 / ₹16,000',
-      icon: '🛒',
-      gradient: 'from-green-500 to-emerald-600',
-      features: ['Shopify / WooCommerce Setup', 'Payment Gateway Integration', 'Product Upload & Basic SEO'],
-      category: 'Web Development'
-    },
-    {
-      id: '11',
-      name: 'TradingView Custom Indicator / Strategy',
-      description: 'Get your personalized TradingView indicator or strategy with alerts and backtesting for automated trading.',
-      startingPrice: '$30 / ₹2,500',
-      icon: '📈',
-      gradient: 'from-blue-500 to-cyan-600',
-      features: ['Custom Indicator / Strategy', 'Backtesting & Alerts', 'Easy Integration'],
-      category: 'Crypto'
-    },
-    {
-      id: '12',
-      name: 'Social Media Management',
-      description: 'Full monthly social media management with content creation, post scheduling, and engagement tracking.',
-      startingPrice: '$20 / ₹1,700 per month',
-      icon: '📱',
-      gradient: 'from-indigo-500 to-purple-600',
-      features: ['Monthly Content Plan', 'Post Scheduling & Templates', 'Engagement & Analytics Report'],
-      category: 'Marketing'
-    },
-    {
-      id: '13',
-      name: 'SEO Services',
-      description: 'Optimize your website for better search engine visibility with technical and on-page SEO improvements.',
-      startingPrice: '$50 / ₹4,200',
-      icon: '🔍',
-      gradient: 'from-yellow-500 to-orange-600',
-      features: ['Website Audit', 'On-page Optimization', 'Keyword Recommendations'],
-      category: 'Marketing'
-    },
-    {
-      id: '14',
-      name: 'Digital Marketing Campaigns',
-      description: 'Setup and manage FB/IG/Google Ads campaigns with creatives, targeting, and performance tracking.',
-      startingPrice: '$20 / ₹1,700',
-      icon: '📊',
-      gradient: 'from-teal-500 to-green-600',
-      features: ['Ads Setup & Targeting', 'Creative Design & Copywriting', 'Analytics & Performance Report'],
-      category: 'Marketing'
-    },
-    {
-      id: '15',
-      name: 'Video Editing Service',
-      description: 'Professional video editing for YouTube, Reels, or promotional content with high-quality output.',
-      startingPrice: '$15 / ₹1,300',
-      icon: '🎬',
-      gradient: 'from-red-500 to-pink-600',
-      features: ['Video Cutting & Editing', 'Transitions & Effects', 'Final Render in Multiple Formats'],
-      category: 'Media'
-    },
-    {
-      id: '16',
-      name: 'Daily Thumbnails Service',
-      description: 'Custom thumbnail creation daily for your YouTube videos or content platform for 30/60 days.',
-      startingPrice: '$5 / ₹450 per thumbnail',
-      icon: '🖼️',
-      gradient: 'from-orange-500 to-red-600',
-      features: ['Custom Thumbnail Design', '30/60 Days Delivery', 'High CTR Focused'],
-      category: 'Media'
-    },
-    {
-      id: '17',
-      name: 'Automated Email Marketing Setup',
-      description: 'Setup automated email campaigns with workflows, templates, and integrations for better engagement.',
-      startingPrice: '$30 / ₹2,500',
-      icon: '📧',
-      gradient: 'from-cyan-500 to-blue-600',
-      features: ['Mailchimp / SendGrid Setup', 'Workflow Automation', 'Email Template Design'],
-      category: 'Marketing'
-    },
-    {
-      id: '18',
-      name: 'WhatsApp Marketing Hidden Software',
-      description: 'Get a cost-effective WhatsApp marketing software without API cost, fully automated for campaigns.',
-      startingPrice: '$30 / ₹2,500',
-      icon: '💬',
-      gradient: 'from-green-500 to-teal-600',
-      features: ['Hidden WhatsApp Automation', 'No API / Zero Cost per Message', 'Easy Setup & Installation Guide'],
-      category: 'Marketing'
-    }
+  const DEFAULT_SERVICES_BASE: Omit<ServiceItem, 'gradient' | 'features'>[] = [
+    { id: 'token', name: 'Crypto Token Creation', description: 'Launch your own cryptocurrency with smart contracts, custom tokenomics, and secure blockchain integration.', startingPrice: '$2,999', icon: '🪙', category: 'Crypto' },
+    { id: 'chatbot', name: 'Chatbot Development', description: 'AI-powered chatbots for customer service, lead generation, and automated support systems.', startingPrice: '$999', icon: '💬', category: 'ai' },
+    { id: 'mlm', name: 'MLM Plan Development', description: 'Complete MLM software with multiple compensation plans, genealogy tree, and commission tracking.', startingPrice: '$350', icon: '📊', category: 'mlm' },
+    { id: 'mobile', name: 'Mobile App Development', description: 'Native and cross-platform mobile applications with modern UI/UX and high performance.', startingPrice: '$250', icon: '📱', category: 'mobile' },
+    { id: 'automation', name: 'Business Automation', description: 'Automate your business processes and workflows with custom integration and smart automation.', startingPrice: '$1,999', icon: '⚙️', category: 'automation' },
+    { id: 'telegram', name: 'Telegram Bot', description: 'Custom Telegram bots with advanced features, payment integration, and user management.', startingPrice: '$799', icon: '🤖', category: 'bot' },
+    { id: 'audit', name: 'Crypto Audit', description: 'Comprehensive smart contract security audits with vulnerability assessment and detailed reports.', startingPrice: '$2,499', icon: '🔍', category: 'security' },
+    { id: 'landing-page', name: 'Landing Page Creation', description: 'Create a responsive and high-converting landing page with custom design, layout, and hosting-ready setup.', startingPrice: '$45 / ₹4,000', icon: '🎨', category: 'Web Development' },
+    { id: 'ecommerce-store', name: 'E-commerce Store Setup', description: 'Launch a full-featured e-commerce store with payment integration, product setup, and basic SEO optimization.', startingPrice: '$190 / ₹16,000', icon: '🛒', category: 'Web Development' },
+    { id: 'tradingview-indicator', name: 'TradingView Custom Indicator / Strategy', description: 'Get your personalized TradingView indicator or strategy with alerts and backtesting for automated trading.', startingPrice: '$30 / ₹2,500', icon: '📈', category: 'Crypto' },
+    { id: 'social-media-management', name: 'Social Media Management', description: 'Full monthly social media management with content creation, post scheduling, and engagement tracking.', startingPrice: '$20 / ₹1,700 per month', icon: '📱', category: 'Marketing' },
+    { id: 'seo-services', name: 'SEO Services', description: 'Optimize your website for better search engine visibility with technical and on-page SEO improvements.', startingPrice: '$50 / ₹4,200', icon: '🔍', category: 'Marketing' },
+    { id: 'digital-marketing-campaigns', name: 'Digital Marketing Campaigns', description: 'Setup and manage FB/IG/Google Ads campaigns with creatives, targeting, and performance tracking.', startingPrice: '$20 / ₹1,700', icon: '📊', category: 'Marketing' },
+    { id: 'video-editing', name: 'Video Editing Service', description: 'Professional video editing for YouTube, Reels, or promotional content with high-quality output.', startingPrice: '$15 / ₹1,300', icon: '🎬', category: 'Media' },
+    { id: 'daily-thumbnails', name: 'Daily Thumbnails Service', description: 'Custom thumbnail creation daily for your YouTube videos or content platform for 30/60 days.', startingPrice: '$5 / ₹450 per thumbnail', icon: '🖼️', category: 'Media' },
+    { id: 'email-marketing-setup', name: 'Automated Email Marketing Setup', description: 'Setup automated email campaigns with workflows, templates, and integrations for better engagement.', startingPrice: '$30 / ₹2,500', icon: '📧', category: 'Marketing' },
+    { id: 'whatsapp-marketing-software', name: 'WhatsApp Marketing Hidden Software', description: 'Get a cost-effective WhatsApp marketing software without API cost, fully automated for campaigns.', startingPrice: '$30 / ₹2,500', icon: '💬', category: 'Marketing' },
+    { id: 'website', name: 'Website Development', description: 'Custom, responsive website with modern design and SEO optimization.', startingPrice: '$1,499', icon: '🖥️', category: 'Web Development' },
   ];
+
+  const staticServices: ServiceItem[] = DEFAULT_SERVICES_BASE.map((s) => ({
+    ...s,
+    gradient: gradientForCategory(s.category),
+    features: getDefaultFeatures(s.id, s.category),
+  }));
 
   const filteredServices = services.filter(service => {
     const matchesSearch = service.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -494,13 +392,37 @@ export default function DashboardHome() {
                   Here's your <span className="font-semibold text-cyan-400">Digilinex</span> dashboard overview
                 </p>
               </div>
-              <div className="flex items-center gap-3">
-                <div className="px-4 py-2 rounded-xl bg-slate-800/60 backdrop-blur-sm shadow-lg border border-slate-700/50">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                <div className="px-3 py-2 rounded-xl bg-slate-800/60 backdrop-blur-sm shadow-lg border border-slate-700/50">
                   <p className="text-xs text-slate-400 mb-0.5">Tier Level</p>
-                  <p className="text-lg font-bold bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">
+                  <p className="text-sm sm:text-lg font-bold bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">
                     {levelLabel}
                   </p>
                 </div>
+                <div className={`px-3 py-2 rounded-xl backdrop-blur-sm shadow-lg border ${userRankInfo.bgColor} ${userRankInfo.borderColor}`}>
+                  <p className="text-xs text-slate-400 mb-0.5">Current Rank</p>
+                  <p className={`text-sm sm:text-lg font-bold ${userRankInfo.textColor}`}>
+                    {userRankInfo.displayName}
+                  </p>
+                </div>
+                {getAffiliateBadgeText() && (
+                  <div className="px-3 py-2 rounded-xl backdrop-blur-sm shadow-lg border border-green-500/50 bg-green-500/10">
+                    <p className="text-xs text-green-400 mb-0.5">Affiliate Status</p>
+                    <p className="text-sm sm:text-lg font-bold text-green-400">
+                      {getAffiliateBadgeText()}
+                    </p>
+                  </div>
+                )}
+                {!affiliateStatus.isPartner && (
+                  <Button
+                    onClick={() => navigate('/affiliate-program')}
+                    className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold px-3 py-2 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 text-sm sm:text-base"
+                  >
+                    <Crown className="w-4 h-4 mr-1 sm:mr-2" />
+                    <span className="hidden sm:inline">Join Affiliate</span>
+                    <span className="sm:hidden">Join</span>
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -591,6 +513,29 @@ export default function DashboardHome() {
               </div>
               <div className="h-1 bg-gradient-to-r from-purple-500 to-pink-600"></div>
             </div>
+
+            {/* Affiliate Status Card */}
+            <div className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-green-500/20 hover:shadow-2xl transition-all duration-300 overflow-hidden border border-slate-700/50 hover:border-green-500/50">
+              <div className="absolute inset-0 bg-gradient-to-br from-green-600/10 to-emerald-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <div className="relative p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-green-500/50">
+                    <Crown className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="px-3 py-1 rounded-full bg-green-500/20 border border-green-500/30 text-green-300 text-xs font-semibold">
+                    {affiliateStatus.isApproved ? 'Active' : affiliateStatus.isPending ? 'Pending' : 'Inactive'}
+                  </div>
+                </div>
+                <h3 className="text-sm font-medium text-slate-400 mb-1">Affiliate Partner</h3>
+                <p className="text-2xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
+                  {getAffiliateStatusText()}
+                </p>
+                <p className="text-xs text-slate-500 mt-2">
+                  Commission: {userRankInfo.commissionPercentage}% • Earnings: ${affiliateStatus.totalEarnings.toFixed(2)}
+                </p>
+              </div>
+              <div className="h-1 bg-gradient-to-r from-green-500 to-emerald-600"></div>
+            </div>
           </div>
 
           {/* Level Progress Card */}
@@ -626,6 +571,11 @@ export default function DashboardHome() {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Top Earners Widget */}
+          <div className="mb-8">
+            <TopEarnersWidget />
           </div>
 
           {/* Affiliate Partner CTA */}
@@ -758,7 +708,7 @@ export default function DashboardHome() {
             </div>
 
             {/* Services Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
               {filteredServices.map((service) => (
                 <div
                   key={service.id}
@@ -767,42 +717,70 @@ export default function DashboardHome() {
                   {/* Gradient Overlay on Hover */}
                   <div className={`absolute inset-0 bg-gradient-to-br ${service.gradient} opacity-0 group-hover:opacity-10 transition-opacity duration-300`}></div>
                   
-                  <div className="relative p-6">
+                  <div className="relative p-4 sm:p-6">
                     {/* Icon */}
-                    <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${service.gradient} flex items-center justify-center text-3xl shadow-lg mb-4 group-hover:scale-110 transition-transform duration-300`}>
+                    <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-gradient-to-br ${service.gradient} flex items-center justify-center text-2xl sm:text-3xl shadow-lg mb-3 sm:mb-4 group-hover:scale-110 transition-transform duration-300`}>
                       {service.icon}
                     </div>
                     
                     {/* Category Badge */}
-                    <div className="absolute top-4 right-4">
-                      <span className="px-3 py-1 text-xs font-semibold bg-slate-700/60 backdrop-blur-sm text-slate-300 rounded-full border border-slate-600/50">
+                    <div className="absolute top-3 right-3 sm:top-4 sm:right-4">
+                      <span className="px-2 py-1 text-xs font-semibold bg-slate-700/60 backdrop-blur-sm text-slate-300 rounded-full border border-slate-600/50">
                         {service.category}
                       </span>
                     </div>
 
                     {/* Title */}
-                    <h3 className="text-xl font-bold text-slate-200 mb-2 leading-tight">
+                    <h3 className="text-lg sm:text-xl font-bold text-slate-200 mb-2 leading-tight">
                       {service.name}
                     </h3>
 
                     {/* Description */}
-                    <p className="text-sm text-slate-400 mb-4 line-clamp-3 leading-relaxed">
+                    <p className="text-xs sm:text-sm text-slate-400 mb-3 sm:mb-4 line-clamp-3 leading-relaxed">
                       {service.description}
                     </p>
 
                     {/* Price */}
-                    <div className="mb-4">
+                    <div className="mb-3 sm:mb-4">
                       <p className="text-xs text-slate-500 mb-1">Starting at</p>
-                      <p className={`text-2xl font-bold bg-gradient-to-r ${service.gradient} bg-clip-text text-transparent`}>
+                      <p className={`text-xl sm:text-2xl font-bold bg-gradient-to-r ${service.gradient} bg-clip-text text-transparent`}>
                         {service.startingPrice}
                       </p>
                     </div>
 
+                    {/* Commission Info */}
+                    <div className="mb-3 sm:mb-4 p-2 sm:p-3 rounded-lg bg-slate-700/30 border border-slate-600/30">
+                      <div className="text-center">
+                        <p className="text-xs text-slate-400 mb-1">Your Commission</p>
+                        <p className={`text-lg sm:text-2xl font-bold ${userRankInfo.textColor}`}>
+                          {userRankInfo.commissionPercentage}%
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Share Button for Affiliates */}
+                    {affiliateStatus.isApproved && (
+                      <div className="mb-3 sm:mb-4">
+                        <Button
+                          onClick={() => {
+                            const referralLink = `${window.location.origin}/signup?ref=${user?.id}`;
+                            navigator.clipboard.writeText(referralLink);
+                            // Show success toast
+                          }}
+                          className="w-full bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 text-white font-semibold py-2 px-3 sm:px-4 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 text-sm sm:text-base"
+                        >
+                          <Share2 className="w-4 h-4 mr-1 sm:mr-2" />
+                          <span className="hidden sm:inline">Share & Earn {userRankInfo.commissionPercentage}%</span>
+                          <span className="sm:hidden">Share & Earn</span>
+                        </Button>
+                      </div>
+                    )}
+
                     {/* Features */}
-                    <ul className="space-y-2 mb-6">
+                    <ul className="space-y-1 sm:space-y-2 mb-4 sm:mb-6">
                       {(service.features ?? []).slice(0, 3).map((feature, idx) => (
-                        <li key={idx} className="flex items-start gap-2 text-sm">
-                          <svg className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <li key={idx} className="flex items-start gap-2 text-xs sm:text-sm">
+                          <svg className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                           </svg>
                           <span className="text-slate-300">{feature}</span>
@@ -813,7 +791,7 @@ export default function DashboardHome() {
                     {/* CTA Button */}
                     <button
                       onClick={() => handleGetService(service.id)}
-                      className={`w-full py-3 rounded-xl bg-gradient-to-r ${service.gradient} text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95`}
+                      className={`w-full py-2 sm:py-3 rounded-xl bg-gradient-to-r ${service.gradient} text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95 text-sm sm:text-base`}
                     >
                       Get Service
                     </button>
@@ -882,6 +860,29 @@ export default function DashboardHome() {
           serviceName={selectedService}
         />
       )}
+
+      {/* Affiliate Join Modal */}
+      <AffiliateJoinModal
+        isOpen={affiliateJoinModalOpen}
+        onClose={() => setAffiliateJoinModalOpen(false)}
+        onJoin={handleJoinAffiliate}
+        isFirstTime={false}
+      />
+
+      {/* First Time User Modal */}
+      <AffiliateJoinModal
+        isOpen={showFirstTimeModal}
+        onClose={() => setShowFirstTimeModal(false)}
+        onJoin={handleJoinAffiliate}
+        isFirstTime={true}
+      />
+
+      {/* Congratulations Modal */}
+      <AffiliateCongratulationsModal
+        isOpen={affiliateCongratulationsModalOpen}
+        onClose={() => setAffiliateCongratulationsModalOpen(false)}
+        commissionRate={userRankInfo.commissionPercentage}
+      />
 
       {/* Add custom animation keyframes to your global CSS or Tailwind config */}
       <style>{`

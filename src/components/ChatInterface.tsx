@@ -49,6 +49,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [currentRequest, setCurrentRequest] = useState<SupportRequest | null>(null);
   const [isTyping, setIsTyping] = useState(false);
+  const [isChatBlocked, setIsChatBlocked] = useState(chatType === 'ai_agent'); // Initialize based on chatType
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -72,12 +73,29 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   useEffect(() => {
     if (!requestId) return;
 
-    const unsubscribe = supportService.subscribeToMessages(requestId, (newMessages) => {
+    const unsubscribeMessages = supportService.subscribeToMessages(requestId, (newMessages) => {
       setMessages(newMessages);
     });
 
-    return unsubscribe;
-  }, [requestId]);
+    // Subscribe to request status changes for AI Agent chat
+    let unsubscribeStatus: () => void;
+    if (chatType === 'ai_agent') {
+      unsubscribeStatus = supportService.subscribeToRequestStatus(requestId, (status, assignedAdmin) => {
+        if (status === 'active' && assignedAdmin) {
+          setIsChatBlocked(false); // Unblock chat when admin connects
+        } else {
+          setIsChatBlocked(true); // Keep chat blocked otherwise
+        }
+      });
+    }
+
+    return () => {
+      unsubscribeMessages();
+      if (unsubscribeStatus) {
+        unsubscribeStatus();
+      }
+    };
+  }, [requestId, chatType]);
 
   // Handle sending messages
   const handleSendMessage = async () => {
@@ -141,6 +159,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           type: 'message',
           status: 'sent'
         });
+        if (chatType === 'ai_agent') {
+          setIsChatBlocked(true); // Block chat after user sends message in AI Agent support
+        }
       } else {
         // Create new support request
         const newRequestId = await supportService.createSupportRequest(
@@ -158,6 +179,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         
         // The component should be re-rendered with the new requestId
         console.log('New support request created:', newRequestId);
+        if (chatType === 'ai_agent') {
+          setIsChatBlocked(true); // Block chat after creating a new AI Agent request
+        }
       }
     } catch (error) {
       console.error('Error sending message:', error);
@@ -348,13 +372,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   : "Type your message..."
               }
               className="w-full px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              disabled={isLoading}
+              disabled={isLoading || isChatBlocked} // Disable input if loading or chat is blocked
             />
+            {isChatBlocked && chatType === 'ai_agent' && (
+              <div className="absolute inset-0 flex items-center justify-center bg-gray-100 bg-opacity-80 rounded-full text-sm text-gray-600">
+                Waiting for agent to connect...
+              </div>
+            )}
           </div>
 
           <button
             onClick={handleSendMessage}
-            disabled={!newMessage.trim() || isLoading}
+            disabled={!newMessage.trim() || isLoading || isChatBlocked} // Disable button if chat is blocked
             className={`p-2 rounded-full transition-colors ${
               newMessage.trim() && !isLoading
                 ? 'bg-green-500 text-white hover:bg-green-600'

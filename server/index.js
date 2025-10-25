@@ -25,7 +25,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const server = http.createServer(app);
 
-const allowedOrigins = ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5176', 'http://localhost:5177'];
+const allowedOrigins = ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5176', 'http://localhost:5177', 'https://digilinex-a80a9.web.app'];
 
 const io = new SocketIOServer(server, {
   cors: {
@@ -433,7 +433,9 @@ app.get('/api/health', (req, res) => res.json({ ok: true }));
 
 // Admin API
 import adminRouter from './routes/admin.js';
+import transactionsRouter from './routes/transactions.js';
 app.use('/api/admin', adminRouter);
+app.use('/api/transactions', transactionsRouter);
 
 const PORT = process.env.PORT || 4000;
 console.log(`Attempting to start server on port ${PORT}...`);

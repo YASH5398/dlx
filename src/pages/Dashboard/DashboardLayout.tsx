@@ -49,18 +49,24 @@ export default function DashboardLayout() {
     { name: "Mining", icon: CurrencyDollarIcon, path: "/mining" },
     { name: "Wallet", icon: WalletIcon, path: "/wallet" },
     { name: approved ? "Affiliate Dashboard" : "Affiliate Program", icon: UsersIcon, path: approved ? "/affiliate-dashboard" : "/affiliate-program" },
-    { name: "Commission", icon: CurrencyDollarIcon, path: "/commission" },
+    { name: "Rewards", icon: CurrencyDollarIcon, path: "/commission" },
     { name: "Referrals", icon: UserGroupIcon, path: "/referrals" },
     { name: "Digital Products", icon: ChartBarIcon, path: "/dashboard/digital-products" },
     { name: "Support", icon: LifebuoyIcon, path: "/support" },
     { name: "Settings", icon: Cog6ToothIcon, path: "/settings" },
   ];
 
-  const handleLogout = () => {
-    logout();
-    navigate("/login");
-    setMenuOpen(false);
-    setProfileDropdownOpen(false);
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate("/login");
+      setMenuOpen(false);
+      setProfileDropdownOpen(false);
+    } catch (error) {
+      console.error('Logout failed:', error);
+      // Force redirect even if logout fails
+      navigate("/login");
+    }
   };
 
   const closeMobileMenu = () => {
