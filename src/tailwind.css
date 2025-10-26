@@ -2,6 +2,67 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Fix select element visibility in dark theme */
+@layer base {
+  select {
+    color: white !important;
+    background-color: rgba(255, 255, 255, 0.05) !important;
+  }
+  
+  select option {
+    color: white !important;
+    background-color: #1a1a1a !important;
+    padding: 8px 12px;
+  }
+  
+  select:focus {
+    outline: none;
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2) !important;
+  }
+  
+  /* Ensure proper contrast for select elements */
+  select,
+  select option {
+    color-scheme: dark;
+  }
+}
+
+/* Utility class for select elements */
+@layer utilities {
+  .select-dark {
+    color: white !important;
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    color-scheme: dark;
+  }
+  
+  .select-dark option {
+    color: white !important;
+    background-color: #1a1a1a !important;
+  }
+  
+  /* Modal scrolling utilities */
+  .modal-container {
+    @apply fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto;
+  }
+  
+  .modal-content {
+    @apply bg-gradient-to-br from-[#0a0e1f] to-[#0b1230] border border-white/20 rounded-3xl p-8 w-full max-h-[90vh] overflow-y-auto;
+  }
+  
+  .modal-content-sm {
+    @apply max-w-md;
+  }
+  
+  .modal-content-md {
+    @apply max-w-2xl;
+  }
+  
+  .modal-content-lg {
+    @apply max-w-4xl;
+  }
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;

@@ -6,7 +6,6 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion";
 import { useNavigate } from 'react-router-dom';
-import { useAffiliateBannerVisibility } from '../hooks/useAffiliateBannerVisibility';
 
 // ============================================================================
 // ERROR BOUNDARY
@@ -1602,8 +1601,6 @@ const Footer = () => {
 // MAIN HOME COMPONENT
 // ============================================================================
 const Home = () => {
-  const { shouldHideBanners, loading } = useAffiliateBannerVisibility();
-
   return (
     <div className="min-h-screen bg-slate-900">
       <Header />
@@ -1620,11 +1617,9 @@ const Home = () => {
         <ErrorBoundary>
           <WhyChooseSection />
         </ErrorBoundary>
-        {!loading && !shouldHideBanners && (
-          <ErrorBoundary>
-            <AffiliateSection />
-          </ErrorBoundary>
-        )}
+        <ErrorBoundary>
+          <AffiliateSection />
+        </ErrorBoundary>
         <ErrorBoundary>
           <TestimonialsSection />
         </ErrorBoundary>

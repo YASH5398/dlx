@@ -386,6 +386,34 @@ export default function Wallet() {
   const renderMainPage = () => (
     <div className={`min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white transition-opacity duration-500 ${isTransitioning ? 'opacity-0' : 'opacity-100'}`}>
       <div className="container mx-auto px-4 py-6 max-w-4xl">
+        {/* Hero Section */}
+        <div className="relative mb-8">
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 via-purple-600/20 to-pink-600/20 rounded-3xl blur-3xl"></div>
+          <div className="relative bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-xl rounded-3xl p-8 border border-white/10 shadow-2xl">
+            <div className="text-center mb-8">
+              <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                Digital Wallet
+              </h1>
+              <p className="text-slate-300 text-lg">Manage your crypto assets with ease</p>
+            </div>
+            
+            {/* Total Balance Overview */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              <div className="text-center p-6 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 rounded-2xl border border-blue-500/20">
+                <div className="text-3xl font-bold text-blue-400 mb-2">${(mainUsdt + purchaseUsdt).toFixed(2)}</div>
+                <div className="text-slate-400 text-sm">Total USDT</div>
+              </div>
+              <div className="text-center p-6 bg-gradient-to-br from-purple-500/10 to-pink-500/10 rounded-2xl border border-purple-500/20">
+                <div className="text-3xl font-bold text-purple-400 mb-2">{wallet.dlx.toFixed(2)}</div>
+                <div className="text-slate-400 text-sm">DLX Tokens</div>
+              </div>
+              <div className="text-center p-6 bg-gradient-to-br from-emerald-500/10 to-green-500/10 rounded-2xl border border-emerald-500/20">
+                <div className="text-3xl font-bold text-emerald-400 mb-2">₹{((mainUsdt + purchaseUsdt) * 80).toFixed(2)}</div>
+                <div className="text-slate-400 text-sm">INR Value</div>
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* Wallet Cards Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">

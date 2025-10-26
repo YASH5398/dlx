@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
 import { useAffiliateApproval } from '../hooks/useAffiliateApproval';
+import MobileHeader from './MobileHeader';
+import MobileDrawer from './MobileDrawer';
+import MobileNavigation from './MobileNavigation';
 
 /**
  * Header
@@ -25,6 +28,7 @@ export default function Header() {
 
   const publicLinks = [
     { to: '/', label: 'Home' },
+    { to: '/work-with-us', label: 'Work With Us' },
   ];
 
   const dashboardLinks = [
@@ -36,6 +40,9 @@ export default function Header() {
     { label: "Commission", to: "/commission" },
     { label: "Referrals", to: "/referrals" },
     { label: "Digital Products", to: "/dashboard/digital-products" },
+    { label: "Database & Marketing", to: "/database-marketing" },
+    { label: "DLX Listing", to: "/dlx-listing" },
+    { label: "Work With Us", to: "/work-with-us" },
     { label: "Support", to: "/support" },
     { label: "Settings", to: "/settings" },
   ];
@@ -51,98 +58,103 @@ export default function Header() {
   const links = isAuthenticated ? dashboardLinks : publicLinks;
 
   return (
-    <header className="sticky top-0 z-40 navbar-gradient backdrop-blur-xl border-b border-white/10">
-      <div className="container-padded flex h-16 items-center justify-between text-white">
-        {/* Brand */}
-        <Link to="/" className="flex items-center gap-2">
-          <span className="h-8 w-8 rounded bg-gradient-to-r from-[#7c3aed] to-[#00d4ff] shadow-[0_0_12px_rgba(0,212,255,0.35)]" />
-          <span className="font-bold text-lg">DigiLinex</span>
-        </Link>
-
-        {/* Desktop nav */}
-        <nav className="hidden md:flex items-center gap-3 text-sm">
-          {links.map((l) => (
-            <NavLink key={l.to} to={l.to} className={desktopLinkClass}>
-              {l.label}
-            </NavLink>
-          ))}
-        </nav>
-
-        {/* Right side: auth / profile */}
-        <div className="flex items-center gap-3">
-          {!isAuthenticated ? (
-            !isHome ? (
-              <>
-                <Link to="/login" className="text-sm font-semibold text-white/90 hover:text-white">Login</Link>
-                <Link to="/signup" className="hidden sm:inline-flex items-center rounded-xl bg-white/10 border border-white/20 px-3 py-2 text-sm font-semibold text-white shadow-[0_0_12px_rgba(255,255,255,0.25)] hover:bg-white/20">Sign Up</Link>
-              </>
-            ) : null
-          ) : (
-            <>
-              <div className="hidden sm:flex items-center gap-2">
-                <div className="text-right">
-                  <div className="text-sm font-semibold">{user?.name || 'User'}</div>
-                  <div className="text-xs text-gray-400">{user?.email || ''}</div>
-                </div>
-                <div className="h-10 w-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center font-semibold">
-                  {initials}
-                </div>
+    <>
+      {/* Mobile Header */}
+      <MobileHeader onMenuToggle={() => setMobileOpen(!mobileOpen)} isMenuOpen={mobileOpen} />
+      
+      {/* Mobile Drawer */}
+      <MobileDrawer isOpen={mobileOpen} onClose={() => setMobileOpen(false)} />
+      
+      {/* Mobile Bottom Navigation */}
+      {isAuthenticated && <MobileNavigation isAuthenticated={isAuthenticated} approved={approved} />}
+      
+      {/* Desktop Header */}
+      <header className="sticky top-0 z-40 bg-gradient-to-r from-gray-900/95 via-gray-800/95 to-gray-900/95 backdrop-blur-xl border-b border-white/10 shadow-2xl hidden md:block">
+        <div className="container-padded flex h-16 items-center justify-between text-white">
+          {/* Enhanced Brand */}
+          <Link to="/" className="flex items-center gap-3 group">
+            <div className="relative">
+              <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 shadow-2xl shadow-blue-500/25 group-hover:shadow-blue-500/40 transition-all duration-500 flex items-center justify-center group-hover:scale-110">
+                <span className="text-white font-bold text-lg">D</span>
               </div>
-              <button
-                className="inline-flex items-center rounded-xl bg-white/10 border border-white/20 px-3 py-2 text-sm font-semibold text-white hover:bg-white/20"
-                onClick={async () => {
-                  await logout();
-                  navigate('/login');
-                }}
+              <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-blue-400 to-purple-400 opacity-0 group-hover:opacity-20 transition-opacity duration-500 animate-pulse" />
+            </div>
+            <span className="font-bold text-xl bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent group-hover:from-blue-300 group-hover:via-purple-300 group-hover:to-pink-300 transition-all duration-500">
+              DigiLinex
+            </span>
+          </Link>
+
+          {/* Enhanced Desktop nav */}
+          <nav className="hidden md:flex items-center gap-2 text-sm">
+            {links.map((l) => (
+              <NavLink 
+                key={l.to} 
+                to={l.to} 
+                className={({ isActive }) => 
+                  `relative px-4 py-2 rounded-xl font-medium transition-all duration-300 group ${
+                    isActive 
+                      ? 'bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-white shadow-lg shadow-blue-500/25 border border-blue-400/30' 
+                      : 'text-white/80 hover:text-white hover:bg-white/10 hover:shadow-md'
+                  }`
+                }
               >
-                Logout
-              </button>
-            </>
-          )}
+                {({ isActive }) => (
+                  <>
+                    <span className="relative z-10">{l.label}</span>
+                    {isActive && (
+                      <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-blue-500/10 to-purple-500/10 animate-pulse" />
+                    )}
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-400 to-purple-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300" />
+                  </>
+                )}
+              </NavLink>
+            ))}
+          </nav>
 
-          {/* Mobile toggle */}
-          <button
-            aria-label="Toggle menu"
-            className="md:hidden inline-flex items-center justify-center h-10 w-10 rounded-xl bg-white/10 border border-white/20"
-            onClick={() => setMobileOpen((v) => !v)}
-          >
-            <span className="sr-only">Open menu</span>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <path d="M4 7h16M4 12h16M4 17h16" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      {/* Mobile drawer */}
-      {mobileOpen && (
-        <div className="md:hidden border-t border-white/10 bg-white/5 backdrop-blur-xl">
-          <div className="container-padded py-4 space-y-3">
-            <div className="grid grid-cols-1 gap-2">
-              {links.map((l) => (
-                <NavLink key={l.to} to={l.to} onClick={() => setMobileOpen(false)} className={mobileLinkClass}>
-                  {l.label}
-                </NavLink>
-              ))}
-              {isAuthenticated ? (
+          {/* Enhanced Right side: auth / profile */}
+          <div className="flex items-center gap-3">
+            {!isAuthenticated ? (
+              !isHome ? (
+                <>
+                  <Link 
+                    to="/login" 
+                    className="text-sm font-semibold text-white/90 hover:text-white transition-colors duration-300 hover:scale-105"
+                  >
+                    Login
+                  </Link>
+                  <Link 
+                    to="/signup" 
+                    className="hidden sm:inline-flex items-center rounded-xl bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-400/30 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:scale-105 transition-all duration-300 backdrop-blur-sm"
+                  >
+                    Sign Up
+                  </Link>
+                </>
+              ) : null
+            ) : (
+              <>
+                <div className="hidden sm:flex items-center gap-3">
+                  <div className="text-right">
+                    <div className="text-sm font-semibold text-white">{user?.name || 'User'}</div>
+                    <div className="text-xs text-gray-300">{user?.email || ''}</div>
+                  </div>
+                  <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 border-2 border-white/20 flex items-center justify-center font-semibold shadow-lg hover:scale-110 transition-all duration-300">
+                    {initials}
+                  </div>
+                </div>
                 <button
-                  onClick={async () => { await logout(); setMobileOpen(false); navigate('/login'); }}
-                  className="rounded-xl px-3 py-2 bg-red-500 text-white font-semibold"
+                  className="inline-flex items-center rounded-xl bg-gradient-to-r from-red-500/20 to-red-600/20 border border-red-400/30 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-red-500/25 hover:shadow-red-500/40 hover:scale-105 transition-all duration-300 backdrop-blur-sm"
+                  onClick={async () => {
+                    await logout();
+                    navigate('/login');
+                  }}
                 >
                   Logout
                 </button>
-              ) : (
-                !isHome ? (
-                  <div className="flex gap-3 pt-2">
-                    <Link to="/login" onClick={() => setMobileOpen(false)} className="flex-1 text-center rounded-xl bg-white/10 border border-white/20 px-3 py-2 text-sm font-semibold text-white">Login</Link>
-                    <Link to="/signup" onClick={() => setMobileOpen(false)} className="flex-1 text-center rounded-xl bg-white/10 border border-white/20 px-3 py-2 text-sm font-semibold text-white">Sign Up</Link>
-                  </div>
-                ) : null
-              )}
-            </div>
+              </>
+            )}
           </div>
         </div>
-      )}
-    </header>
+      </header>
+    </>
   );
 }
