@@ -4,7 +4,7 @@ import Header from './components/Header';
 import Footer from './components/Footer';
 import ProtectedRoute from './components/ProtectedRoute';
 import DashboardLayout from './pages/Dashboard/DashboardLayout';
-import AffiliateProgram from './pages/AffiliateProgram.jsx';
+import AffiliateProgram from './pages/AffiliateProgramNew';
 import OrderInvoice from './pages/Dashboard/OrderInvoice';
 import Home from './pages/Home';
 import AffiliateProgramInfo from './pages/AffiliateProgramInfo';
@@ -25,6 +25,7 @@ import AdminDepositRequests from './pages/SecretAdmin/AdminDepositRequests';
 import AdminWithdrawalRequests from './pages/SecretAdmin/AdminWithdrawalRequests';
 import SecretAdminSupport from './pages/SecretAdmin/AdminServiceRequestsEnhanced';
 import AdminSupportRequests from './pages/SecretAdmin/AdminSupportRequests';
+import AdminServiceManage from './pages/SecretAdmin/AdminServiceManage';
 import SecretAdminSettings from './pages/SecretAdmin/AdminSettings';
 import SecretAdminReferrals from './pages/SecretAdmin/AdminReferrals';
 import SecretAdminAffiliates from './pages/SecretAdmin/AdminAffiliates';
@@ -134,6 +135,7 @@ function App() {
         <Route path="/secret-admin/support" element={<SecretAdminSupport />} />
         <Route path="/secret-admin/notifications" element={<SecretAdminNotifications />} />
         <Route path="/secret-admin/service-requests" element={<SecretAdminSupport />} />
+        <Route path="/secret-admin/service-requests/manage" element={<AdminServiceManage />} />
         <Route path="/secret-admin/settings" element={<SecretAdminSettings />} />
       </Route>
 

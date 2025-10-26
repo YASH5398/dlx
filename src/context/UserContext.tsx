@@ -163,6 +163,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     const walletRef = doc(firestore, 'wallets', uid);
     const walletSnap = await getDoc(walletRef);
     if (!walletSnap.exists()) {
+      console.log('Creating wallet document for user:', uid);
       await setDoc(walletRef, {
         usdt: {
           mainUsdt: 0,
@@ -172,9 +173,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           mainInr: 0,
           purchaseInr: 0
         },
-        dlx: 100,
+        dlx: 0, // Changed from 100 to 0 for consistency
         walletUpdatedAt: serverTimestamp()
       });
+      console.log('Wallet document created successfully');
+    } else {
+      console.log('Wallet document already exists for user:', uid);
     }
   };
 

@@ -66,23 +66,61 @@ export default function Wallet() {
     if (!uid) return;
     const walletDoc = doc(firestore, 'wallets', uid);
     const unsub = onSnapshot(walletDoc, (snap) => {
-      const d = (snap.data() as any) || {};
-      const usdt = d.usdt || {};
-      const inr = d.inr || {};
-      
-      setMainUsdt(Number(usdt.mainUsdt || 0));
-      setPurchaseUsdt(Number(usdt.purchaseUsdt || 0));
-      setMainInr(Number(inr.mainInr || 0));
-      setPurchaseInr(Number(inr.purchaseInr || 0));
-      
-      console.log('Wallet data updated (canonical):', { 
-        mainUsdt: usdt.mainUsdt, 
-        purchaseUsdt: usdt.purchaseUsdt,
-        mainInr: inr.mainInr,
-        purchaseInr: inr.purchaseInr
-      });
+      try {
+        if (!snap.exists()) {
+          console.warn('Wallet: Document does not exist for user:', uid);
+          console.warn('Wallet: This may cause the $900 discrepancy. Creating wallet document...');
+          
+          // Try to create the wallet document if it doesn't exist
+          const { setDoc, serverTimestamp } = require('firebase/firestore');
+          setDoc(walletDoc, {
+            usdt: { mainUsdt: 0, purchaseUsdt: 0 },
+            inr: { mainInr: 0, purchaseInr: 0 },
+            dlx: 0,
+            walletUpdatedAt: serverTimestamp()
+          }).then(() => {
+            console.log('Wallet: Document created successfully');
+          }).catch((err: any) => {
+            console.error('Wallet: Failed to create document:', err);
+          });
+          
+          setMainUsdt(0);
+          setPurchaseUsdt(0);
+          setMainInr(0);
+          setPurchaseInr(0);
+          return;
+        }
+
+        const d = (snap.data() as any) || {};
+        const usdt = d.usdt || {};
+        const inr = d.inr || {};
+        
+        const mainUsdt = Number(usdt.mainUsdt || 0);
+        const purchaseUsdt = Number(usdt.purchaseUsdt || 0);
+        const mainInr = Number(inr.mainInr || 0);
+        const purchaseInr = Number(inr.purchaseInr || 0);
+        
+        setMainUsdt(mainUsdt);
+        setPurchaseUsdt(purchaseUsdt);
+        setMainInr(mainInr);
+        setPurchaseInr(purchaseInr);
+        
+        console.log('Wallet: Data updated (canonical):', { 
+          mainUsdt, 
+          purchaseUsdt,
+          mainInr,
+          purchaseInr,
+          rawData: d
+        });
+      } catch (error) {
+        console.error('Wallet: Error processing data:', error);
+        setMainUsdt(0);
+        setPurchaseUsdt(0);
+        setMainInr(0);
+        setPurchaseInr(0);
+      }
     }, (err) => {
-      console.error('Wallet stream failed:', err);
+      console.error('Wallet: Stream failed:', err);
       setMainUsdt(0);
       setPurchaseUsdt(0);
       setMainInr(0);

@@ -49,113 +49,128 @@ export function useReferral() {
     }
 
     setLoading(true);
-    const refDoc = doc(firestore, 'referrals', user.id);
-    const unsubRefDoc = onSnapshot(refDoc, (snap) => {
+    
+    // First, try to get data from user document (primary source)
+    const userDoc = doc(firestore, 'users', user.id);
+    const unsubUserDoc = onSnapshot(userDoc, (snap) => {
       try {
         if (snap.exists()) {
           const data = snap.data() as any;
+          console.log('useReferral: User document data:', data);
+          
+          // Use user document as primary source
           setActiveReferrals(Number(data.activeReferrals || 0));
           setReferralCount(Number(data.referralCount || 0));
           setTotalEarnings(Number(data.totalEarningsUsd || 0));
-          const t = Number(data.tier || 1);
-          const r = Number(data.rate || 20);
-          const lv = (data.level || 'Starter') as 'Starter' | 'Silver' | 'Gold';
+          
+          // Calculate tier and rate based on active referrals
+          const activeCount = Number(data.activeReferrals || 0);
+          const { tier: t, rate: r, level: lv } = computeTierByCount(activeCount);
           setTier(t);
           setRate(r);
-          setLevel(lv);
-          const hist = (data.history || []) as ReferralHistoryItem[];
-          setHistory(Array.isArray(hist) ? hist.map((h) => ({ ...h, commissionUsd: Number(h.commissionUsd || 0), date: Number(h.date || 0) })) : []);
-          console.log('Referral data updated:', { activeReferrals: data.activeReferrals, referralCount: data.referralCount, totalEarnings: data.totalEarningsUsd });
+          setLevel(lv as 'Starter' | 'Silver' | 'Gold');
+          
+          console.log('useReferral: User data updated:', { 
+            activeReferrals: data.activeReferrals, 
+            referralCount: data.referralCount, 
+            totalEarnings: data.totalEarningsUsd,
+            tier: t,
+            rate: r,
+            level: lv
+          });
         } else {
-          console.warn('Referral document does not exist');
+          console.warn('useReferral: User document does not exist for user:', user.id);
           setActiveReferrals(0);
           setReferralCount(0);
           setTotalEarnings(0);
+          setTier(1);
+          setRate(20);
+          setLevel('Starter');
         }
         setLoading(false);
       } catch (error) {
-        console.error('Error processing referral data:', error);
+        console.error('useReferral: Error processing user data:', error);
         setLoading(false);
       }
     }, (err) => {
-      console.error('Referral document stream failed:', err);
+      console.error('useReferral: User document stream failed:', err);
       setLoading(false);
     });
 
-    // Query orders to count active referrals (users who made purchases)
+    // Query orders to count active referrals and calculate earnings
     const ordersQ = query(collection(firestore, 'orders'), where('affiliateId', '==', user.id));
     const unsubOrders = onSnapshot(ordersQ, (snap) => {
       const rows: ReferralHistoryItem[] = [];
       const userIds = new Set<string>();
-      let total = 0;
+      let totalEarnings = 0;
+      
       snap.forEach((docSnap) => {
         const d = docSnap.data() as any;
-        const status: 'joined' | 'active' | 'refunded' = (d.status === 'Completed') ? 'active' : 'joined';
+        const status: 'joined' | 'active' | 'refunded' = (d.status === 'Completed' || d.status === 'paid') ? 'active' : 'joined';
         const commissionUsd = Number(((Number(d.amountUsd || 0) * 0.7)).toFixed(2));
-        total += status === 'active' ? commissionUsd : 0;
+        totalEarnings += status === 'active' ? commissionUsd : 0;
         const ts = d.timestamp?.toMillis ? d.timestamp.toMillis() : Number(d.timestamp || 0);
         rows.push({ id: docSnap.id, username: d.userName || 'User', date: ts, status, commissionUsd });
         if (d.userId) userIds.add(String(d.userId));
       });
+      
       rows.sort((a, b) => b.date - a.date);
-      const count = userIds.size;
-      setActiveReferrals(count);
-      const { tier: t, rate: r, level: lv } = computeTierByCount(count);
+      const activeCount = userIds.size;
+      
+      // Update state with calculated values
+      setActiveReferrals(activeCount);
+      setTotalEarnings(Number(totalEarnings.toFixed(2)));
+      setHistory(rows);
+      
+      // Calculate tier and rate based on active referrals
+      const { tier: t, rate: r, level: lv } = computeTierByCount(activeCount);
       setTier(t);
       setRate(r);
       setLevel(lv as 'Starter' | 'Silver' | 'Gold');
-      setHistory(rows);
-      setTotalEarnings(Number(total.toFixed(2)));
+      
+      console.log('useReferral: Orders data updated:', { 
+        activeReferrals: activeCount, 
+        totalEarnings: totalEarnings,
+        tier: t,
+        rate: r,
+        level: lv,
+        historyCount: rows.length
+      });
     });
 
-    // Query users collection to count referrals by referredBy field
-    const referralsQuery = query(
-      collection(firestore, 'users'),
-      where('referredBy', '==', user.id)
-    );
-    const unsubReferrals = onSnapshot(referralsQuery, (snap) => {
-      const referredUserIds = new Set<string>();
-      snap.forEach((docSnap) => {
-        referredUserIds.add(docSnap.id);
-      });
-
-      // Count active referrals by checking orders in parallel
-      if (referredUserIds.size === 0) {
-        setActiveReferrals(0);
-        return;
-      }
-
-      // Use Promise.all for parallel queries instead of sequential await
-      const activeCountPromises = Array.from(referredUserIds).map(async (userId) => {
-        try {
-          const userOrdersQuery = query(
-            collection(firestore, 'orders'),
-            where('userId', '==', userId),
-            where('status', '==', 'paid')
+    // Query users collection to count total referrals by referrerCode field
+    // We'll get the referral code from the user document stream above
+    let unsubReferrals: (() => void) | null = null;
+    
+    // Set up a listener for the user document to get the referral code
+    const userDocListener = onSnapshot(userDoc, (snap) => {
+      if (snap.exists()) {
+        const userData = snap.data() as any;
+        const userReferralCode = userData?.referralCode;
+        
+        if (userReferralCode && !unsubReferrals) {
+          const referralsQuery = query(
+            collection(firestore, 'users'),
+            where('referrerCode', '==', userReferralCode)
           );
-          const userOrdersSnap = await getDocs(userOrdersQuery);
-          return !userOrdersSnap.empty ? 1 : 0;
-        } catch (error) {
-          console.error(`Error checking orders for user ${userId}:`, error);
-          return 0;
+          unsubReferrals = onSnapshot(referralsQuery, (referralsSnap) => {
+            const totalReferrals = referralsSnap.size;
+            setReferralCount(totalReferrals);
+            
+            console.log('useReferral: Referrals count updated:', { 
+              totalReferrals,
+              referralCode: userReferralCode
+            });
+          });
         }
-      });
-
-      Promise.all(activeCountPromises)
-        .then((counts) => {
-          const activeCount = counts.reduce((sum: number, count: number) => sum + count, 0);
-          setActiveReferrals(activeCount);
-        })
-        .catch((error) => {
-          console.error('Error counting active referrals:', error);
-          setActiveReferrals(0);
-        });
+      }
     });
 
     return () => {
-      try { unsubRefDoc(); } catch {}
+      try { unsubUserDoc(); } catch {}
       try { unsubOrders(); } catch {}
-      try { unsubReferrals(); } catch {}
+      try { unsubReferrals?.(); } catch {}
+      try { userDocListener(); } catch {}
     };
   }, [user?.id, referralCode]);
 

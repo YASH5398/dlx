@@ -10,6 +10,8 @@ import TopEarnersWidget from '../../components/TopEarnersWidget';
 import { getRankInfo, getRankDisplayName } from '../../utils/rankSystem';
 import { useUserRank } from '../../hooks/useUserRank';
 import { useAffiliateStatus } from '../../hooks/useAffiliateStatus';
+import { useAffiliateBannerVisibility } from '../../hooks/useAffiliateBannerVisibility';
+import { useActiveServices } from '../../hooks/useServices';
 import AffiliateJoinModal from '../../components/AffiliateJoinModal';
 import AffiliateCongratulationsModal from '../../components/AffiliateCongratulationsModal';
 import { Button } from '../../components/ui/button';
@@ -49,6 +51,7 @@ export default function DashboardHome() {
   const { totalEarnings, activeReferrals, tier, loading: referralsLoading } = useReferral();
   const { userRankInfo } = useUserRank();
   const { affiliateStatus, joinAffiliateProgram, getAffiliateBadgeText, getAffiliateStatusText } = useAffiliateStatus();
+  const { shouldHideBanners } = useAffiliateBannerVisibility();
   const navigate = useNavigate();
   const [ordersCount, setOrdersCount] = useState(0);
   const [progress, setProgress] = useState(0);
@@ -59,6 +62,7 @@ export default function DashboardHome() {
   const [affiliateCongratulationsModalOpen, setAffiliateCongratulationsModalOpen] = useState(false);
   const [showFirstTimeModal, setShowFirstTimeModal] = useState(false);
   const [selectedService, setSelectedService] = useState<string | null>(null);
+  const { services: activeServices, loading: servicesLoading } = useActiveServices();
   const [services, setServices] = useState<ServiceItem[]>([]);
 
   // Real-time wallet subscription for dashboard balances
@@ -107,7 +111,22 @@ export default function DashboardHome() {
     const unsub = onSnapshot(walletDoc, (snap) => {
       try {
         if (!snap.exists()) {
-          console.warn('Wallet document does not exist');
+          console.warn('Dashboard: Wallet document does not exist for user:', user.id);
+          console.warn('Dashboard: This may cause the $900 discrepancy. Creating wallet document...');
+          
+          // Try to create the wallet document if it doesn't exist
+          const { setDoc, serverTimestamp } = require('firebase/firestore');
+          setDoc(walletDoc, {
+            usdt: { mainUsdt: 0, purchaseUsdt: 0 },
+            inr: { mainInr: 0, purchaseInr: 0 },
+            dlx: 0,
+            walletUpdatedAt: serverTimestamp()
+          }).then(() => {
+            console.log('Dashboard: Wallet document created successfully');
+          }).catch((err: any) => {
+            console.error('Dashboard: Failed to create wallet document:', err);
+          });
+          
           setUsdtTotal(0);
           setInrMain(0);
           setWalletLoading(false);
@@ -124,28 +143,30 @@ export default function DashboardHome() {
         const purchaseInr = Number(inr.purchaseInr || 0);
         
         // USDT Balance: Combined main + purchase (canonical calculation)
-        setUsdtTotal(mainUsdt + purchaseUsdt);
+        const usdtTotal = mainUsdt + purchaseUsdt;
+        const inrTotal = mainInr + purchaseInr;
         
-        // INR Balance: Combined main + purchase (canonical calculation)
-        setInrMain(mainInr + purchaseInr);
+        setUsdtTotal(usdtTotal);
+        setInrMain(inrTotal);
         
         setWalletLoading(false);
-        console.log('Dashboard wallet data updated (canonical):', { 
+        console.log('Dashboard: Wallet data updated (canonical):', { 
           mainUsdt, 
           purchaseUsdt, 
-          usdtTotal: mainUsdt + purchaseUsdt,
+          usdtTotal,
           mainInr,
           purchaseInr,
-          inrMain: mainInr + purchaseInr
+          inrTotal,
+          rawData: data
         });
       } catch (error) {
-        console.error('Error processing wallet data:', error);
+        console.error('Dashboard: Error processing wallet data:', error);
         setUsdtTotal(0);
         setInrMain(0);
         setWalletLoading(false);
       }
     }, (err) => {
-      console.error('Dashboard wallet stream failed:', err);
+      console.error('Dashboard: Wallet stream failed:', err);
       setUsdtTotal(0);
       setInrMain(0);
       setWalletLoading(false);
@@ -209,22 +230,23 @@ export default function DashboardHome() {
         const totalEarningsFromUser = Number(data.totalEarningsUsd || 0);
         const referralEarningsFromUser = Number(data.referralEarnings || 0);
         
-        // Update comprehensive total earnings with user document data
-        const comprehensiveTotal = totalEarningsFromUser + (totalEarningsComprehensive - (totalEarnings || 0));
+        // Use the referral hook's totalEarnings as primary source
+        const comprehensiveTotal = totalEarnings + (totalEarningsFromUser - totalEarnings);
         setTotalEarningsComprehensive(comprehensiveTotal);
         
-        console.log('User earnings data updated:', { 
+        console.log('Dashboard: User earnings data updated:', { 
           totalEarningsFromUser,
           referralEarningsFromUser,
+          referralTotalEarnings: totalEarnings,
           comprehensiveTotal
         });
       }
     }, (err) => {
-      console.error('User document stream failed:', err);
+      console.error('Dashboard: User document stream failed:', err);
     });
     
     return () => { try { unsub(); } catch {} };
-  }, [user?.id, totalEarningsComprehensive, totalEarnings]);
+  }, [user?.id, totalEarnings]);
 
   // Ensure required Firestore docs exist for this user
   useEffect(() => {
@@ -305,23 +327,23 @@ export default function DashboardHome() {
   useEffect(() => {
     const load = async () => {
       try {
-        const snap = await getDocs(collection(firestore, 'services'));
-        const items: ServiceItem[] = [];
-        snap.forEach((d) => {
-          const data = d.data() as any;
-          items.push({
-            id: d.id,
-            name: data.title ?? data.name ?? '',
-            description: data.description ?? '',
-            startingPrice: data.price ?? data.startingPrice ?? '',
-            icon: String(data.icon ?? '✨'),
-            gradient: gradientForCategory(data.category),
-            features: Array.isArray(data.features) ? data.features : getDefaultFeatures(d.id, data.category),
-            category: data.category ?? 'General',
-          });
-        });
-        // If Firestore has no services, use static fallback
-        setServices(items.length ? items : staticServices);
+        // Use the new service management system for real-time updates
+        if (activeServices.length > 0) {
+          const items: ServiceItem[] = activeServices.map(service => ({
+            id: service.id,
+            name: service.title,
+            description: service.description,
+            startingPrice: service.price,
+            icon: service.icon,
+            gradient: gradientForCategory(service.category),
+            features: service.features || getDefaultFeatures(service.id, service.category),
+            category: service.category,
+          }));
+          setServices(items);
+        } else {
+          // Fallback to static services if no active services
+          setServices(staticServices);
+        }
 
         // Restore missing service form configs (idempotent)
         await restoreDefaultServiceForms(DEFAULT_SERVICE_FORMS);
@@ -347,6 +369,7 @@ export default function DashboardHome() {
           'whatsapp-marketing-software',
         ]);
 
+        const snap = await getDocs(collection(firestore, 'services'));
         if (snap.size > allowedIds.size) {
           const deletions: Promise<any>[] = [];
           snap.forEach((d) => {
@@ -381,7 +404,7 @@ export default function DashboardHome() {
       }
     };
     load();
-  }, []);
+  }, [activeServices]);
 
   // Fallback static list (used if backend is empty)
   const DEFAULT_SERVICES_BASE: Omit<ServiceItem, 'gradient' | 'features'>[] = [
@@ -556,7 +579,7 @@ export default function DashboardHome() {
                     </p>
                   </div>
                 )}
-                {!affiliateStatus.isPartner && (
+                {!affiliateStatus.isPartner && !shouldHideBanners && (
                   <Button
                     onClick={() => navigate('/affiliate-program')}
                     className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold px-3 py-2 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 text-sm sm:text-base"
@@ -722,7 +745,8 @@ export default function DashboardHome() {
           </div>
 
           {/* Affiliate Partner CTA */}
-          <div className="mb-8">
+          {!shouldHideBanners && (
+            <div className="mb-8">
             <div className="relative overflow-hidden bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-600 rounded-2xl shadow-2xl border border-emerald-500/50">
               {/* Animated Background Pattern */}
               <div className="absolute inset-0 opacity-20">
@@ -795,6 +819,7 @@ export default function DashboardHome() {
               <div className="absolute bottom-0 left-0 w-40 h-40 bg-cyan-300/10 rounded-full blur-3xl"></div>
             </div>
           </div>
+          )}
 
           {/* Services Section */}
           <div className="mb-8">

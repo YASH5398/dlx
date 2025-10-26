@@ -236,9 +236,9 @@ export async function approveDeposit(requestId: string, adminId: string, adminEm
       const currentBalance = Number(walletData.mainUsdt || 0);
       const newBalance = currentBalance + requestData.amount;
 
-      // 4. Update wallet (direct field structure)
+      // 4. Update wallet (canonical structure)
       tx.update(walletRef, {
-        mainUsdt: newBalance,
+        'usdt.mainUsdt': newBalance,
         walletUpdatedAt: serverTimestamp()
       });
 
@@ -324,9 +324,9 @@ export async function approveWithdrawal(requestId: string, adminId: string, admi
 
       const newBalance = currentBalance - requestData.amount;
 
-      // 5. Update wallet (direct field structure)
+      // 5. Update wallet (canonical structure)
       const updateData: any = {
-        [balanceField]: newBalance,
+        [`usdt.${balanceField}`]: newBalance,
         walletUpdatedAt: serverTimestamp()
       };
       tx.update(walletRef, updateData);

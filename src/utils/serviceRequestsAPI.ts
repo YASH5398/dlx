@@ -156,12 +156,12 @@ export async function createServiceRequest(data: {
   serviceId: string;
   serviceTitle: string;
   serviceCategory: string;
-  requestDetails: string;
+  requestDetails: object;
   attachments?: string[];
 }): Promise<string> {
   const { userId, userName, userEmail, serviceId, serviceTitle, serviceCategory, requestDetails, attachments = [] } = data;
   
-  if (!userId || !serviceId || !requestDetails.trim()) {
+  if (!userId || !serviceId || !requestDetails) {
     throw new Error('Invalid service request data');
   }
 
@@ -177,7 +177,7 @@ export async function createServiceRequest(data: {
       serviceId,
       serviceTitle,
       serviceCategory,
-      requestDetails,
+      requestDetails: typeof requestDetails === 'string' ? requestDetails : JSON.stringify(requestDetails),
       attachments,
       status: 'pending',
       chatId,
@@ -367,8 +367,9 @@ export async function processPayment(
         }
 
         const walletData = walletSnap.data();
-        const mainBalance = Number(walletData.mainUsdt || 0);
-        const purchaseBalance = Number(walletData.purchaseUsdt || 0);
+        const usdt = walletData.usdt || {};
+        const mainBalance = Number(usdt.mainUsdt || 0);
+        const purchaseBalance = Number(usdt.purchaseUsdt || 0);
         
         if (paymentData.walletSplit) {
           const { mainWallet, purchaseWallet } = paymentData.walletSplit;
@@ -383,8 +384,8 @@ export async function processPayment(
           
           // Deduct from both wallets
           tx.update(walletRef, {
-            mainUsdt: mainBalance - mainWallet,
-            purchaseUsdt: purchaseBalance - purchaseWallet,
+            'usdt.mainUsdt': mainBalance - mainWallet,
+            'usdt.purchaseUsdt': purchaseBalance - purchaseWallet,
             walletUpdatedAt: serverTimestamp()
           });
         } else {
@@ -394,7 +395,7 @@ export async function processPayment(
           }
           
           tx.update(walletRef, {
-            mainUsdt: mainBalance - paymentData.amount,
+            'usdt.mainUsdt': mainBalance - paymentData.amount,
             walletUpdatedAt: serverTimestamp()
           });
         }
