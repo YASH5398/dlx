@@ -17,13 +17,14 @@ import {
   ShareIcon, 
   UserGroupIcon, 
   ChatBubbleLeftRightIcon, 
-  BellIcon, 
+  BellIcon,
   Cog6ToothIcon,
   ChartBarIcon,
   SunIcon,
   MoonIcon,
   ChevronDownIcon
 } from '@heroicons/react/24/outline';
+import { Package } from 'lucide-react';
 
 export default function SecretAdminLayout() {
   const [admin, setAdmin] = useState<{ id: string; email: string; name?: string } | null>(null);
@@ -190,7 +191,16 @@ export default function SecretAdminLayout() {
     { to: '/secret-admin/user-ranks', label: 'User Ranks', icon: UserGroupIcon },
     { to: '/secret-admin/orders', label: 'Orders', icon: ShoppingBagIcon, badge: 0 },
     { to: '/secret-admin/support-requests', label: 'Support Requests', icon: ChatBubbleLeftRightIcon, badge: 0 },
-    { to: '/secret-admin/service-requests', label: 'Service Requests', icon: WrenchScrewdriverIcon, badge: 3 },
+    { 
+      to: '/secret-admin/service-requests', 
+      label: 'Service Requests', 
+      icon: WrenchScrewdriverIcon, 
+      badge: 3,
+      submenu: [
+        { to: '/secret-admin/service-requests', label: 'All Requests', icon: WrenchScrewdriverIcon },
+        { to: '/secret-admin/service-requests/manage', label: 'Service Manage', icon: Package }
+      ]
+    },
     { to: '/secret-admin/products', label: 'Products', icon: CubeIcon },
     { 
       to: '/secret-admin/transactions', 

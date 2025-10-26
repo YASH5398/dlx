@@ -76,6 +76,39 @@ service cloud.firestore {
         request.auth.token.admin == true;
     }
     
+    // Referrals - users can read and write their own referral data
+    match /referrals/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Digital Products - public read access for product listings
+    match /digitalProducts/{productId} {
+      allow read: if true; // Public read access for product listings
+      allow write: if request.auth != null && request.auth.token.admin == true;
+    }
+    
+    // Services - public read access for service listings
+    match /services/{serviceId} {
+      allow read: if true; // Public read access for service listings
+      allow write: if request.auth != null && request.auth.token.admin == true;
+    }
+    
+    // Affiliates - users can read their own affiliate data
+    match /affiliates/{affiliateId} {
+      allow read, write: if request.auth != null && request.auth.uid == affiliateId;
+    }
+    
+    // Inquiries - users can create and read their own inquiries
+    match /inquiries/{inquiryId} {
+      allow create: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+      allow read: if request.auth != null && 
+        (request.auth.uid == resource.data.userId || 
+         request.auth.token.admin == true);
+      allow update: if request.auth != null && 
+        request.auth.token.admin == true;
+    }
+    
     // Admin collections - only admins can access
     match /adminUsers/{adminId} {
       allow read, write: if request.auth != null && 
@@ -87,7 +120,7 @@ service cloud.firestore {
         request.auth.token.admin == true;
     }
     
-    // Default deny all other collections
+    // Default deny all other collections (but allow specific ones above)
     match /{document=**} {
       allow read, write: if false;
     }

@@ -32,19 +32,47 @@ export function useAffiliateStatus() {
     }
 
     const unsubscribe = onSnapshot(doc(firestore, 'users', user.id), (doc) => {
-      if (doc.exists()) {
-        const data = doc.data();
-        const rankInfo = getRankInfo(data.rank || 'starter');
-        
-        setAffiliateStatus({
-          isPartner: data.affiliateApproved || false,
-          isApproved: data.affiliateApproved || false,
-          isPending: data.affiliateStatus === 'pending',
-          commissionRate: rankInfo.commission,
-          totalEarnings: data.affiliateEarnings || 0,
-          referralCount: data.affiliateReferrals || 0
-        });
+      try {
+        if (doc.exists()) {
+          const data = doc.data();
+          const rankInfo = getRankInfo(data.rank || 'starter');
+          
+          setAffiliateStatus({
+            isPartner: data.affiliateApproved || false,
+            isApproved: data.affiliateApproved || false,
+            isPending: data.affiliateStatus === 'pending',
+            commissionRate: rankInfo.commission,
+            totalEarnings: data.affiliateEarnings || 0,
+            referralCount: data.affiliateReferrals || 0
+          });
+          
+          console.log('useAffiliateStatus: User data updated:', {
+            isPartner: data.affiliateApproved || false,
+            isApproved: data.affiliateApproved || false,
+            isPending: data.affiliateStatus === 'pending',
+            commissionRate: rankInfo.commission,
+            totalEarnings: data.affiliateEarnings || 0,
+            referralCount: data.affiliateReferrals || 0,
+            rank: data.rank || 'starter'
+          });
+        } else {
+          console.warn('useAffiliateStatus: User document does not exist for user:', user.id);
+          setAffiliateStatus({
+            isPartner: false,
+            isApproved: false,
+            isPending: false,
+            commissionRate: 0,
+            totalEarnings: 0,
+            referralCount: 0
+          });
+        }
+        setLoading(false);
+      } catch (error) {
+        console.error('useAffiliateStatus: Error processing user data:', error);
+        setLoading(false);
       }
+    }, (err) => {
+      console.error('useAffiliateStatus: User document stream failed:', err);
       setLoading(false);
     });
 

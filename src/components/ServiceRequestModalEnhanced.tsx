@@ -55,7 +55,7 @@ export default function ServiceRequestModalEnhanced({
         serviceId: service.id,
         serviceTitle: service.title,
         serviceCategory: service.category,
-        requestDetails: formData.requestDetails,
+        requestDetails: { details: formData.requestDetails },
         attachments: formData.attachments
       });
 

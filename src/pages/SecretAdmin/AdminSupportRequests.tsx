@@ -137,10 +137,10 @@ export default function AdminSupportRequests({}: AdminSupportRequestsProps) {
           userId: req.userId,
           userName: req.userName,
           userEmail: req.userEmail,
-          status: req.status === 'pending' ? 'pending' : 
+          status: (req.status === 'pending' ? 'pending' : 
                   req.status === 'processing' || req.status === 'in_progress' ? 'in_progress' :
-                  req.status === 'completed' ? 'resolved' : 'pending',
-          priority: req.status === 'pending' ? 'medium' : 'low',
+                  req.status === 'completed' ? 'resolved' : 'pending') as 'pending' | 'closed' | 'in_progress' | 'resolved',
+          priority: (req.status === 'pending' ? 'medium' : 'low') as 'high' | 'low' | 'medium' | 'urgent',
           createdAt: req.createdAt,
           updatedAt: req.updatedAt,
           assignedTo: req.adminProposal?.submittedBy,
@@ -168,8 +168,8 @@ export default function AdminSupportRequests({}: AdminSupportRequestsProps) {
             userId: data.userId,
             userName: data.userName,
             userEmail: data.userEmail || 'No email',
-            status: data.status || 'pending',
-            priority: 'medium',
+            status: (data.status || 'pending') as 'pending' | 'closed' | 'in_progress' | 'resolved',
+            priority: 'medium' as 'high' | 'low' | 'medium' | 'urgent',
             createdAt: data.createdAt,
             updatedAt: data.updatedAt,
             metadata: data
@@ -197,9 +197,9 @@ export default function AdminSupportRequests({}: AdminSupportRequestsProps) {
             userId: data.userId,
             userName: data.userName || 'Unknown User',
             userEmail: data.userEmail || 'No email',
-            status: data.status === 'Resolved' ? 'resolved' : 
-                   data.status === 'Pending' ? 'pending' : 'in_progress',
-            priority: data.priority || 'medium',
+            status: (data.status === 'Resolved' ? 'resolved' : 
+                   data.status === 'Pending' ? 'pending' : 'in_progress') as 'pending' | 'closed' | 'in_progress' | 'resolved',
+            priority: (data.priority || 'medium') as 'high' | 'low' | 'medium' | 'urgent',
             createdAt: data.createdAt,
             updatedAt: data.updatedAt,
             metadata: data

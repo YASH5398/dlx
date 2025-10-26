@@ -3,8 +3,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import ServiceCard from '../components/ServiceCard';
 import ServiceRequestModalEnhanced from '../components/ServiceRequestModalEnhanced';
-import { collection, getDocs } from 'firebase/firestore';
-import { firestore } from '../firebase';
+import { useActiveServices } from '../hooks/useServices';
 
 interface Service {
   id: string;
@@ -19,28 +18,7 @@ interface Service {
 export default function Services() {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
-  const [services, setServices] = useState<Service[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadServices();
-  }, []);
-
-  const loadServices = async () => {
-    try {
-      setLoading(true);
-      const servicesSnapshot = await getDocs(collection(firestore, 'services'));
-      const servicesData = servicesSnapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() } as Service))
-        .filter(service => service.isActive);
-      
-      setServices(servicesData);
-    } catch (error) {
-      console.error('Failed to load services:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { services, loading } = useActiveServices();
 
   const handleServiceClick = (service: Service) => {
     setSelectedService(service);

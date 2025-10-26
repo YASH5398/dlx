@@ -20,7 +20,7 @@ export function AdminSocketProvider({ children }: { children: React.ReactNode })
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    if (!user || user.role !== 'admin') return;
+    if (!user || (user as any).role !== 'admin') return;
 
     // Initialize socket connection
     const newSocket = io(import.meta.env.VITE_SERVER_URL || 'http://localhost:3001', {

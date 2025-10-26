@@ -14,4 +14,4 @@ export const COMMISSION_TIERS = [
     { tier: 2, rate: 25 },
     { tier: 3, rate: 30 },
 ];
-export const DEFAULT_WALLET = { dlx: 500, usdt: 1000, inr: 50000 };
+// Removed DEFAULT_WALLET - using Firestore as canonical source
