@@ -30,10 +30,12 @@ import SecretAdminSettings from './pages/SecretAdmin/AdminSettings';
 import SecretAdminReferrals from './pages/SecretAdmin/AdminReferrals';
 import SecretAdminAffiliates from './pages/SecretAdmin/AdminAffiliates';
 import SecretAdminNotifications from './pages/SecretAdmin/AdminNotifications';
+import AdminDLXListing from './pages/SecretAdmin/AdminDLXListing';
 
 // Public pages
 // Removed public pages: Exchanges, Pricing, Tutorials, Docs, Blogs, Apply
 import DigitalProducts from './pages/DigitalProducts';
+import AboutUs from './pages/AboutUs';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Otp from './pages/Otp';
@@ -52,6 +54,18 @@ import Wallet from './pages/Dashboard/Wallet';
 import Support from './pages/Dashboard/Support';
 import SettingsFull from './pages/Dashboard/SettingsFull';
 import Profile from './pages/Dashboard/Profile';
+
+// Database & Marketing pages
+import DatabaseMarketing from './pages/DatabaseMarketing';
+import DatabaseCategories from './pages/DatabaseCategories';
+import BuyDatabase from './pages/BuyDatabase';
+import MarketingSoftware from './pages/MarketingSoftware';
+import WhatsAppDashboard from './pages/WhatsAppDashboard';
+import OrderData from './pages/OrderData';
+import AdminDatabaseRequests from './pages/AdminDatabaseRequests';
+import WorkWithUs from './pages/WorkWithUs';
+import AdminApplicants from './pages/AdminApplicants';
+import DLXListing from './pages/DLXListing';
 
 function PublicLayout() {
   const location = useLocation();
@@ -109,6 +123,15 @@ function App() {
         <Route path="/settings" element={<SettingsFull />} />
         <Route path="/dashboard/profile" element={<Profile />} />
         <Route path="/dashboard/digital-products" element={<DigitalProducts />} />
+        <Route path="/database-marketing" element={<DatabaseMarketing />} />
+        <Route path="/database-marketing/categories" element={<DatabaseCategories />} />
+        <Route path="/database-marketing/buy-database" element={<BuyDatabase />} />
+        <Route path="/database-marketing/marketing-software" element={<MarketingSoftware />} />
+        <Route path="/database-marketing/whatsapp-dashboard" element={<WhatsAppDashboard />} />
+        <Route path="/database-marketing/order-data" element={<OrderData />} />
+        <Route path="/work-with-us" element={<WorkWithUs />} />
+        <Route path="/dlx-listing" element={<DLXListing />} />
+        <Route path="/about" element={<AboutUs />} />
       </Route>
 
       {/* Secret Admin (JWT cookie protected) */}
@@ -130,12 +153,15 @@ function App() {
         <Route path="/secret-admin/transactions" element={<SecretAdminTransactions />} />
         <Route path="/secret-admin/transactions/deposit-requests" element={<AdminDepositRequests />} />
         <Route path="/secret-admin/transactions/withdrawal-requests" element={<AdminWithdrawalRequests />} />
+        <Route path="/secret-admin/database-requests" element={<AdminDatabaseRequests />} />
+        <Route path="/secret-admin/applicants" element={<AdminApplicants />} />
         <Route path="/secret-admin/referrals" element={<SecretAdminReferrals />} />
         <Route path="/secret-admin/affiliates" element={<SecretAdminAffiliates />} />
         <Route path="/secret-admin/support" element={<SecretAdminSupport />} />
         <Route path="/secret-admin/notifications" element={<SecretAdminNotifications />} />
         <Route path="/secret-admin/service-requests" element={<SecretAdminSupport />} />
         <Route path="/secret-admin/service-requests/manage" element={<AdminServiceManage />} />
+        <Route path="/secret-admin/dlx-listing" element={<AdminDLXListing />} />
         <Route path="/secret-admin/settings" element={<SecretAdminSettings />} />
       </Route>
 
