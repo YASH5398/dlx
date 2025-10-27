@@ -123,7 +123,7 @@ export default function MarketingSoftware() {
   const fetchWalletBalance = async () => {
     if (!user) return;
     try {
-      const balance = await WalletService.getWalletBalance(user.uid);
+      const balance = await WalletService.getWalletBalance(user.id);
       setWalletBalance(balance);
     } catch (error) {
       console.error('Error fetching wallet balance:', error);
@@ -148,7 +148,7 @@ export default function MarketingSoftware() {
 
       // Check wallet balance and process payment
       const purchaseResult = await WalletService.processPurchase(
-        user.uid,
+        user.id,
         tool.price,
         'software',
         tool.id,
@@ -166,7 +166,7 @@ export default function MarketingSoftware() {
       }
 
       const orderData = {
-        user_id: user.uid,
+        user_id: user.id,
         software_id: tool.id,
         software_name: tool.name,
         price: tool.price,

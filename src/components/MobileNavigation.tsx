@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
+import { useAffiliateStatus } from '../hooks/useAffiliateStatus';
 import { 
   HomeIcon, 
   ShoppingCartIcon, 
@@ -35,6 +36,7 @@ interface MobileNavigationProps {
 const MobileNavigation: React.FC<MobileNavigationProps> = ({ isAuthenticated, approved = false }) => {
   const location = useLocation();
   const [activeTab, setActiveTab] = useState(location.pathname);
+  const { canJoinAffiliate, canReapply, affiliateStatus } = useAffiliateStatus();
 
   const navigationItems = [
     {
@@ -70,12 +72,16 @@ const MobileNavigation: React.FC<MobileNavigationProps> = ({ isAuthenticated, ap
       show: isAuthenticated
     },
     {
-      name: 'Affiliate',
-      href: approved ? '/affiliate-dashboard' : '/affiliate-program',
+      name: affiliateStatus.isApproved ? 'Affiliate Dashboard' : 
+            affiliateStatus.isPending ? 'Affiliate (Pending)' :
+            affiliateStatus.isRejected ? 'Reapply Affiliate' : 'Join Affiliate',
+      href: affiliateStatus.isApproved ? '/affiliate-dashboard' : '/affiliate-program',
       icon: UsersIcon,
       activeIcon: UsersIconSolid,
-      color: 'from-indigo-500 to-blue-500',
-      show: isAuthenticated
+      color: affiliateStatus.isApproved ? 'from-green-500 to-emerald-500' :
+             affiliateStatus.isPending ? 'from-yellow-500 to-orange-500' :
+             affiliateStatus.isRejected ? 'from-red-500 to-pink-500' : 'from-indigo-500 to-blue-500',
+      show: isAuthenticated && (canJoinAffiliate() || canReapply() || affiliateStatus.isApproved || affiliateStatus.isPending)
     },
     {
       name: 'Products',

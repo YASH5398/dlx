@@ -18,9 +18,9 @@ export const RANK_DEFINITIONS: Record<string, RankInfo> = {
     textColor: 'text-green-300',
     borderColor: 'border-green-500/30',
     bgColor: 'bg-green-600/20',
-    commission: 0,
+    commission: 20,
     icon: 'star',
-    description: 'Entry level rank with 0% commission'
+    description: 'Entry level rank with 20% commission'
   },
   'dlx-associate': {
     name: 'DLX Associate',

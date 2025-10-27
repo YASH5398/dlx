@@ -129,7 +129,7 @@ export default function BuyDatabase() {
   const fetchWalletBalance = async () => {
     if (!user) return;
     try {
-      const balance = await WalletService.getWalletBalance(user.uid);
+      const balance = await WalletService.getWalletBalance(user.id);
       setWalletBalance(balance);
     } catch (error) {
       console.error('Error fetching wallet balance:', error);
@@ -174,7 +174,7 @@ export default function BuyDatabase() {
     try {
       // Check wallet balance and process payment
       const purchaseResult = await WalletService.processPurchase(
-        user.uid,
+        user.id,
         previewData.price,
         'database',
         previewData.id,
@@ -191,7 +191,7 @@ export default function BuyDatabase() {
 
       // Create order in Firebase
       const orderData = {
-        user_id: user.uid,
+        user_id: user.id,
         database_id: previewData.id,
         category: selectedCategory,
         package_name: previewData.packageName,

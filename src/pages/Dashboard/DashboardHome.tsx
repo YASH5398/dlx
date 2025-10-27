@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useUser } from '../../context/UserContext';
 // import { useWallet } from '../../hooks/useWallet';
 import { useReferral } from '../../hooks/useReferral';
 import { firestore } from '../../firebase';
-import { collection, query, where, onSnapshot, getDocs, doc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, getDocs, doc, deleteDoc, addDoc, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import ServiceRequestModal from '../../components/ServiceRequestModal';
 import TopEarnersWidget from '../../components/TopEarnersWidget';
@@ -12,11 +13,12 @@ import { useUserRank } from '../../hooks/useUserRank';
 import { useAffiliateStatus } from '../../hooks/useAffiliateStatus';
 import { useAffiliateBannerVisibility } from '../../hooks/useAffiliateBannerVisibility';
 import { useActiveServices } from '../../hooks/useServices';
+import { useDigitalProducts } from '../../hooks/useDigitalProducts';
 import AffiliateJoinModal from '../../components/AffiliateJoinModal';
 import AffiliateCongratulationsModal from '../../components/AffiliateCongratulationsModal';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
-import { Share2, Crown, Sparkles } from 'lucide-react';
+import { Share2, Crown, Sparkles, CheckCircle, TrendingUp, Package, ShoppingCart, ArrowRight, X, AlertCircle, DollarSign, Download } from 'lucide-react';
 
 import type { ServiceItem } from '../../utils/services';
 import { restoreDefaultServiceForms } from '../../utils/services';
@@ -50,7 +52,7 @@ export default function DashboardHome() {
   // const { wallet } = useWallet();
   const { totalEarnings, activeReferrals, tier, loading: referralsLoading } = useReferral();
   const { userRankInfo } = useUserRank();
-  const { affiliateStatus, joinAffiliateProgram, getAffiliateBadgeText, getAffiliateStatusText } = useAffiliateStatus();
+  const { affiliateStatus, joinAffiliateProgram, getAffiliateBadgeText, getAffiliateStatusText, canJoinAffiliate, canReapply } = useAffiliateStatus();
   const { shouldHideBanners } = useAffiliateBannerVisibility();
   const navigate = useNavigate();
   const [ordersCount, setOrdersCount] = useState(0);
@@ -63,7 +65,27 @@ export default function DashboardHome() {
   const [showFirstTimeModal, setShowFirstTimeModal] = useState(false);
   const [selectedService, setSelectedService] = useState<string | null>(null);
   const { services: activeServices, loading: servicesLoading } = useActiveServices();
+  const { products: digitalProducts, loading: productsLoading } = useDigitalProducts();
   const [services, setServices] = useState<ServiceItem[]>([]);
+  const [showAllServices, setShowAllServices] = useState(false);
+  const [showAllProducts, setShowAllProducts] = useState(false);
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [currency, setCurrency] = useState<'USDT' | 'INR'>('USDT');
+  const [processing, setProcessing] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [purchaseOption, setPurchaseOption] = useState<'main_only' | 'split' | 'currency_choice'>('split');
+  const [walletBalances, setWalletBalances] = useState<{
+    mainUsdt: number;
+    purchaseUsdt: number;
+    mainInr: number;
+    purchaseInr: number;
+  }>({
+    mainUsdt: 0,
+    purchaseUsdt: 0,
+    mainInr: 0,
+    purchaseInr: 0,
+  });
 
   // Real-time wallet subscription for dashboard balances
   const [usdtTotal, setUsdtTotal] = useState(0);
@@ -73,7 +95,7 @@ export default function DashboardHome() {
 
   // Check for first-time user and show affiliate modal
   useEffect(() => {
-    if (user && !affiliateStatus.isPartner) {
+    if (user && canJoinAffiliate()) {
       // Check if this is a first-time user (no previous visits)
       const hasVisitedBefore = localStorage.getItem('dlx_user_visited');
       if (!hasVisitedBefore) {
@@ -81,7 +103,7 @@ export default function DashboardHome() {
         localStorage.setItem('dlx_user_visited', 'true');
       }
     }
-  }, [user, affiliateStatus.isPartner]);
+  }, [user, canJoinAffiliate]);
 
   // Show congratulations modal when affiliate gets approved
   useEffect(() => {
@@ -148,6 +170,14 @@ export default function DashboardHome() {
         
         setUsdtTotal(usdtTotal);
         setInrMain(inrTotal);
+        
+        // Update wallet balances for checkout
+        setWalletBalances({
+          mainUsdt,
+          purchaseUsdt,
+          mainInr,
+          purchaseInr,
+        });
         
         setWalletLoading(false);
         console.log('Dashboard: Wallet data updated (canonical):', { 
@@ -441,6 +471,12 @@ export default function DashboardHome() {
     return matchesSearch && matchesCategory;
   });
 
+  // Limit services to 10 initially, show all if showAllServices is true
+  const displayedServices = showAllServices ? filteredServices : filteredServices.slice(0, 10);
+  
+  // Limit digital products to 10 initially, show all if showAllProducts is true
+  const displayedProducts = showAllProducts ? digitalProducts : digitalProducts.slice(0, 10);
+
   useEffect(() => {
     if (!user?.id) return;
     const q = query(collection(firestore, 'orders'), where('userId', '==', user.id));
@@ -537,6 +573,157 @@ export default function DashboardHome() {
     setModalOpen(true);
   };
 
+  const handleProductClick = (product: any) => {
+    setSelectedProduct(product);
+    setShowProductModal(true);
+    setPurchaseOption('split'); // Reset to default
+    setCurrency('USDT'); // Reset to default
+  };
+
+  const doPurchase = async () => {
+    if (!user || !selectedProduct) return;
+
+    setProcessing(true);
+    const walletRef = doc(firestore, "wallets", user.id);
+    const ordersRef = collection(firestore, "orders");
+    const productPrice = Number(selectedProduct.priceUsd ?? selectedProduct.price ?? 0);
+    const commissionUsd = Number((productPrice * 0.7).toFixed(2));
+
+    try {
+      await runTransaction(firestore, async (tx) => {
+        const walletSnap = await tx.get(walletRef);
+        if (!walletSnap.exists()) {
+          throw new Error("Wallet not found. Please set up your wallet first.");
+        }
+        const w = walletSnap.data() as any;
+
+        // Determine payment amount and currency based on purchase option
+        let paymentAmount: number;
+        let currencyToUse: string;
+        
+        if (purchaseOption === "currency_choice") {
+          currencyToUse = currency;
+          paymentAmount = currency === "INR" ? Math.round(productPrice * 84) : productPrice; // USD_TO_INR = 84
+        } else {
+          currencyToUse = "USDT"; // Default to USDT for main_only and split options
+          paymentAmount = productPrice;
+        }
+
+        // Check balance and deduct based on purchase option
+        if (purchaseOption === "main_only") {
+          // Pay from main wallet only
+          if (currencyToUse === "USDT") {
+            const mainWallet = Number(w.mainUsdt || 0);
+            if (mainWallet < paymentAmount) {
+              throw new Error("Insufficient balance in main wallet. Please deposit more funds.");
+            }
+            tx.update(walletRef, { 
+              mainUsdt: mainWallet - paymentAmount
+            });
+          } else {
+            const mainWallet = Number(w.mainInr || 0);
+            if (mainWallet < paymentAmount) {
+              throw new Error("Insufficient balance in main wallet. Please deposit more funds.");
+            }
+            tx.update(walletRef, { 
+              mainInr: mainWallet - paymentAmount
+            });
+          }
+        } else if (purchaseOption === "split") {
+          // Split 50/50 between main and purchase wallets, fallback to main wallet only if purchase wallet insufficient
+          const halfAmount = Number((paymentAmount / 2).toFixed(2));
+          
+          if (currencyToUse === "USDT") {
+            const mainWallet = Number(w.mainUsdt || 0);
+            const purchaseWallet = Number(w.purchaseUsdt || 0);
+            
+            // Check if main wallet has enough for full amount
+            if (mainWallet < paymentAmount) {
+              throw new Error("Insufficient balance in main wallet. Please deposit more funds.");
+            }
+            
+            // If purchase wallet has enough for 50%, split the payment
+            if (purchaseWallet >= halfAmount) {
+              tx.update(walletRef, { 
+                mainUsdt: mainWallet - halfAmount, 
+                purchaseUsdt: purchaseWallet - halfAmount 
+              });
+            } else {
+              // Use only main wallet if purchase wallet is insufficient
+              tx.update(walletRef, { 
+                mainUsdt: mainWallet - paymentAmount
+              });
+            }
+          } else {
+            const halfAmountInr = Math.floor(paymentAmount / 2);
+            const mainWallet = Number(w.mainInr || 0);
+            const purchaseWallet = Number(w.purchaseInr || 0);
+            
+            // Check if main wallet has enough for full amount
+            if (mainWallet < paymentAmount) {
+              throw new Error("Insufficient balance in main wallet. Please deposit more funds.");
+            }
+            
+            // If purchase wallet has enough for 50%, split the payment
+            if (purchaseWallet >= halfAmountInr) {
+              tx.update(walletRef, { 
+                mainInr: mainWallet - halfAmountInr, 
+                purchaseInr: purchaseWallet - halfAmountInr 
+              });
+            } else {
+              // Use only main wallet if purchase wallet is insufficient
+              tx.update(walletRef, { 
+                mainInr: mainWallet - paymentAmount
+              });
+            }
+          }
+        } else if (purchaseOption === "currency_choice") {
+          // Pay from main wallet with chosen currency
+          if (currencyToUse === "USDT") {
+            const mainWallet = Number(w.mainUsdt || 0);
+            if (mainWallet < paymentAmount) {
+              throw new Error("Insufficient balance in main wallet. Please deposit more funds.");
+            }
+            tx.update(walletRef, { 
+              mainUsdt: mainWallet - paymentAmount
+            });
+          } else {
+            const mainWallet = Number(w.mainInr || 0);
+            if (mainWallet < paymentAmount) {
+              throw new Error("Insufficient balance in main wallet. Please deposit more funds.");
+            }
+            tx.update(walletRef, { 
+              mainInr: mainWallet - paymentAmount
+            });
+          }
+        }
+
+        // Create order document with required fields
+        await addDoc(ordersRef, {
+          userId: user.id,
+          productId: selectedProduct.id,
+          productName: selectedProduct.title,
+          productPrice: productPrice,
+          productLink: selectedProduct.downloadUrl ?? selectedProduct.productLink ?? "",
+          status: "completed", // Changed to completed since payment is successful
+          purchaseOption: purchaseOption,
+          currency: currencyToUse,
+          createdAt: serverTimestamp(),
+        });
+      });
+
+      setToast({ message: "Purchase successful! Access link available in Orders.", type: "success" });
+      setTimeout(() => setToast(null), 2500);
+      setShowProductModal(false);
+      setSelectedProduct(null);
+    } catch (e: any) {
+      setToast({ message: e?.message || "Payment failed. Please try again.", type: "error" });
+      setTimeout(() => setToast(null), 3000);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   return (
     <>
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0f172a]">
@@ -579,14 +766,24 @@ export default function DashboardHome() {
                     </p>
                   </div>
                 )}
-                {!affiliateStatus.isPartner && !shouldHideBanners && (
+                {canJoinAffiliate() && !shouldHideBanners && !affiliateStatus.isApproved && (
                   <Button
                     onClick={() => navigate('/affiliate-program')}
                     className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold px-3 py-2 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 text-sm sm:text-base"
                   >
                     <Crown className="w-4 h-4 mr-1 sm:mr-2" />
-                    <span className="hidden sm:inline">Join Affiliate</span>
-                    <span className="sm:hidden">Join</span>
+                    <span className="hidden sm:inline">Join Our Affiliate Program</span>
+                    <span className="sm:hidden">Join Affiliate Program</span>
+                  </Button>
+                )}
+                {canReapply() && !shouldHideBanners && !affiliateStatus.isApproved && (
+                  <Button
+                    onClick={() => navigate('/affiliate-program')}
+                    className="bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white font-semibold px-3 py-2 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 text-sm sm:text-base"
+                  >
+                    <Crown className="w-4 h-4 mr-1 sm:mr-2" />
+                    <span className="hidden sm:inline">Reapply</span>
+                    <span className="sm:hidden">Reapply</span>
                   </Button>
                 )}
               </div>
@@ -739,15 +936,75 @@ export default function DashboardHome() {
             </div>
           </div>
 
-          {/* Top Earners Widget */}
-          <div className="mb-8">
-            <TopEarnersWidget />
-          </div>
-
-          {/* Affiliate Partner CTA */}
-          {!shouldHideBanners && (
+          {/* Compact Affiliate Partner CTA - Only show for users who can join */}
+          {canJoinAffiliate() && !shouldHideBanners && !affiliateStatus.isApproved && (
             <div className="mb-8">
-            <div className="relative overflow-hidden bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-600 rounded-2xl shadow-2xl border border-emerald-500/50">
+              <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-purple-900 to-indigo-900 rounded-2xl shadow-2xl border border-purple-500/30">
+                {/* Animated Background */}
+                <div className="absolute inset-0">
+                  <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-full blur-2xl animate-pulse"></div>
+                  <div className="absolute bottom-0 left-0 w-32 h-32 bg-gradient-to-br from-cyan-500/20 to-blue-500/20 rounded-full blur-2xl animate-pulse animation-delay-2000"></div>
+                </div>
+                
+                <div className="relative p-6 sm:p-8">
+                  <div className="flex flex-col lg:flex-row items-center gap-6">
+                    {/* Icon & Header */}
+                    <div className="flex-shrink-0 text-center lg:text-left">
+                      <div className="w-16 h-16 mx-auto lg:mx-0 mb-4 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-lg">
+                        <Crown className="w-8 h-8 text-white" />
+                      </div>
+                      <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">
+                        Join Our Affiliate Program
+                      </h2>
+                      <p className="text-slate-300 text-sm sm:text-base">
+                        Earn <span className="text-yellow-300 font-semibold">30-40% commission</span> on every sale
+                      </p>
+                    </div>
+
+                    {/* Quick Stats */}
+                    <div className="flex-1 grid grid-cols-3 gap-4">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-yellow-300">30-40%</div>
+                        <div className="text-xs text-slate-400">Commission</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-cyan-300">$400+</div>
+                        <div className="text-xs text-slate-400">Monthly</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-emerald-300">Instant</div>
+                        <div className="text-xs text-slate-400">Payouts</div>
+                      </div>
+                    </div>
+
+                    {/* CTA Buttons */}
+                    <div className="flex-shrink-0 flex flex-col sm:flex-row gap-3">
+                      <button
+                        onClick={() => navigate('/affiliate-program')}
+                        className="group relative px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-bold shadow-lg hover:shadow-purple-500/50 transition-all duration-300 hover:scale-105"
+                      >
+                        <span className="relative z-10 flex items-center gap-2">
+                          <Crown className="w-4 h-4" />
+                          Join Now
+                        </span>
+                      </button>
+                      <button
+                        onClick={() => navigate('/affiliate-program/info')}
+                        className="px-6 py-3 bg-white/10 border border-white/20 text-white rounded-xl font-semibold hover:bg-white/20 transition-all duration-300"
+                      >
+                        Learn More
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Reapply CTA - Only show for rejected users */}
+          {canReapply() && !shouldHideBanners && !affiliateStatus.isApproved && (
+            <div className="mb-8">
+            <div className="relative overflow-hidden bg-gradient-to-br from-orange-600 via-red-600 to-pink-600 rounded-2xl shadow-2xl border border-orange-500/50">
               {/* Animated Background Pattern */}
               <div className="absolute inset-0 opacity-20">
                 <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.8),transparent_50%)] animate-pulse"></div>
@@ -759,38 +1016,38 @@ export default function DashboardHome() {
                   {/* Icon Section */}
                   <div className="flex-shrink-0">
                     <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-2xl border-2 border-white/30">
-                      <span className="text-5xl sm:text-6xl">🤝</span>
+                      <span className="text-5xl sm:text-6xl">🔄</span>
                     </div>
                   </div>
 
                   {/* Content Section */}
                   <div className="flex-1 text-center lg:text-left">
                     <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white mb-3">
-                      Become an Affiliate Partner
+                      Reapply to Affiliate Program
                     </h2>
                     <div className="space-y-2 mb-4">
                       <p className="text-white/95 text-base sm:text-lg font-medium">
-                        🎯 Earn <span className="font-bold text-yellow-300">30-40% commission</span> on each sale!
+                        🎯 Your previous application wasn't approved, but you can reapply anytime!
                       </p>
                       <p className="text-white/90 text-sm sm:text-base">
-                        💰 Sell digital services worth <span className="font-semibold">$400/month</span> (just 3 clients)
+                        💰 Earn <span className="font-semibold">30-40% commission</span> on every referral
                       </p>
                       <p className="text-white/90 text-sm sm:text-base">
-                        💵 Easily make <span className="font-bold text-yellow-300">$400-$500 monthly</span>
+                        💵 Build your passive income with our digital services
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-3 justify-center lg:justify-start">
                       <div className="flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-sm rounded-lg border border-white/30">
-                        <span className="text-lg">✅</span>
+                        <span className="text-lg">🔄</span>
+                        <span className="text-white text-sm font-medium">Reapply Anytime</span>
+                      </div>
+                      <div className="flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-sm rounded-lg border border-white/30">
+                        <span className="text-lg">📈</span>
                         <span className="text-white text-sm font-medium">High Commission</span>
                       </div>
                       <div className="flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-sm rounded-lg border border-white/30">
                         <span className="text-lg">⚡</span>
                         <span className="text-white text-sm font-medium">Fast Payouts</span>
-                      </div>
-                      <div className="flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-sm rounded-lg border border-white/30">
-                        <span className="text-lg">🎁</span>
-                        <span className="text-white text-sm font-medium">Bonus Rewards</span>
                       </div>
                     </div>
                   </div>
@@ -799,10 +1056,10 @@ export default function DashboardHome() {
                   <div className="flex-shrink-0">
                     <button
                       onClick={() => navigate('/affiliate-program')}
-                      className="group relative px-8 py-4 bg-white text-emerald-600 rounded-xl font-bold text-lg shadow-2xl hover:shadow-emerald-400/50 transition-all duration-300 hover:scale-105 active:scale-95"
+                      className="group relative px-8 py-4 bg-white text-orange-600 rounded-xl font-bold text-lg shadow-2xl hover:shadow-orange-400/50 transition-all duration-300 hover:scale-105 active:scale-95"
                     >
                       <span className="relative z-10 flex items-center gap-2">
-                        Join Now
+                        Reapply Now
                         <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                         </svg>
@@ -816,7 +1073,7 @@ export default function DashboardHome() {
 
               {/* Decorative Elements */}
               <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full blur-3xl"></div>
-              <div className="absolute bottom-0 left-0 w-40 h-40 bg-cyan-300/10 rounded-full blur-3xl"></div>
+              <div className="absolute bottom-0 left-0 w-40 h-40 bg-orange-300/10 rounded-full blur-3xl"></div>
             </div>
           </div>
           )}
@@ -876,10 +1133,23 @@ export default function DashboardHome() {
             </div>
 
             {/* Services Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-              {filteredServices.map((service) => (
-                <div
+            <motion.div 
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6"
+              layout
+            >
+              <AnimatePresence mode="popLayout">
+                {displayedServices.map((service, index) => (
+                <motion.div
                   key={service.id}
+                  layout
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ 
+                    duration: 0.3, 
+                    delay: index * 0.05,
+                    layout: { duration: 0.3 }
+                  }}
                   className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-slate-700/50 hover:border-cyan-500/50 hover:-translate-y-1"
                 >
                   {/* Gradient Overlay on Hover */}
@@ -969,9 +1239,23 @@ export default function DashboardHome() {
 
                   {/* Bottom Accent Line */}
                   <div className={`h-1 bg-gradient-to-r ${service.gradient}`}></div>
-                </div>
-              ))}
-            </div>
+                </motion.div>
+                ))}
+              </AnimatePresence>
+            </motion.div>
+
+            {/* View All Button for Services */}
+            {filteredServices.length > 10 && (
+              <div className="text-center mt-8">
+                <button
+                  onClick={() => setShowAllServices(!showAllServices)}
+                  className="group inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
+                >
+                  <span>{showAllServices ? 'Show Less' : 'View All Services'}</span>
+                  <ArrowRight className={`w-5 h-5 group-hover:translate-x-1 transition-transform ${showAllServices ? 'rotate-180' : ''}`} />
+                </button>
+              </div>
+            )}
 
             {/* No Results Message */}
             {filteredServices.length === 0 && (
@@ -988,8 +1272,162 @@ export default function DashboardHome() {
               </div>
             )}
 
-            {/* Promotional Banner */}
-            <div className="mt-16 p-8 bg-gradient-to-r from-cyan-500/10 to-blue-500/10 backdrop-blur-sm border border-cyan-500/20 rounded-2xl">
+          </div>
+
+          {/* Digital Products Section */}
+          <div className="mb-8">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
+              <div>
+                <h2 className="text-2xl sm:text-3xl font-bold text-slate-200 mb-1">
+                  Digital Products
+                </h2>
+                <p className="text-slate-400 text-sm sm:text-base">
+                  Discover and purchase premium digital products
+                </p>
+              </div>
+            </div>
+
+            {/* Digital Products Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+              {displayedProducts.map((product) => (
+                <div
+                  key={product.id}
+                  className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-slate-700/50 hover:border-purple-500/50 hover:-translate-y-1"
+                >
+                  {/* Product Image */}
+                  <div className="relative h-48 bg-gradient-to-br from-purple-500/20 to-pink-500/20 overflow-hidden">
+                    {product.thumbnailUrl ? (
+                      <img
+                        src={product.thumbnailUrl}
+                        alt={product.title}
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Package className="w-16 h-16 text-purple-400" />
+                      </div>
+                    )}
+                    <div className="absolute top-3 right-3">
+                      <span className="px-2 py-1 text-xs font-semibold bg-slate-700/60 backdrop-blur-sm text-slate-300 rounded-full border border-slate-600/50">
+                        {product.category || 'Digital'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="relative p-4 sm:p-6">
+                    {/* Title */}
+                    <h3 className="text-lg sm:text-xl font-bold text-slate-200 mb-2 leading-tight line-clamp-2">
+                      {product.title}
+                    </h3>
+
+                    {/* Description */}
+                    <p className="text-xs sm:text-sm text-slate-400 mb-3 sm:mb-4 line-clamp-3 leading-relaxed">
+                      {product.description}
+                    </p>
+
+                    {/* Price */}
+                    <div className="mb-3 sm:mb-4">
+                      <p className="text-xs text-slate-500 mb-1">Price</p>
+                      <p className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                        ${product.priceUsd.toFixed(2)}
+                      </p>
+                    </div>
+
+                    {/* Commission Info - Only for Affiliates */}
+                    {affiliateStatus.isApproved && (
+                      <div className="mb-3 sm:mb-4 p-2 sm:p-3 rounded-lg bg-slate-700/30 border border-slate-600/30">
+                        <div className="text-center">
+                          <p className="text-xs text-slate-400 mb-1">Your Commission</p>
+                          <p className={`text-lg sm:text-2xl font-bold ${userRankInfo.textColor}`}>
+                            {userRankInfo.commissionPercentage}%
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Share Button for Affiliates */}
+                    {affiliateStatus.isApproved && (
+                      <div className="mb-3 sm:mb-4">
+                        <Button
+                          onClick={() => {
+                            const referralLink = `${window.location.origin}/digital-products?ref=${user?.id}`;
+                            navigator.clipboard.writeText(referralLink);
+                            // Show success toast
+                          }}
+                          className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold py-2 px-3 sm:px-4 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 text-sm sm:text-base"
+                        >
+                          <Share2 className="w-4 h-4 mr-1 sm:mr-2" />
+                          <span className="hidden sm:inline">Share & Earn {userRankInfo.commissionPercentage}%</span>
+                          <span className="sm:hidden">Share & Earn</span>
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* CTA Button */}
+                    <button
+                      onClick={() => handleProductClick(product)}
+                      className="w-full py-2 sm:py-3 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95 text-sm sm:text-base"
+                    >
+                      <ShoppingCart className="w-4 h-4 inline mr-2" />
+                      View Product
+                    </button>
+                  </div>
+
+                  {/* Bottom Accent Line */}
+                  <div className="h-1 bg-gradient-to-r from-purple-500 to-pink-500"></div>
+                </div>
+              ))}
+            </div>
+
+            {/* View All Button for Digital Products */}
+            {digitalProducts.length > 10 && (
+              <div className="text-center mt-8">
+                <button
+                  onClick={() => navigate('/dashboard/digital-products')}
+                  className="group inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
+                >
+                  <span>View All Digital Products</span>
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </button>
+              </div>
+            )}
+
+            {/* No Products Message */}
+            {digitalProducts.length === 0 && !productsLoading && (
+              <div className="text-center py-16">
+                <div className="w-24 h-24 mx-auto mb-4 rounded-full bg-slate-800/40 backdrop-blur-sm border border-slate-700/50 flex items-center justify-center">
+                  <Package className="w-12 h-12 text-slate-400" />
+                </div>
+                <h3 className="text-xl font-semibold text-slate-200 mb-2">
+                  No digital products available
+                </h3>
+                <p className="text-slate-400">
+                  Check back later for new products
+                </p>
+              </div>
+            )}
+
+            {/* Loading State */}
+            {productsLoading && (
+              <div className="text-center py-16">
+                <div className="w-24 h-24 mx-auto mb-4 rounded-full bg-slate-800/40 backdrop-blur-sm border border-slate-700/50 flex items-center justify-center">
+                  <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+                </div>
+                <h3 className="text-xl font-semibold text-slate-200 mb-2">
+                  Loading digital products...
+                </h3>
+              </div>
+            )}
+          </div>
+
+          {/* Top Earners Widget */}
+          <div className="mb-8">
+            <TopEarnersWidget />
+          </div>
+
+          {/* Explore More High-Value Services */}
+          <div className="mb-8">
+            <div className="p-8 bg-gradient-to-r from-cyan-500/10 to-blue-500/10 backdrop-blur-sm border border-cyan-500/20 rounded-2xl">
               <div className="text-center">
                 <h3 className="text-2xl font-bold text-slate-200 mb-4">
                   Explore More High-Value Services
@@ -1054,6 +1492,221 @@ export default function DashboardHome() {
         commissionRate={userRankInfo.commissionPercentage}
       />
 
+      {/* Product Checkout Modal */}
+      <AnimatePresence>
+        {showProductModal && selectedProduct && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onClick={() => { setShowProductModal(false); setSelectedProduct(null); }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.3 }}
+              className="bg-slate-900/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-6 border-b border-slate-700/50">
+                <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                  <ShoppingCart className="w-6 h-6 text-purple-400" />
+                  Checkout
+                </h2>
+                <button
+                  onClick={() => { setShowProductModal(false); setSelectedProduct(null); }}
+                  className="p-2 rounded-xl hover:bg-white/10 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="p-6 space-y-6 max-h-[60vh] overflow-y-auto">
+                {/* Product Info */}
+                <div className="flex gap-4">
+                  <div className="w-20 h-20 bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                    {selectedProduct.thumbnailUrl ? (
+                      <img
+                        src={selectedProduct.thumbnailUrl}
+                        alt={selectedProduct.title}
+                        className="w-full h-full object-cover rounded-xl"
+                      />
+                    ) : (
+                      <Package className="w-8 h-8 text-purple-400" />
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-xl font-bold text-white mb-2">{selectedProduct.title}</h3>
+                    <p className="text-slate-300 text-sm mb-3 line-clamp-2">{selectedProduct.description}</p>
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="w-4 h-4 text-green-400" />
+                      <span className="text-2xl font-bold text-green-400">${selectedProduct.priceUsd.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Purchase Options */}
+                <div className="space-y-4">
+                  <h4 className="text-lg font-semibold text-white">Payment Options</h4>
+                  
+                  {/* Purchase Option Selection */}
+                  <div className="space-y-3">
+                    <label className="flex items-center gap-3 p-3 rounded-xl bg-slate-800/50 border border-slate-700/50 cursor-pointer hover:bg-slate-800/70 transition-colors">
+                      <input
+                        type="radio"
+                        name="purchaseOption"
+                        value="split"
+                        checked={purchaseOption === 'split'}
+                        onChange={(e) => setPurchaseOption(e.target.value as any)}
+                        className="w-4 h-4 text-purple-600"
+                      />
+                      <div>
+                        <div className="text-white font-medium">Split Payment (Recommended)</div>
+                        <div className="text-slate-400 text-sm">50% from main wallet, 50% from purchase wallet</div>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center gap-3 p-3 rounded-xl bg-slate-800/50 border border-slate-700/50 cursor-pointer hover:bg-slate-800/70 transition-colors">
+                      <input
+                        type="radio"
+                        name="purchaseOption"
+                        value="main_only"
+                        checked={purchaseOption === 'main_only'}
+                        onChange={(e) => setPurchaseOption(e.target.value as any)}
+                        className="w-4 h-4 text-purple-600"
+                      />
+                      <div>
+                        <div className="text-white font-medium">Main Wallet Only</div>
+                        <div className="text-slate-400 text-sm">Pay from main wallet only</div>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center gap-3 p-3 rounded-xl bg-slate-800/50 border border-slate-700/50 cursor-pointer hover:bg-slate-800/70 transition-colors">
+                      <input
+                        type="radio"
+                        name="purchaseOption"
+                        value="currency_choice"
+                        checked={purchaseOption === 'currency_choice'}
+                        onChange={(e) => setPurchaseOption(e.target.value as any)}
+                        className="w-4 h-4 text-purple-600"
+                      />
+                      <div className="flex-1">
+                        <div className="text-white font-medium">Choose Currency</div>
+                        <div className="text-slate-400 text-sm">Pay in USDT or INR</div>
+                        {purchaseOption === 'currency_choice' && (
+                          <div className="mt-2 flex gap-2">
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="radio"
+                                name="currency"
+                                value="USDT"
+                                checked={currency === 'USDT'}
+                                onChange={(e) => setCurrency(e.target.value as any)}
+                                className="w-4 h-4 text-purple-600"
+                              />
+                              <span className="text-sm text-slate-300">USDT</span>
+                            </label>
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="radio"
+                                name="currency"
+                                value="INR"
+                                checked={currency === 'INR'}
+                                onChange={(e) => setCurrency(e.target.value as any)}
+                                className="w-4 h-4 text-purple-600"
+                              />
+                              <span className="text-sm text-slate-300">INR</span>
+                            </label>
+                          </div>
+                        )}
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* Wallet Balances */}
+                  <div className="bg-slate-800/30 rounded-xl p-4">
+                    <h5 className="text-white font-medium mb-3">Wallet Balances</h5>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <div className="text-slate-400">USDT Main</div>
+                        <div className="text-white font-semibold">${walletBalances.mainUsdt.toFixed(2)}</div>
+                      </div>
+                      <div>
+                        <div className="text-slate-400">USDT Purchase</div>
+                        <div className="text-white font-semibold">${walletBalances.purchaseUsdt.toFixed(2)}</div>
+                      </div>
+                      <div>
+                        <div className="text-slate-400">INR Main</div>
+                        <div className="text-white font-semibold">₹{walletBalances.mainInr.toFixed(2)}</div>
+                      </div>
+                      <div>
+                        <div className="text-slate-400">INR Purchase</div>
+                        <div className="text-white font-semibold">₹{walletBalances.purchaseInr.toFixed(2)}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="bg-slate-800/50 border-t border-slate-700/50 px-6 py-4 flex items-center justify-end gap-3">
+                <button
+                  onClick={() => { setShowProductModal(false); setSelectedProduct(null); }}
+                  className="px-6 py-3 rounded-xl bg-slate-700/50 border border-slate-600/50 hover:bg-slate-700/70 transition-all duration-300 font-semibold text-white"
+                  disabled={processing}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={doPurchase}
+                  disabled={processing}
+                  className="px-8 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {processing ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingCart className="w-4 h-4" />
+                      Complete Purchase
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Toast Notifications */}
+      {toast && (
+        <motion.div
+          initial={{ opacity: 0, y: 50 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 50 }}
+          className={`fixed bottom-4 right-4 p-4 rounded-xl shadow-lg z-50 ${
+            toast.type === 'success' 
+              ? 'bg-green-600 text-white' 
+              : 'bg-red-600 text-white'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {toast.type === 'success' ? (
+              <CheckCircle className="w-5 h-5" />
+            ) : (
+              <AlertCircle className="w-5 h-5" />
+            )}
+            <span>{toast.message}</span>
+          </div>
+        </motion.div>
+      )}
+
       {/* Add custom animation keyframes to your global CSS or Tailwind config */}
       <style>{`
         @keyframes blob {
@@ -1070,6 +1723,12 @@ export default function DashboardHome() {
         }
         .animation-delay-4000 {
           animation-delay: 4s;
+        }
+        .animation-delay-1000 {
+          animation-delay: 1s;
+        }
+        .animation-delay-3000 {
+          animation-delay: 3s;
         }
       `}</style>
     </>

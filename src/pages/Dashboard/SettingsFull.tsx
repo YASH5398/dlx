@@ -99,16 +99,44 @@ export default function SettingsFull() {
   const connectMetaMask = async () => {
     try {
       const { ethereum } = window as any;
+      
+      // Check if MetaMask is installed
       if (!ethereum || !ethereum.request) {
-        setConnectedWallet(`0x${Math.random().toString(16).slice(2, 42)}`);
-        toast.success('Simulated wallet connected');
+        toast.error('MetaMask extension not found. Please install MetaMask to connect your wallet.');
         return;
       }
-      const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
-      setConnectedWallet(accounts[0]);
-      toast.success('Wallet connected');
-    } catch (e) {
-      toast.error('Failed to connect wallet');
+      
+      // Check if MetaMask is already connected
+      const accounts = await ethereum.request({ method: 'eth_accounts' });
+      if (accounts.length > 0) {
+        setConnectedWallet(accounts[0]);
+        toast.success('Wallet already connected');
+        return;
+      }
+      
+      // Request connection
+      const newAccounts = await ethereum.request({ method: 'eth_requestAccounts' });
+      if (newAccounts.length > 0) {
+        setConnectedWallet(newAccounts[0]);
+        toast.success('Wallet connected successfully');
+      } else {
+        toast.error('No accounts found');
+      }
+    } catch (error: any) {
+      console.error('MetaMask connection error:', error);
+      
+      // Handle specific error cases
+      if (error.code === 4001) {
+        toast.error('Connection rejected by user');
+      } else if (error.code === -32002) {
+        toast.error('Connection request already pending. Please check MetaMask.');
+      } else if (error.message?.includes('User rejected')) {
+        toast.error('Connection rejected by user');
+      } else if (error.message?.includes('extension not found')) {
+        toast.error('MetaMask extension not found. Please install MetaMask.');
+      } else {
+        toast.error('Failed to connect wallet. Please try again.');
+      }
     }
   };
 

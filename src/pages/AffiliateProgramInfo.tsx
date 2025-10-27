@@ -7,6 +7,8 @@ import 'react-toastify/dist/ReactToastify.css';
 import { useNavigate } from 'react-router-dom';
 import { UserPlusIcon, LinkIcon, ShoppingCartIcon, CurrencyDollarIcon, ChartBarIcon, WalletIcon, QuestionMarkCircleIcon } from '@heroicons/react/24/outline';
 import { firestore } from '../firebase.ts';
+import { useUser } from '../context/UserContext';
+import { useAffiliateStatus } from '../hooks/useAffiliateStatus';
 
 const validators = {
   email: (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v || ''),
@@ -125,6 +127,8 @@ interface FormData {
 const AffiliateProgramInfo: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const navigate = useNavigate();
+  const { user } = useUser();
+  const { canJoinAffiliate, canReapply, affiliateStatus } = useAffiliateStatus();
 
   const methods = useForm<FormData>({
     defaultValues: { email: '', fullName: '' },
@@ -159,6 +163,69 @@ const AffiliateProgramInfo: React.FC = () => {
     }
   };
 
+  // Show different content based on affiliate status
+  if (user && affiliateStatus.isApproved) {
+    return (
+      <section className="min-h-screen bg-gradient-to-b from-purple-900 to-indigo-900 text-white px-4 py-12 sm:py-16 lg:py-20">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center">
+            <div className="w-24 h-24 mx-auto mb-8 rounded-full bg-green-500/20 flex items-center justify-center">
+              <span className="text-5xl">✅</span>
+            </div>
+            <h1 className="text-4xl sm:text-5xl font-bold text-white mb-4">
+              You're Already an Affiliate Partner!
+            </h1>
+            <p className="text-xl text-indigo-100 mb-8 max-w-2xl mx-auto">
+              Congratulations! You're already part of our affiliate program. Access your dashboard to start earning commissions.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <button
+                onClick={() => navigate('/affiliate-dashboard')}
+                className="px-8 py-3 rounded-full bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold text-lg shadow-md hover:shadow-lg transition-all duration-300"
+              >
+                View Dashboard
+              </button>
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="px-8 py-3 rounded-full bg-white/10 border border-white/20 text-white font-semibold text-lg hover:bg-white/20 transition-all duration-300"
+              >
+                Go to Dashboard
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (user && affiliateStatus.isPending) {
+    return (
+      <section className="min-h-screen bg-gradient-to-b from-purple-900 to-indigo-900 text-white px-4 py-12 sm:py-16 lg:py-20">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center">
+            <div className="w-24 h-24 mx-auto mb-8 rounded-full bg-yellow-500/20 flex items-center justify-center">
+              <span className="text-5xl">⏳</span>
+            </div>
+            <h1 className="text-4xl sm:text-5xl font-bold text-white mb-4">
+              Application Under Review
+            </h1>
+            <p className="text-xl text-indigo-100 mb-8 max-w-2xl mx-auto">
+              Your affiliate application is currently being reviewed. We'll notify you via email once it's approved.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="px-8 py-3 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold text-lg shadow-md hover:shadow-lg transition-all duration-300"
+              >
+                Go to Dashboard
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="min-h-screen bg-gradient-to-b from-purple-900 to-indigo-900 text-white px-4 py-12 sm:py-16 lg:py-20">
       <ToastContainer />
@@ -180,7 +247,7 @@ const AffiliateProgramInfo: React.FC = () => {
               onClick={() => setIsModalOpen(true)}
               className="mt-8 px-8 py-3 rounded-full bg-gradient-to-r from-pink-500 to-purple-500 text-white font-semibold text-lg shadow-md hover:shadow-lg hover:from-pink-600 hover:to-purple-600 focus:ring-2 focus:ring-pink-400 transition-all duration-300"
             >
-              {CONTENT.intro.cta}
+              {canReapply() ? 'Reapply to Affiliate Program' : CONTENT.intro.cta}
             </button>
           </motion.div>
         </header>

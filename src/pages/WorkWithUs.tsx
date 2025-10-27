@@ -166,7 +166,7 @@ export default function WorkWithUs() {
     try {
       const q = query(
         collection(firestore, 'applicants'),
-        where('user_id', '==', user.uid)
+        where('user_id', '==', user.id)
       );
       const querySnapshot = await getDocs(q);
       
@@ -247,7 +247,7 @@ export default function WorkWithUs() {
         status: 'pending',
         trustFeeStatus: 'pending',
         trustFeeAmount: 12,
-        user_id: user?.uid || 'anonymous'
+        user_id: user?.id || 'anonymous'
       };
       
       await addDoc(collection(firestore, 'applicants'), applicationData);

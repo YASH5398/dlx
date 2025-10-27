@@ -6,6 +6,8 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion";
 import { useNavigate } from 'react-router-dom';
+import { useUser } from '../context/UserContext';
+import { useAffiliateStatus } from '../hooks/useAffiliateStatus';
 
 // ============================================================================
 // ERROR BOUNDARY
@@ -942,6 +944,8 @@ const WhyChooseSection = () => {
 // ============================================================================
 const AffiliateSection = () => {
   const [referrals, setReferrals] = useState(20);
+  const { user } = useUser();
+  const { canJoinAffiliate } = useAffiliateStatus();
 
   const calculateEarnings = () => {
     const avgOrderValue = 1000;
@@ -961,6 +965,11 @@ const AffiliateSection = () => {
 
   const tier = getTier();
   const earnings = calculateEarnings();
+
+  // Don't show affiliate section if user has already applied or is approved
+  if (user && !canJoinAffiliate()) {
+    return null;
+  }
 
   return (
     <section id="affiliate" className="relative py-20 md:py-32 bg-gradient-to-b from-slate-900 via-blue-950 to-indigo-950 overflow-hidden">
