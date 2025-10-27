@@ -8,9 +8,14 @@ interface AffiliateStatus {
   isPartner: boolean;
   isApproved: boolean;
   isPending: boolean;
+  isRejected: boolean;
+  hasApplied: boolean;
   commissionRate: number;
   totalEarnings: number;
   referralCount: number;
+  joinedAt?: Date;
+  approvedAt?: Date;
+  status: 'not_joined' | 'under_review' | 'approved' | 'rejected';
 }
 
 export function useAffiliateStatus() {
@@ -19,9 +24,12 @@ export function useAffiliateStatus() {
     isPartner: false,
     isApproved: false,
     isPending: false,
+    isRejected: false,
+    hasApplied: false,
     commissionRate: 0,
     totalEarnings: 0,
-    referralCount: 0
+    referralCount: 0,
+    status: 'not_joined'
   });
   const [loading, setLoading] = useState(true);
 
@@ -37,22 +45,42 @@ export function useAffiliateStatus() {
           const data = doc.data();
           const rankInfo = getRankInfo(data.rank || 'starter');
           
-          setAffiliateStatus({
-            isPartner: data.affiliateApproved || false,
-            isApproved: data.affiliateApproved || false,
-            isPending: data.affiliateStatus === 'pending',
-            commissionRate: rankInfo.commission,
-            totalEarnings: data.affiliateEarnings || 0,
-            referralCount: data.affiliateReferrals || 0
-          });
+          const isApproved = data.affiliateApproved || false;
+          const isUnderReview = data.affiliateStatus === 'under_review';
+          const isPending = data.affiliateStatus === 'pending' || isUnderReview;
+          const isRejected = data.affiliateStatus === 'rejected';
+          const hasApplied = data.affiliateJoinedAt || data.affiliateStatus;
           
-          console.log('useAffiliateStatus: User data updated:', {
-            isPartner: data.affiliateApproved || false,
-            isApproved: data.affiliateApproved || false,
-            isPending: data.affiliateStatus === 'pending',
+          let status: 'not_joined' | 'under_review' | 'approved' | 'rejected' = 'not_joined';
+          if (isApproved) status = 'approved';
+          else if (isUnderReview) status = 'under_review';
+          else if (isRejected) status = 'rejected';
+          else if (hasApplied) status = 'under_review';
+          
+          setAffiliateStatus({
+            isPartner: isApproved,
+            isApproved,
+            isPending,
+            isRejected,
+            hasApplied: !!hasApplied,
             commissionRate: rankInfo.commission,
             totalEarnings: data.affiliateEarnings || 0,
             referralCount: data.affiliateReferrals || 0,
+            joinedAt: data.affiliateJoinedAt?.toDate?.() || data.affiliateJoinedAt,
+            approvedAt: data.affiliateApprovedAt?.toDate?.() || data.affiliateApprovedAt,
+            status
+          });
+          
+          console.log('useAffiliateStatus: User data updated:', {
+            isPartner: isApproved,
+            isApproved,
+            isPending,
+            isRejected,
+            hasApplied: !!hasApplied,
+            commissionRate: rankInfo.commission,
+            totalEarnings: data.affiliateEarnings || 0,
+            referralCount: data.affiliateReferrals || 0,
+            status,
             rank: data.rank || 'starter'
           });
         } else {
@@ -61,9 +89,12 @@ export function useAffiliateStatus() {
             isPartner: false,
             isApproved: false,
             isPending: false,
+            isRejected: false,
+            hasApplied: false,
             commissionRate: 0,
             totalEarnings: 0,
-            referralCount: 0
+            referralCount: 0,
+            status: 'not_joined'
           });
         }
         setLoading(false);
@@ -85,7 +116,8 @@ export function useAffiliateStatus() {
     try {
       await updateDoc(doc(firestore, 'users', user.id), {
         affiliateJoinedAt: new Date(),
-        affiliateStatus: 'pending'
+        affiliateStatus: 'pending',
+        affiliatePartner: true
       });
       return true;
     } catch (error) {
@@ -97,13 +129,30 @@ export function useAffiliateStatus() {
   const getAffiliateBadgeText = () => {
     if (affiliateStatus.isApproved) return 'Affiliate Partner ✅';
     if (affiliateStatus.isPending) return 'Affiliate Partner ⏳';
+    if (affiliateStatus.isRejected) return 'Affiliate Partner ❌';
     return null;
   };
 
   const getAffiliateStatusText = () => {
-    if (affiliateStatus.isApproved) return '✅ Approved';
-    if (affiliateStatus.isPending) return '⏳ Pending Approval';
+    if (affiliateStatus.isApproved) return 'Affiliate Partner ✅';
+    if (affiliateStatus.isPending) return '⏳ Under Review (Please wait up to 30 min)';
+    if (affiliateStatus.isRejected) return '❌ Rejected';
     return '❌ Not Joined';
+  };
+
+  const getAffiliateStatusColor = () => {
+    if (affiliateStatus.isApproved) return 'text-blue-400 bg-blue-500/10 border-blue-500/30';
+    if (affiliateStatus.isPending) return 'text-red-400 bg-red-500/10 border-red-500/30';
+    if (affiliateStatus.isRejected) return 'text-red-400 bg-red-500/10 border-red-500/30';
+    return 'text-gray-400 bg-gray-500/10 border-gray-500/30';
+  };
+
+  const canJoinAffiliate = () => {
+    return !affiliateStatus.hasApplied && !affiliateStatus.isApproved;
+  };
+
+  const canReapply = () => {
+    return affiliateStatus.isRejected;
   };
 
   return {
@@ -111,6 +160,9 @@ export function useAffiliateStatus() {
     loading,
     joinAffiliateProgram,
     getAffiliateBadgeText,
-    getAffiliateStatusText
+    getAffiliateStatusText,
+    getAffiliateStatusColor,
+    canJoinAffiliate,
+    canReapply
   };
 }

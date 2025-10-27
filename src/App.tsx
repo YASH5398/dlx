@@ -4,7 +4,7 @@ import Header from './components/Header';
 import Footer from './components/Footer';
 import ProtectedRoute from './components/ProtectedRoute';
 import DashboardLayout from './pages/Dashboard/DashboardLayout';
-import AffiliateProgram from './pages/AffiliateProgramNew';
+import AffiliateProgram from './pages/AffiliateProgram';
 import OrderInvoice from './pages/Dashboard/OrderInvoice';
 import Home from './pages/Home';
 import AffiliateProgramInfo from './pages/AffiliateProgramInfo';
@@ -35,6 +35,7 @@ import AdminDLXListing from './pages/SecretAdmin/AdminDLXListing';
 // Public pages
 // Removed public pages: Exchanges, Pricing, Tutorials, Docs, Blogs, Apply
 import DigitalProducts from './pages/DigitalProducts';
+import Services from './pages/Services';
 import AboutUs from './pages/AboutUs';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -122,6 +123,7 @@ function App() {
         <Route path="/support" element={<Support />} />
         <Route path="/settings" element={<SettingsFull />} />
         <Route path="/dashboard/profile" element={<Profile />} />
+        <Route path="/dashboard/services" element={<Services />} />
         <Route path="/dashboard/digital-products" element={<DigitalProducts />} />
         <Route path="/database-marketing" element={<DatabaseMarketing />} />
         <Route path="/database-marketing/categories" element={<DatabaseCategories />} />

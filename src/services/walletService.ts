@@ -209,4 +209,68 @@ export class WalletService {
       return false;
     }
   }
+
+  static async processReferralCommission(
+    userId: string,
+    amount: number,
+    currency: 'DLX' | 'USDT' | 'INR',
+    commissionType: 'level1' | 'level2',
+    orderId: string
+  ): Promise<boolean> {
+    try {
+      const { updateDoc, increment, serverTimestamp, doc, getDoc, setDoc } = await import('firebase/firestore');
+      
+      if (currency === 'DLX') {
+        // Update DLX balance in user document
+        const userRef = doc(firestore, 'users', userId);
+        await updateDoc(userRef, {
+          [`referralIncome.${commissionType}`]: increment(amount),
+          [`referralIncome.total`]: increment(amount),
+          [`referralIncome.lastUpdated`]: serverTimestamp()
+        });
+      } else {
+        // Update wallet document for USDT/INR
+        const walletRef = doc(firestore, 'wallets', userId);
+        const walletDoc = await getDoc(walletRef);
+        
+        if (walletDoc.exists()) {
+          await updateDoc(walletRef, {
+            [`${currency.toLowerCase()}.referral${commissionType}`]: increment(amount),
+            [`${currency.toLowerCase()}.total`]: increment(amount),
+            walletUpdatedAt: serverTimestamp()
+          });
+        } else {
+          // Create wallet document if it doesn't exist
+          const newWalletData: any = {
+            dlx: 0,
+            usdt: { mainUsdt: 0, purchaseUsdt: 0, referrallevel1: 0, referrallevel2: 0, total: 0 },
+            inr: { mainInr: 0, purchaseInr: 0, referrallevel1: 0, referrallevel2: 0, total: 0 },
+            walletUpdatedAt: serverTimestamp()
+          };
+          
+          newWalletData[currency.toLowerCase()][`referral${commissionType}`] = amount;
+          newWalletData[currency.toLowerCase()].total = amount;
+          
+          await setDoc(walletRef, newWalletData);
+        }
+      }
+      
+      // Log the commission transaction
+      const transactionRef = doc(collection(firestore, 'referralTransactions'));
+      await setDoc(transactionRef, {
+        userId,
+        orderId,
+        amount,
+        currency,
+        type: commissionType,
+        timestamp: serverTimestamp(),
+        description: `Referral ${commissionType} commission - ${currency}`
+      });
+      
+      return true;
+    } catch (error) {
+      console.error('Error processing referral commission:', error);
+      return false;
+    }
+  }
 }

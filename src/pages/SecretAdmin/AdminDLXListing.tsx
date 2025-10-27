@@ -147,7 +147,7 @@ const AdminDLXListing = () => {
 
   const handleInputChange = (field: string, value: any) => {
     if (tempData) {
-      setTempData(prev => ({
+      setTempData((prev: any) => ({
         ...prev,
         [field]: value
       }));

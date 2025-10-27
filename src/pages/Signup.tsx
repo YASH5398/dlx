@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
+import { useReferralTracking } from '../hooks/useReferralTracking';
 
 /**
  * Signup Page - Premium Enhanced Design
@@ -11,6 +12,7 @@ import { useUser } from '../context/UserContext';
 const Signup: React.FC = () => {
   const { signup, loginWithGoogle } = useUser();
   const navigate = useNavigate();
+  const { trackSignup } = useReferralTracking();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -67,7 +69,13 @@ const Signup: React.FC = () => {
     if (v) return setError(v);
     try {
       setLoading(true);
-      await signup(name.trim(), email, password, phone, referral);
+      const result = await signup(name.trim(), email, password, phone, referral);
+      
+      // Track referral signup if there's a valid referral code
+      if ((result as any)?.user?.uid) {
+        await trackSignup((result as any).user.uid, email, name.trim());
+      }
+      
       navigate('/dashboard');
     } catch (e: any) {
       setError(e?.message ?? 'Registration failed');

@@ -258,11 +258,11 @@ export default function AdminDatabaseCategories() {
     setShowCategoryModal(true);
   };
 
-  const openPackageModal = (categoryId: string, package?: DatabasePackage) => {
+  const openPackageModal = (categoryId: string, packageData?: DatabasePackage) => {
     setSelectedCategoryId(categoryId);
-    if (package) {
-      setEditingPackage(package);
-      setPackageForm(package);
+    if (packageData) {
+      setEditingPackage(packageData);
+      setPackageForm(packageData);
     } else {
       setEditingPackage(null);
       setPackageForm(initialPackage);

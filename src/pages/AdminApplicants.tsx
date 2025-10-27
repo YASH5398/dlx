@@ -59,10 +59,11 @@ interface Applicant {
   portfolio_projects: string[];
   additional_info: string;
   submitted_at: string;
-  status: 'pending' | 'reviewed' | 'approved' | 'rejected';
+  status: 'pending' | 'reviewed' | 'approved' | 'rejected' | 'accepted' | 'shortlisted';
   admin_notes?: string;
   trustFeeStatus?: 'pending' | 'paid' | 'verified';
   trustFeeAmount?: number;
+  trust_fee_paid?: boolean;
   whatsappNumber?: string;
   telegramUsername?: string;
   reviewedAt?: string;

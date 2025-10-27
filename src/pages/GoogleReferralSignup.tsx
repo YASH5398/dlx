@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
+import { useReferralTracking } from '../hooks/useReferralTracking';
 
 /**
  * GoogleReferralSignup Page
@@ -10,6 +11,7 @@ import { useUser } from '../context/UserContext';
 const GoogleReferralSignup: React.FC = () => {
   const { loginWithGoogle } = useUser();
   const navigate = useNavigate();
+  const { trackSignup } = useReferralTracking();
   const [referral, setReferral] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,10 +64,17 @@ const GoogleReferralSignup: React.FC = () => {
         const referrerQuery = await getDocs(query(collection(firestore, 'users'), where('referralCode', '==', referral.trim())));
         if (!referrerQuery.empty) {
           const referrerDoc = referrerQuery.docs[0];
-          await updateDoc(doc(firestore, 'users', referrerDoc.id), {
+          const referrerId = referrerDoc.id;
+          
+          // Update referrer's count
+          await updateDoc(doc(firestore, 'users', referrerId), {
             referralCount: increment(1),
             activeReferrals: increment(1)
           });
+          
+          // Track referral signup with join bonus
+          const { trackReferralSignup } = await import('../utils/referralTracking');
+          await trackReferralSignup(referrerId, uid, auth.currentUser?.email || '', auth.currentUser?.displayName || '');
         }
       }
       

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Dialog } from '@headlessui/react';
 import { Button } from './ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/Card.tsx';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/Card';
 import { Badge } from './ui/badge';
 import ConfettiAnimation from './ConfettiAnimation';
 import { 

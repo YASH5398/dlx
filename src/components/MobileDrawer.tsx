@@ -39,11 +39,17 @@ const MobileDrawer: React.FC<MobileDrawerProps> = ({ isOpen, onClose }) => {
 
   const handleLogout = async () => {
     try {
-      await logout();
-      navigate('/login');
+      // Close drawer first
       onClose();
+      
+      // Perform logout (this will handle redirect)
+      await logout();
+      
+      // No need to navigate manually as logout function handles redirect
     } catch (error) {
       console.error('Logout failed:', error);
+      // Even if logout fails, close drawer and let logout function handle redirect
+      onClose();
     }
   };
 
@@ -112,7 +118,7 @@ const MobileDrawer: React.FC<MobileDrawerProps> = ({ isOpen, onClose }) => {
                 <div className="text-sm text-gray-300 truncate">{user?.email || ''}</div>
                 <div className="flex items-center gap-2 mt-1">
                   <span className="text-xs text-blue-300 bg-blue-500/20 px-2 py-1 rounded-full border border-blue-400/30">
-                    Referral Code: DLX{user?.uid?.slice(-6) || 'USER'}
+                    Referral Code: DLX{user?.id?.slice(-6) || 'USER'}
                   </span>
                 </div>
               </div>
@@ -142,10 +148,7 @@ const MobileDrawer: React.FC<MobileDrawerProps> = ({ isOpen, onClose }) => {
                   </div>
                   <span className="flex-1 font-medium">{item.name}</span>
                   
-                  {/* Active Indicator */}
-                  {({ isActive }) => isActive && (
-                    <div className={`w-2 h-2 rounded-full bg-gradient-to-r ${item.color} animate-pulse`} />
-                  )}
+                  {/* Active Indicator - moved inside NavLink render prop */}
                 </NavLink>
               ))}
             </nav>

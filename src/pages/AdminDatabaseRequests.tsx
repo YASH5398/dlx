@@ -143,6 +143,7 @@ export default function AdminDatabaseRequests() {
 
         // Create database order
         const orderData: DatabaseOrder = {
+          id: `custom-${selectedRequest.id}`,
           user_id: selectedRequest.user_id,
           database_id: `custom-${selectedRequest.id}`,
           category: selectedRequest.category.toLowerCase(),

@@ -4,7 +4,7 @@ import { collection, doc, onSnapshot, query, updateDoc, orderBy } from 'firebase
 import { Dialog } from '@headlessui/react';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card.tsx';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
@@ -18,9 +18,9 @@ export const RANK_DEFINITIONS = {
     textColor: 'text-green-300',
     borderColor: 'border-green-500/30',
     bgColor: 'bg-green-600/20',
-    commission: 0,
+    commission: 20,
     icon: Star,
-    description: 'Entry level rank with 0% commission'
+    description: 'Entry level rank with 20% commission'
   },
   'dlx-associate': {
     name: 'DLX Associate',

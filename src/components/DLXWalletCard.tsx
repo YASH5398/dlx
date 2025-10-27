@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { doc, onSnapshot, collection, query, orderBy, where } from 'firebase/firestore';
 import { firestore } from '../firebase';
 import { useUser } from '../context/UserContext';
+import { useDailyIncome } from '../hooks/useDailyIncome';
+import { useReferralIncome } from '../hooks/useReferralIncome';
 import { Dialog, Transition } from '@headlessui/react';
-import { XMarkIcon, CurrencyDollarIcon, ClockIcon, UserGroupIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, CurrencyDollarIcon, ClockIcon, UserGroupIcon, UsersIcon, UserIcon, UserPlusIcon } from '@heroicons/react/24/outline';
 
 interface DLXWalletCardProps {
   className?: string;
@@ -34,6 +36,27 @@ interface PriceData {
 
 const DLXWalletCard: React.FC<DLXWalletCardProps> = ({ className = '' }) => {
   const { user } = useUser();
+  const { 
+    stats: dailyIncomeStats, 
+    refreshing, 
+    refreshStats,
+    getTotalEarnings,
+    getLevel1Earnings,
+    getLevel2Earnings,
+    getUserEarnings,
+    getActiveReferralsCount
+  } = useDailyIncome();
+  
+  const {
+    incomeData: referralIncomeData,
+    loading: referralIncomeLoading,
+    getTotalEarnings: getReferralTotalEarnings,
+    getLevel1Earnings: getReferralLevel1Earnings,
+    getLevel2Earnings: getReferralLevel2Earnings,
+    getJoinBonus,
+    getActiveReferralsCount: getReferralCounts
+  } = useReferralIncome();
+  
   const [dlxData, setDlxData] = useState<DLXWalletData>({
     totalMinedDLX: 0,
     totalReferralDLX: 0,
@@ -261,6 +284,103 @@ const DLXWalletCard: React.FC<DLXWalletCardProps> = ({ className = '' }) => {
             </div>
           </div>
         </div>
+
+        {/* Daily Income Breakdown */}
+        {dailyIncomeStats.today && (
+          <div className="mt-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-cyan-300 text-sm font-medium">Today's Income</span>
+              <button
+                onClick={refreshStats}
+                disabled={refreshing}
+                className="p-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 transition-colors duration-200 disabled:opacity-50"
+              >
+                <svg className={`w-4 h-4 text-cyan-400 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-3">
+              {/* User Daily Earnings */}
+              <div className="bg-white/5 rounded-xl p-3 border border-white/10">
+                <div className="flex items-center gap-2 mb-1">
+                  <UserIcon className="w-4 h-4 text-green-400" />
+                  <div className="text-xs text-cyan-300">Your Daily</div>
+                </div>
+                <div className="text-lg font-semibold text-white">{getUserEarnings()} DLX</div>
+                <div className="text-xs text-gray-400">Active: 15, Inactive: 10</div>
+              </div>
+
+              {/* Level 1 Referral Income */}
+              <div className="bg-white/5 rounded-xl p-3 border border-white/10">
+                <div className="flex items-center gap-2 mb-1">
+                  <UsersIcon className="w-4 h-4 text-blue-400" />
+                  <div className="text-xs text-cyan-300">Level 1 (Rank-based)</div>
+                </div>
+                <div className="text-lg font-semibold text-white">{getReferralLevel1Earnings('DLX').toFixed(1)} DLX</div>
+                <div className="text-xs text-gray-400">{getReferralCounts().level1} referrals</div>
+              </div>
+
+              {/* Level 2 Referral Income */}
+              <div className="bg-white/5 rounded-xl p-3 border border-white/10">
+                <div className="flex items-center gap-2 mb-1">
+                  <UserPlusIcon className="w-4 h-4 text-purple-400" />
+                  <div className="text-xs text-cyan-300">Level 2 (15% of L1)</div>
+                </div>
+                <div className="text-lg font-semibold text-white">{getReferralLevel2Earnings('DLX').toFixed(1)} DLX</div>
+                <div className="text-xs text-gray-400">{getReferralCounts().level2} referrals</div>
+              </div>
+
+              {/* Total Daily Income */}
+              <div className="bg-gradient-to-r from-cyan-500/20 to-blue-500/20 rounded-xl p-3 border border-cyan-400/30">
+                <div className="flex items-center gap-2 mb-1">
+                  <CurrencyDollarIcon className="w-4 h-4 text-cyan-400" />
+                  <div className="text-xs text-cyan-300 font-medium">Total Daily</div>
+                </div>
+                <div className="text-lg font-bold text-white">{getTotalEarnings().toFixed(1)} DLX</div>
+                <div className="text-xs text-cyan-300">All sources</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Referral Income Summary */}
+        {!referralIncomeLoading && (referralIncomeData.totalIncome.total > 0 || getJoinBonus('total') > 0) && (
+          <div className="mt-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-cyan-300 text-sm font-medium">Referral Income Summary</span>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="bg-white/5 rounded-lg p-2 border border-white/10">
+                <div className="text-cyan-300 mb-1">Commission DLX</div>
+                <div className="text-white font-semibold">{getReferralTotalEarnings('DLX').toFixed(2)}</div>
+              </div>
+              <div className="bg-white/5 rounded-lg p-2 border border-white/10">
+                <div className="text-cyan-300 mb-1">Join Bonus DLX</div>
+                <div className="text-white font-semibold">{getJoinBonus('total').toFixed(2)}</div>
+              </div>
+            </div>
+            
+            {/* Join Bonus Breakdown */}
+            {getJoinBonus('total') > 0 && (
+              <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 rounded-lg p-3 border border-green-500/20">
+                <div className="text-green-300 text-xs font-medium mb-2">Join Bonus Breakdown</div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <div className="text-gray-400">Level 1 (+10 DLX each)</div>
+                    <div className="text-white font-semibold">{getJoinBonus('level1').toFixed(0)} DLX</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-400">Level 2 (+5 DLX each)</div>
+                    <div className="text-white font-semibold">{getJoinBonus('level2').toFixed(0)} DLX</div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Progress Bar */}
         <div className="mt-4">

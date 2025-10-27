@@ -16,6 +16,19 @@ import { doc, setDoc, updateDoc, getDoc, serverTimestamp, getDocs, query, collec
 import { logActivity } from '../utils/activity';
 import { randomSecret, otpauthURI, qrCodeUrlFromOtpauth, verifyTOTP, sha256Hex } from '../utils/totp';
 
+// Declare Google API types
+declare global {
+  interface Window {
+    gapi?: {
+      auth2?: {
+        getAuthInstance: () => {
+          signOut: () => void;
+        };
+      };
+    };
+  }
+}
+
 export type User = {
   id: string;
   name: string;
@@ -66,30 +79,85 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       }
     } catch {}
 
+    // Listen for storage changes to handle cross-tab logout
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'dlx-auth' && e.newValue === null) {
+        // User was logged out in another tab
+        setUser(null);
+        setToken(null);
+        setMfaRequired(false);
+        setMfaVerified(false);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+
     const unsub = onAuthStateChanged(auth, async (fu) => {
-      if (fu) {
-        const u: User = { id: fu.uid, name: fu.displayName ?? fu.email ?? 'User', email: fu.email ?? '', phone: fu.phoneNumber ?? undefined };
-        setUser(u);
-        try {
-          const t = await fu.getIdToken();
-          setToken(t);
-          localStorage.setItem('dlx-auth', JSON.stringify({ user: u, token: t, ts: Date.now() }));
-        } catch {
+      try {
+        if (fu) {
+          // User is signed in
+          const u: User = { id: fu.uid, name: fu.displayName ?? fu.email ?? 'User', email: fu.email ?? '', phone: fu.phoneNumber ?? undefined };
+          setUser(u);
+          
+          try {
+            const t = await fu.getIdToken();
+            setToken(t);
+            localStorage.setItem('dlx-auth', JSON.stringify({ user: u, token: t, ts: Date.now() }));
+          } catch (error) {
+            console.warn('Failed to get ID token:', error);
+            setToken(null);
+            localStorage.setItem('dlx-auth', JSON.stringify({ user: u, token: null, ts: Date.now() }));
+          }
+          
+          // Refresh MFA status on login
+          refreshMfaStatus(fu.uid).catch(() => {});
+        } else {
+          // User is signed out - ensure complete cleanup
+          setUser(null);
           setToken(null);
-          localStorage.setItem('dlx-auth', JSON.stringify({ user: u, token: null, ts: Date.now() }));
+          setMfaRequired(false);
+          setMfaVerified(false);
+          
+          // Clear auth data from localStorage
+          try { 
+            localStorage.removeItem('dlx-auth'); 
+          } catch (error) {
+            console.warn('Failed to remove dlx-auth from localStorage:', error);
+          }
+          
+          // Additional cleanup for any remaining auth data
+          try {
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+              const key = localStorage.key(i);
+              if (key && (key.includes('firebase') || key.includes('auth') || key.includes('session') || key.includes('token'))) {
+                keysToRemove.push(key);
+              }
+            }
+            keysToRemove.forEach(key => {
+              try { localStorage.removeItem(key); } catch {}
+            });
+          } catch (error) {
+            console.warn('Failed to clear additional auth data on logout:', error);
+          }
         }
-        // Refresh MFA status on login
-        refreshMfaStatus(fu.uid).catch(() => {});
-      } else {
+      } catch (error) {
+        console.error('Auth state change error:', error);
+        // On error, assume user is logged out
         setUser(null);
         setToken(null);
         setMfaRequired(false);
         setMfaVerified(false);
         try { localStorage.removeItem('dlx-auth'); } catch {}
+      } finally {
+        setInitialized(true);
       }
-      setInitialized(true);
     });
-    return () => unsub();
+    
+    return () => {
+      unsub();
+      window.removeEventListener('storage', handleStorageChange);
+    };
   }, []);
 
   const isAuthenticated = !!user;
@@ -259,10 +327,17 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         const referrerQuery = await getDocs(query(collection(firestore, 'users'), where('referralCode', '==', referralCode)));
         if (!referrerQuery.empty) {
           const referrerDoc = referrerQuery.docs[0];
-          await updateDoc(doc(firestore, 'users', referrerDoc.id), {
+          const referrerId = referrerDoc.id;
+          
+          // Update referrer's count
+          await updateDoc(doc(firestore, 'users', referrerId), {
             referralCount: increment(1),
             activeReferrals: increment(1)
           });
+          
+          // Track referral signup with join bonus
+          const { trackReferralSignup } = await import('../utils/referralTracking');
+          await trackReferralSignup(referrerId, uid, email, name);
         }
       } catch (error) {
         console.error('Error updating referrer count:', error);
@@ -306,48 +381,100 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     try {
       const uid = user?.id;
-      if (uid) await logActivity(uid, 'logout');
       
-      // Sign out from Firebase Auth
-      await signOut(auth);
+      // Log activity first (before clearing state)
+      if (uid) {
+        try {
+          await logActivity(uid, 'logout');
+        } catch (error) {
+          console.warn('Failed to log logout activity:', error);
+        }
+      }
       
-      // Clear user state
+      // Clear user state immediately to prevent UI flicker
       setUser(null);
       setToken(null);
       setMfaRequired(false);
       setMfaVerified(false);
       
-      // Clear all local storage
+      // Clear all storage immediately
       try {
         localStorage.clear();
-      } catch {}
+        sessionStorage.clear();
+      } catch (error) {
+        console.warn('Failed to clear storage:', error);
+      }
       
-      // Clear all session storage
+      // Sign out from Firebase Auth (this will trigger onAuthStateChanged)
       try {
+        await signOut(auth);
+        
+        // Additional cleanup for Google sign-in
+        // Clear any Google-related tokens or sessions
+        try {
+          // Clear Google OAuth tokens if they exist
+          if (window.gapi) {
+            window.gapi.auth2?.getAuthInstance()?.signOut();
+          }
+        } catch (error) {
+          console.warn('Failed to clear Google OAuth tokens:', error);
+        }
+        
+      } catch (error) {
+        console.error('Firebase signOut failed:', error);
+        // Continue with cleanup even if signOut fails
+      }
+      
+      // Additional cleanup for any remaining auth data
+      try {
+        // Clear any remaining Firebase/auth related data
+        const keysToRemove = [];
+        
+        // Check localStorage
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.includes('firebase') || key.includes('auth') || key.includes('session') || key.includes('token'))) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach(key => {
+          try { localStorage.removeItem(key); } catch {}
+        });
+        
+        // Check sessionStorage
+        const sessionKeysToRemove = [];
+        for (let i = 0; i < sessionStorage.length; i++) {
+          const key = sessionStorage.key(i);
+          if (key && (key.includes('firebase') || key.includes('auth') || key.includes('session') || key.includes('token'))) {
+            sessionKeysToRemove.push(key);
+          }
+        }
+        sessionKeysToRemove.forEach(key => {
+          try { sessionStorage.removeItem(key); } catch {}
+        });
+      } catch (error) {
+        console.warn('Failed to clear additional auth data:', error);
+      }
+      
+      // Force redirect to login page
+      // Use replace to prevent back button issues
+      window.location.replace('/login');
+      
+    } catch (error) {
+      console.error('Logout error:', error);
+      
+      // Emergency cleanup - clear everything and force redirect
+      try {
+        setUser(null);
+        setToken(null);
+        setMfaRequired(false);
+        setMfaVerified(false);
+        localStorage.clear();
         sessionStorage.clear();
       } catch {}
       
-      // Additional cleanup for Firebase-related data
-      try {
-        // Clear any remaining Firebase data
-        Object.keys(localStorage).forEach((key) => {
-          if (key.includes('firebase') || key.includes('auth') || key.includes('session')) {
-            try { localStorage.removeItem(key); } catch {}
-          }
-        });
-        Object.keys(sessionStorage).forEach((key) => {
-          if (key.includes('firebase') || key.includes('auth') || key.includes('session')) {
-            try { sessionStorage.removeItem(key); } catch {}
-          }
-        });
-      } catch {}
-      
-      // Force reload to ensure complete cleanup
-      window.location.href = '/login';
-    } catch (error) {
-      console.error('Logout error:', error);
-      // Even if there's an error, force redirect to login
-      window.location.href = '/login';
+      // Force redirect even if everything fails
+      window.location.replace('/login');
     }
   };
 

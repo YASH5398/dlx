@@ -88,7 +88,7 @@ export default function OrderData() {
       // Fetch database orders
       const dbOrdersQuery = query(
         collection(firestore, 'database_orders'),
-        where('user_id', '==', user.uid),
+        where('user_id', '==', user.id),
         orderBy('ordered_at', 'desc')
       );
       const dbOrdersSnapshot = await getDocs(dbOrdersQuery);
@@ -100,7 +100,7 @@ export default function OrderData() {
       // Fetch software orders
       const swOrdersQuery = query(
         collection(firestore, 'software_orders'),
-        where('user_id', '==', user.uid),
+        where('user_id', '==', user.id),
         orderBy('subscribed_at', 'desc')
       );
       const swOrdersSnapshot = await getDocs(swOrdersQuery);
@@ -112,7 +112,7 @@ export default function OrderData() {
       // Fetch database requests
       const requestsQuery = query(
         collection(firestore, 'data_requests'),
-        where('user_id', '==', user.uid),
+        where('user_id', '==', user.id),
         orderBy('requested_at', 'desc')
       );
       const requestsSnapshot = await getDocs(requestsQuery);
@@ -130,7 +130,7 @@ export default function OrderData() {
       setDatabaseOrders([
         {
           id: '1',
-          user_id: user?.uid || '',
+          user_id: user?.id || '',
           database_id: 'business-small-001',
           category: 'business',
           package_name: 'Small - 1k contacts',
@@ -144,7 +144,7 @@ export default function OrderData() {
       setSoftwareOrders([
         {
           id: '1',
-          user_id: user?.uid || '',
+          user_id: user?.id || '',
           software_id: 'marketing-software',
           status: 'active',
           subscribed_at: '2025-01-15T09:00:00Z'
@@ -153,16 +153,16 @@ export default function OrderData() {
       setDatabaseRequests([
         {
           id: '1',
-          user_id: user?.uid || '',
+          user_id: user?.id || '',
           category: 'Healthcare',
           contacts_count: 3000,
           description: 'Need latest healthcare contacts for medical practice',
-          status: 'pending',
+          status: 'pending' as const,
           requested_at: '2025-01-25T10:00:00Z'
         },
         {
           id: '2',
-          user_id: user?.uid || '',
+          user_id: user?.id || '',
           category: 'Technology/IT',
           contacts_count: 5000,
           description: 'IT companies and professionals for software sales',
@@ -182,11 +182,11 @@ export default function OrderData() {
     setSubmittingRequest(true);
     try {
       const requestData = {
-        user_id: user.uid,
+        user_id: user.id,
         category: requestCategory,
         contacts_count: parseInt(requestContacts),
         description: requestDescription,
-        status: 'pending',
+        status: 'pending' as const,
         requested_at: new Date().toISOString()
       };
 
@@ -512,7 +512,7 @@ export default function OrderData() {
                   {isRequest && (order as DatabaseRequest).status === 'accepted' && (order as DatabaseRequest).price && (
                     <div className="flex items-center gap-2 text-green-400">
                       <CheckCircleIcon className="w-5 h-5" />
-                      <span className="font-medium">Ready for Payment - ₹{(order as DatabaseRequest).price.toLocaleString()}</span>
+                      <span className="font-medium">Ready for Payment - ₹{((order as DatabaseRequest).price || 0).toLocaleString()}</span>
                     </div>
                   )}
                 </div>
