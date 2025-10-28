@@ -17,9 +17,11 @@ export default function Footer() {
         </div>
         <div>
           <h5 className="font-semibold text-white">Quick Links</h5>
-          <div className="flex flex-col mt-2 text-sm">
-            <Link to="/services" className="hover:underline text-sky-300 hover:text-white">Services</Link>
+          <div className="flex flex-col mt-2 text-sm space-y-2">
             <Link to="/mining" className="hover:underline text-sky-300 hover:text-white">Mining</Link>
+            <Link to="/about" className="hover:underline text-sky-300 hover:text-white">About Us</Link>
+            <Link to="/terms" className="hover:underline text-sky-300 hover:text-white">Terms of Service</Link>
+            <Link to="/privacy" className="hover:underline text-sky-300 hover:text-white">Privacy Policy</Link>
           </div>
         </div>
       </div>

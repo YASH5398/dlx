@@ -108,32 +108,66 @@ export function useReferralIncome() {
     // Get referral counts
     const getReferralCounts = async () => {
       try {
-        // Level 1 referrals (direct referrals)
-        const level1Query = query(
+        // Level 1 referrals (direct referrals) - query both referrerCode and referredBy
+        const referrerCodeQuery = query(
+          collection(firestore, 'users'),
+          where('referrerCode', '==', userId)
+        );
+        const referredByQuery = query(
           collection(firestore, 'users'),
           where('referredBy', '==', userId)
         );
-        const level1Snapshot = await getDocs(level1Query);
+        
+        const [referrerCodeSnapshot, referredBySnapshot] = await Promise.all([
+          getDocs(referrerCodeQuery),
+          getDocs(referredByQuery)
+        ]);
+        
+        // Combine and deduplicate level 1 referrals
+        const level1UserIds = new Set<string>();
+        referrerCodeSnapshot.docs.forEach(doc => level1UserIds.add(doc.id));
+        referredBySnapshot.docs.forEach(doc => level1UserIds.add(doc.id));
+        
+        const level1Count = level1UserIds.size;
         
         // Level 2 referrals (referrals of referrals)
-        const level2UserIds: string[] = [];
-        level1Snapshot.forEach(doc => {
-          level2UserIds.push(doc.id);
-        });
+        const level2UserIds: string[] = Array.from(level1UserIds);
         
         let level2Count = 0;
         if (level2UserIds.length > 0) {
-          const level2Query = query(
+          // Query for level 2 referrals using both field names
+          const level2ReferrerCodeQuery = query(
+            collection(firestore, 'users'),
+            where('referrerCode', 'in', level2UserIds)
+          );
+          const level2ReferredByQuery = query(
             collection(firestore, 'users'),
             where('referredBy', 'in', level2UserIds)
           );
-          const level2Snapshot = await getDocs(level2Query);
-          level2Count = level2Snapshot.size;
+          
+          const [level2ReferrerCodeSnapshot, level2ReferredBySnapshot] = await Promise.all([
+            getDocs(level2ReferrerCodeQuery),
+            getDocs(level2ReferredByQuery)
+          ]);
+          
+          // Combine and deduplicate level 2 referrals
+          const level2UserIdsSet = new Set<string>();
+          level2ReferrerCodeSnapshot.docs.forEach(doc => level2UserIdsSet.add(doc.id));
+          level2ReferredBySnapshot.docs.forEach(doc => level2UserIdsSet.add(doc.id));
+          
+          level2Count = level2UserIdsSet.size;
         }
+        
+        console.log(`useReferralIncome: Referral counts for user ${userId}`, {
+          level1ReferrerCode: referrerCodeSnapshot.size,
+          level1ReferredBy: referredBySnapshot.size,
+          level1Total: level1Count,
+          level2Total: level2Count
+        });
         
         setIncomeData(prev => ({
           ...prev,
-          level1Referrals: level1Snapshot.size,
+          level1Referrals: level1Count,
           level2Referrals: level2Count
         }));
       } catch (error) {

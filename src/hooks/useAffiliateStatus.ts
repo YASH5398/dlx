@@ -141,7 +141,7 @@ export function useAffiliateStatus() {
   };
 
   const getAffiliateStatusColor = () => {
-    if (affiliateStatus.isApproved) return 'text-blue-400 bg-blue-500/10 border-blue-500/30';
+    if (affiliateStatus.isApproved) return 'text-green-400 bg-green-500/10 border-green-500/30';
     if (affiliateStatus.isPending) return 'text-red-400 bg-red-500/10 border-red-500/30';
     if (affiliateStatus.isRejected) return 'text-red-400 bg-red-500/10 border-red-500/30';
     return 'text-gray-400 bg-gray-500/10 border-gray-500/30';

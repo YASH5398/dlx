@@ -234,7 +234,7 @@ const PhoneSignup: React.FC = () => {
 
         {/* Terms */}
         <p className="text-xs text-slate-500 mt-4">
-          By continuing, you agree to our <a className="underline">Terms</a> and <a className="underline">Privacy Policy</a>.
+          By continuing, you agree to DigiLinex's <Link to="/terms" className="underline hover:text-slate-400">Terms of Service</Link> and <Link to="/privacy" className="underline hover:text-slate-400">Privacy Policy</Link>.
         </p>
 
         {/* Invisible reCAPTCHA container for Firebase */}

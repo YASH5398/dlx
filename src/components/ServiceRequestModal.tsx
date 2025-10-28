@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
 import { logActivity } from '../utils/activity';
 import { notifyAdminNewServiceRequest } from '../utils/notifications';
@@ -17,6 +18,7 @@ type Props = {
 
 export default function ServiceRequestModal({ open, onClose, serviceName }: Props) {
   const { user } = useUser();
+  const navigate = useNavigate();
   const [steps, setSteps] = useState<StepDef[]>([]);
   const [stepIndex, setStepIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, any>>({});
@@ -422,18 +424,49 @@ export default function ServiceRequestModal({ open, onClose, serviceName }: Prop
           )}
         </div>
 
-        {/* Confirmation */}
+        {/* Success Popup Overlay - persistent until user closes */}
         {submittedId && (
-          <div className="mt-6 p-4 rounded-xl bg-white/5 border border-white/10">
-            <p className="text-sm text-gray-200">Your request has been submitted successfully.</p>
-            <p className="text-xs text-gray-300 mt-1">Reference ID: {submittedId}</p>
-            <div className="mt-3 flex justify-end">
-              <button 
-                onClick={onClose} 
-                className="px-4 py-2 rounded-xl bg-white/10 border border-white/20 text-white hover:bg-white/20 transition-colors"
-              >
-                Close
-              </button>
+          <div className="fixed inset-0 z-[70] p-4 sm:p-6 overflow-y-auto">
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" />
+            <div className="relative w-full max-w-2xl mx-auto my-8 rounded-2xl shadow-2xl border border-white/10 bg-gradient-to-br from-slate-900/95 to-slate-800/95 text-white overflow-hidden">
+              {/* Header */}
+              <div className="absolute top-3 right-3">
+                <button onClick={onClose} className="px-3 py-2 rounded-xl bg-white/10 border border-white/20 hover:bg-white/15 transition-colors">Close</button>
+              </div>
+              <div className="px-6 py-8 sm:px-10 sm:py-10">
+                <div className="mx-auto mb-6 w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-lg">
+                  <span className="text-2xl">✅</span>
+                </div>
+                <h3 className="text-2xl sm:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 to-teal-300 text-center mb-4">
+                  Service Request Submitted Successfully!
+                </h3>
+                <div className="text-slate-300 text-sm sm:text-base leading-relaxed space-y-2 text-center">
+                  <p>Our team will review your request within 12 hours.</p>
+                  <p>Once the review is complete, the service cost will appear in your <strong className="text-white">Orders</strong> section.</p>
+                  <p>After that, you’ll be able to make the payment to start the work.</p>
+                  <p>You can track every update in the <strong className="text-white">Orders</strong> section.</p>
+                </div>
+                <div className="mt-6 text-center text-xs sm:text-sm text-slate-400">
+                  <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10">
+                    <span>🕒</span>
+                    <span>Please wait up to 12 hours for review</span>
+                  </span>
+                </div>
+                <div className="mt-8 flex flex-col sm:flex-row gap-3">
+                  <button
+                    onClick={() => navigate('/orders')}
+                    className="flex-1 px-5 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 font-semibold shadow-lg hover:shadow-xl transition-all"
+                  >
+                    Track Order
+                  </button>
+                  <button
+                    onClick={onClose}
+                    className="flex-1 px-5 py-3 rounded-xl bg-white/10 border border-white/20 hover:bg-white/15 font-semibold"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}

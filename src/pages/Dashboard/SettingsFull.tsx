@@ -2,8 +2,43 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '../../context/UserContext';
 import Button from '../../components/Button';
-import InputField from '../../components/InputField.jsx';
-import ToggleSwitch from '../../components/ToggleSwitch.jsx';
+import { Input } from '../../components/ui/input';
+
+// InputField wrapper component
+const InputField = ({ label, value, onChange, placeholder, type = "text", helper }: any) => (
+  <div className="space-y-1">
+    <label className="text-sm font-medium text-gray-700">{label}</label>
+    <Input
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      type={type}
+      className="w-full"
+    />
+    {helper && <p className="text-xs text-gray-500">{helper}</p>}
+  </div>
+);
+
+// ToggleSwitch wrapper component
+const ToggleSwitch = ({ label, checked, onChange, helper }: any) => (
+  <div className="space-y-1">
+    <label className="text-sm font-medium text-gray-700">{label}</label>
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
+        checked ? 'bg-indigo-600' : 'bg-gray-200'
+      }`}
+    >
+      <span
+        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+          checked ? 'translate-x-6' : 'translate-x-1'
+        }`}
+      />
+    </button>
+    {helper && <p className="text-xs text-gray-500">{helper}</p>}
+  </div>
+);
 import toast from 'react-hot-toast';
 import { ShieldCheckIcon, Cog6ToothIcon, UserIcon, PhotoIcon, WalletIcon, ArrowDownTrayIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { useI18n } from '../../context/I18nContext';
