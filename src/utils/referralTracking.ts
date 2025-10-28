@@ -41,6 +41,74 @@ export interface ReferralPurchase {
 }
 
 /**
+ * Track a referral page visit (impression)
+ */
+export async function trackReferralVisit(
+  affiliateId: string,
+  metadata?: {
+    userAgent?: string;
+    ipAddress?: string;
+    referrer?: string;
+    utmSource?: string;
+    utmMedium?: string;
+    utmCampaign?: string;
+  }
+): Promise<void> {
+  try {
+    // Prevent duplicate tracking using session storage
+    const visitKey = `referral_visit_${affiliateId}`;
+    const impressionKey = `referral_impression_${affiliateId}`;
+    
+    const now = Date.now();
+    const lastVisit = sessionStorage.getItem(visitKey);
+    const lastImpression = localStorage.getItem(impressionKey);
+    
+    // Check if this is a new visit (within 30 minutes)
+    const isNewVisit = !lastVisit || (now - parseInt(lastVisit)) > 30 * 60 * 1000;
+    const isNewImpression = !lastImpression || (now - parseInt(lastImpression)) > 24 * 60 * 60 * 1000;
+    
+    // Update affiliate stats
+    const affiliateRef = doc(firestore, 'users', affiliateId);
+    const updates: any = {
+      'affiliateStats.lastUpdated': serverTimestamp()
+    };
+    
+    // Only increment impressions for new impressions (24 hours)
+    if (isNewImpression) {
+      updates['affiliateStats.impressions'] = increment(1);
+      localStorage.setItem(impressionKey, now.toString());
+    }
+    
+    // Always update last visit time
+    if (isNewVisit) {
+      sessionStorage.setItem(visitKey, now.toString());
+    }
+    
+    await updateDoc(affiliateRef, updates);
+
+    // Log the visit event
+    const visitData = {
+      id: `${affiliateId}_visit_${now}`,
+      affiliateId,
+      timestamp: serverTimestamp(),
+      type: 'visit',
+      ...metadata
+    };
+
+    await setDoc(doc(firestore, 'referralVisits', visitData.id), visitData);
+
+    console.log('Referral visit tracked:', {
+      affiliateId,
+      isNewVisit,
+      isNewImpression,
+      visitKey
+    });
+  } catch (error) {
+    console.error('Error tracking referral visit:', error);
+  }
+}
+
+/**
  * Track a referral link click
  */
 export async function trackReferralClick(
@@ -55,16 +123,42 @@ export async function trackReferralClick(
   }
 ): Promise<void> {
   try {
+    // Prevent duplicate tracking using session storage
+    const clickKey = `referral_click_${affiliateId}_${Date.now()}`;
+    const sessionKey = `referral_session_${affiliateId}`;
+    const impressionKey = `referral_impression_${affiliateId}`;
+    
+    const now = Date.now();
+    const lastClick = sessionStorage.getItem(sessionKey);
+    const lastImpression = localStorage.getItem(impressionKey);
+    
+    // Check if this is a new session (within 30 minutes)
+    const isNewSession = !lastClick || (now - parseInt(lastClick)) > 30 * 60 * 1000;
+    const isNewImpression = !lastImpression || (now - parseInt(lastImpression)) > 24 * 60 * 60 * 1000;
+    
     // Update affiliate stats
     const affiliateRef = doc(firestore, 'users', affiliateId);
-    await updateDoc(affiliateRef, {
-      'affiliateStats.clicks': increment(1),
+    const updates: any = {
       'affiliateStats.lastUpdated': serverTimestamp()
-    });
+    };
+    
+    // Only increment clicks for new sessions
+    if (isNewSession) {
+      updates['affiliateStats.clicks'] = increment(1);
+      sessionStorage.setItem(sessionKey, now.toString());
+    }
+    
+    // Only increment impressions for new impressions (24 hours)
+    if (isNewImpression) {
+      updates['affiliateStats.impressions'] = increment(1);
+      localStorage.setItem(impressionKey, now.toString());
+    }
+    
+    await updateDoc(affiliateRef, updates);
 
-    // Log the click event
+    // Log the click event (always log for analytics)
     const clickData: ReferralClick = {
-      id: `${affiliateId}_${Date.now()}`,
+      id: `${affiliateId}_${now}`,
       affiliateId,
       timestamp: serverTimestamp(),
       ...metadata
@@ -72,19 +166,12 @@ export async function trackReferralClick(
 
     await setDoc(doc(firestore, 'referralClicks', clickData.id), clickData);
 
-    // Update impressions (if this is a new session)
-    const sessionKey = `referral_impression_${affiliateId}`;
-    const lastImpression = localStorage.getItem(sessionKey);
-    const now = Date.now();
-    
-    if (!lastImpression || (now - parseInt(lastImpression)) > 24 * 60 * 60 * 1000) { // 24 hours
-      await updateDoc(affiliateRef, {
-        'affiliateStats.impressions': increment(1)
-      });
-      localStorage.setItem(sessionKey, now.toString());
-    }
-
-    console.log('Referral click tracked:', affiliateId);
+    console.log('Referral click tracked:', {
+      affiliateId,
+      isNewSession,
+      isNewImpression,
+      clickKey
+    });
   } catch (error) {
     console.error('Error tracking referral click:', error);
   }
@@ -447,17 +534,58 @@ export async function getReferralStats(affiliateId: string) {
  */
 export async function getReferralUsers(affiliateId: string) {
   try {
-    const q = query(
+    // We need to fetch referrals by both the affiliate's referral code and their user id.
+    // First, resolve the affiliate's referral code.
+    const affiliateDoc = await getDoc(doc(firestore, 'users', affiliateId));
+    const affiliateData = affiliateDoc.exists() ? affiliateDoc.data() : null;
+    const affiliateReferralCode = (affiliateData as any)?.referralCode || affiliateId;
+
+    // Query for users with referrerCode equal to affiliateReferralCode (new format)
+    const referrerCodeQuery = query(
       collection(firestore, 'users'),
-      where('referrerCode', '==', affiliateId),
-      where('referredBy', '==', affiliateId)
+      where('referrerCode', '==', affiliateReferralCode)
+    );
+
+    // Query for users with referredBy equal to either referral code or user id (old/mixed formats)
+    const referredByQuery = query(
+      collection(firestore, 'users'),
+      where('referredBy', 'in', [affiliateReferralCode, affiliateId])
     );
     
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    // Execute both queries in parallel
+    const [referrerCodeSnapshot, referredBySnapshot] = await Promise.all([
+      getDocs(referrerCodeQuery),
+      getDocs(referredByQuery)
+    ]);
+    
+    // Combine results and remove duplicates
+    const allUsers = new Map();
+    
+    // Add users from referrerCode query
+    referrerCodeSnapshot.docs.forEach(doc => {
+      allUsers.set(doc.id, {
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+    
+    // Add users from referredBy query
+    referredBySnapshot.docs.forEach(doc => {
+      allUsers.set(doc.id, {
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+    
+    const result = Array.from(allUsers.values());
+    console.log(`getReferralUsers: Found ${result.length} referrals for affiliate ${affiliateId}`, {
+      referrerCodeCount: referrerCodeSnapshot.size,
+      referredByCount: referredBySnapshot.size,
+      totalUnique: result.length,
+      affiliateReferralCode
+    });
+    
+    return result;
   } catch (error) {
     console.error('Error getting referral users:', error);
     return [];

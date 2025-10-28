@@ -138,10 +138,10 @@ const GoogleReferralSignup: React.FC = () => {
 
             <div className="text-center">
               <p className="text-slate-400 text-sm">
-                By continuing, you agree to our{' '}
-                <a href="#" className="text-purple-400 hover:text-purple-300 underline">Terms</a>
+                By continuing, you agree to DigiLinex's{' '}
+                <Link to="/terms" className="text-purple-400 hover:text-purple-300 underline">Terms of Service</Link>
                 {' '}and{' '}
-                <a href="#" className="text-purple-400 hover:text-purple-300 underline">Privacy Policy</a>
+                <Link to="/privacy" className="text-purple-400 hover:text-purple-300 underline">Privacy Policy</Link>
               </p>
             </div>
           </div>
@@ -185,10 +185,10 @@ const GoogleReferralSignup: React.FC = () => {
 
         {/* Terms */}
         <p className="text-xs text-slate-500 mt-4 text-center">
-          By continuing, you agree to our{' '}
-          <a href="#" className="text-purple-400 hover:text-purple-300 underline">Terms</a>
+          By continuing, you agree to DigiLinex's{' '}
+          <Link to="/terms" className="text-purple-400 hover:text-purple-300 underline">Terms of Service</Link>
           {' '}and{' '}
-          <a href="#" className="text-purple-400 hover:text-purple-300 underline">Privacy Policy</a>
+          <Link to="/privacy" className="text-purple-400 hover:text-purple-300 underline">Privacy Policy</Link>
         </p>
       </div>
     </div>

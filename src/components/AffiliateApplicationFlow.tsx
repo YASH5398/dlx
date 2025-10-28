@@ -125,13 +125,13 @@ export default function AffiliateApplicationFlow({ onComplete, onClose }: Affili
     // Get commission rate based on user's rank
     const rank = (user as any)?.rank || 'starter';
     const rates: { [key: string]: number } = {
-      'starter': 30,
-      'bronze': 32,
-      'silver': 35,
-      'gold': 38,
-      'platinum': 40
+      'starter': 20,
+      'dlx-associate': 25,
+      'dlx-executive': 30,
+      'dlx-director': 35,
+      'dlx-president': 45
     };
-    return rates[rank] || 30;
+    return rates[rank] || 20;
   };
 
   if (currentStep === 'apply') {

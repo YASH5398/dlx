@@ -202,10 +202,10 @@ const Login: React.FC = () => {
 
           {/* Terms */}
           <p className="terms-text">
-            By continuing, you agree to our{' '}
-            <a href="#" className="terms-link">Terms of Service</a>
+            By continuing, you agree to DigiLinex's{' '}
+            <Link to="/terms" className="terms-link">Terms of Service</Link>
             {' '}and{' '}
-            <a href="#" className="terms-link">Privacy Policy</a>
+            <Link to="/privacy" className="terms-link">Privacy Policy</Link>
           </p>
         </div>
       </div>

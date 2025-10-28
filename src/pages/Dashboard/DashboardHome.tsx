@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUser } from '../../context/UserContext';
 // import { useWallet } from '../../hooks/useWallet';
@@ -18,7 +18,7 @@ import AffiliateJoinModal from '../../components/AffiliateJoinModal';
 import AffiliateCongratulationsModal from '../../components/AffiliateCongratulationsModal';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
-import { Share2, Crown, Sparkles, CheckCircle, TrendingUp, Package, ShoppingCart, ArrowRight, X, AlertCircle, DollarSign, Download } from 'lucide-react';
+import { Share2, Crown, Sparkles, CheckCircle, TrendingUp, Package, ShoppingCart, ArrowRight, X, AlertCircle, DollarSign, Download, ChevronLeft, ChevronRight, XCircle } from 'lucide-react';
 
 import type { ServiceItem } from '../../utils/services';
 import { restoreDefaultServiceForms } from '../../utils/services';
@@ -62,7 +62,6 @@ export default function DashboardHome() {
   const [modalOpen, setModalOpen] = useState(false);
   const [affiliateJoinModalOpen, setAffiliateJoinModalOpen] = useState(false);
   const [affiliateCongratulationsModalOpen, setAffiliateCongratulationsModalOpen] = useState(false);
-  const [showFirstTimeModal, setShowFirstTimeModal] = useState(false);
   const [selectedService, setSelectedService] = useState<string | null>(null);
   const { services: activeServices, loading: servicesLoading } = useActiveServices();
   const { products: digitalProducts, loading: productsLoading } = useDigitalProducts();
@@ -75,6 +74,11 @@ export default function DashboardHome() {
   const [processing, setProcessing] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [purchaseOption, setPurchaseOption] = useState<'main_only' | 'split' | 'currency_choice'>('split');
+  const [showSuccessPopup, setShowSuccessPopup] = useState(false);
+  const [showFailurePopup, setShowFailurePopup] = useState(false);
+
+  // Popups persist until user action (no auto-hide)
+
   const [walletBalances, setWalletBalances] = useState<{
     mainUsdt: number;
     purchaseUsdt: number;
@@ -87,23 +91,153 @@ export default function DashboardHome() {
     purchaseInr: 0,
   });
 
+  // Banner slider state
+  const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
+  const [isAutoPlaying, setIsAutoPlaying] = useState(true);
+  const bannerRef = useRef<HTMLDivElement>(null);
+  const autoPlayRef = useRef<NodeJS.Timeout | null>(null);
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+  const [loadedImages, setLoadedImages] = useState<Set<number>>(new Set());
+
+  // Banner data with high-quality professional images
+  const banners = [
+    {
+      id: 1,
+      title: "Our Services",
+      subtitle: "Professional Development & Marketing Solutions",
+      image: "https://images.unsplash.com/photo-1560472354-b33ff0c44a43?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2126&q=90",
+      gradient: "from-blue-600 to-cyan-600",
+      overlayGradient: "from-slate-900/70 to-slate-800/70",
+      route: "scroll-to-services"
+    },
+    {
+      id: 2,
+      title: "Digital Products Store",
+      subtitle: "Premium Digital Assets & Tools",
+      image: "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2340&q=90",
+      gradient: "from-purple-600 to-pink-600",
+      overlayGradient: "from-slate-900/70 to-slate-800/70",
+      route: "/dashboard/digital-products"
+    },
+    {
+      id: 3,
+      title: "Join Our Affiliate Program",
+      subtitle: "Earn 20%–45% Commission per Sale",
+      image: "https://images.unsplash.com/photo-1551434678-e076c223a692?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=90",
+      gradient: "from-orange-600 to-red-600",
+      overlayGradient: "from-slate-900/70 to-slate-800/70",
+      route: "/affiliate-program"
+    },
+    {
+      id: 4,
+      title: "Database & Marketing Tools",
+      subtitle: "Find Your Category & Get 50% Discount",
+      image: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=90",
+      gradient: "from-green-600 to-emerald-600",
+      overlayGradient: "from-slate-900/70 to-slate-800/70",
+      route: "/database-marketing/categories"
+    },
+    {
+      id: 5,
+      title: "Work With Us",
+      subtitle: "We're Hiring (Remote Jobs Available)",
+      image: "https://images.unsplash.com/photo-1521791136064-7986c2920216?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2069&q=90",
+      gradient: "from-indigo-600 to-blue-600",
+      overlayGradient: "from-slate-900/70 to-slate-800/70",
+      route: "/work-with-us"
+    }
+  ];
+
   // Real-time wallet subscription for dashboard balances
   const [usdtTotal, setUsdtTotal] = useState(0);
   const [walletLoading, setWalletLoading] = useState(true);
   const [totalSpent, setTotalSpent] = useState(0);
   const [totalEarningsComprehensive, setTotalEarningsComprehensive] = useState(0);
 
-  // Check for first-time user and show affiliate modal
+  // Banner slider functions
+  const nextBanner = () => {
+    setCurrentBannerIndex((prev) => (prev + 1) % banners.length);
+  };
+
+  const prevBanner = () => {
+    setCurrentBannerIndex((prev) => (prev - 1 + banners.length) % banners.length);
+  };
+
+  const goToBanner = (index: number) => {
+    setCurrentBannerIndex(index);
+  };
+
+  const handleBannerClick = (route: string) => {
+    if (route === "scroll-to-services") {
+      // Scroll to services section
+      const servicesSection = document.getElementById('services-section');
+      if (servicesSection) {
+        servicesSection.scrollIntoView({ behavior: 'smooth' });
+      }
+    } else {
+      navigate(route);
+    }
+  };
+
+  // Auto-play banner slider
   useEffect(() => {
-    if (user && canJoinAffiliate()) {
-      // Check if this is a first-time user (no previous visits)
-      const hasVisitedBefore = localStorage.getItem('dlx_user_visited');
-      if (!hasVisitedBefore) {
-        setShowFirstTimeModal(true);
-        localStorage.setItem('dlx_user_visited', 'true');
+    if (isAutoPlaying) {
+      autoPlayRef.current = setInterval(() => {
+        nextBanner();
+      }, 4000); // Change banner every 4 seconds
+    } else {
+      if (autoPlayRef.current) {
+        clearInterval(autoPlayRef.current);
       }
     }
-  }, [user, canJoinAffiliate]);
+
+    return () => {
+      if (autoPlayRef.current) {
+        clearInterval(autoPlayRef.current);
+      }
+    };
+  }, [isAutoPlaying]);
+
+  // Pause auto-play on hover
+  const handleBannerHover = () => {
+    setIsAutoPlaying(false);
+  };
+
+  const handleBannerLeave = () => {
+    setIsAutoPlaying(true);
+  };
+
+  // Image loading handler
+  const handleImageLoad = (bannerId: number) => {
+    setLoadedImages(prev => new Set(prev).add(bannerId));
+  };
+
+  // Touch handlers for mobile swipe
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > 50;
+    const isRightSwipe = distance < -50;
+
+    if (isLeftSwipe) {
+      nextBanner();
+    } else if (isRightSwipe) {
+      prevBanner();
+    }
+  };
+
+  // Removed automatic affiliate popup - users must manually join
 
   // Show congratulations modal when affiliate gets approved
   useEffect(() => {
@@ -116,7 +250,6 @@ export default function DashboardHome() {
     const success = await joinAffiliateProgram();
     if (success) {
       setAffiliateJoinModalOpen(false);
-      setShowFirstTimeModal(false);
       // Show success toast or notification
     }
   };
@@ -613,112 +746,103 @@ export default function DashboardHome() {
         if (purchaseOption === "main_only") {
           // Pay from main wallet only
           if (currencyToUse === "USDT") {
-            const mainWallet = Number(w.mainUsdt || 0);
+            const mainWallet = Number(w?.usdt?.mainUsdt || 0);
             if (mainWallet < paymentAmount) {
               throw new Error("Insufficient balance in main wallet. Please deposit more funds.");
             }
             tx.update(walletRef, { 
-              mainUsdt: mainWallet - paymentAmount
+              "usdt.mainUsdt": Number((mainWallet - paymentAmount).toFixed(2))
             });
           } else {
-            const mainWallet = Number(w.mainInr || 0);
+            const mainWallet = Number(w?.inr?.mainInr || 0);
             if (mainWallet < paymentAmount) {
               throw new Error("Insufficient balance in main wallet. Please deposit more funds.");
             }
             tx.update(walletRef, { 
-              mainInr: mainWallet - paymentAmount
+              "inr.mainInr": mainWallet - paymentAmount
             });
           }
         } else if (purchaseOption === "split") {
-          // Split 50/50 between main and purchase wallets, fallback to main wallet only if purchase wallet insufficient
-          const halfAmount = Number((paymentAmount / 2).toFixed(2));
-          
+          // Dynamic split: prefer 50/50, fall back to whatever is available in purchase wallet, rest from main
           if (currencyToUse === "USDT") {
-            const mainWallet = Number(w.mainUsdt || 0);
-            const purchaseWallet = Number(w.purchaseUsdt || 0);
-            
-            // Check if main wallet has enough for full amount
-            if (mainWallet < paymentAmount) {
-              throw new Error("Insufficient balance in main wallet. Please deposit more funds.");
+            const mainWallet = Number(w?.usdt?.mainUsdt || 0);
+            const purchaseWallet = Number(w?.usdt?.purchaseUsdt || 0);
+            const totalAvailable = Number((mainWallet + purchaseWallet).toFixed(2));
+            if (totalAvailable < paymentAmount) {
+              throw new Error("Not enough balance across wallets. Please deposit funds to continue.");
             }
-            
-            // If purchase wallet has enough for 50%, split the payment
-            if (purchaseWallet >= halfAmount) {
-              tx.update(walletRef, { 
-                mainUsdt: mainWallet - halfAmount, 
-                purchaseUsdt: purchaseWallet - halfAmount 
-              });
-            } else {
-              // Use only main wallet if purchase wallet is insufficient
-              tx.update(walletRef, { 
-                mainUsdt: mainWallet - paymentAmount
-              });
-            }
+            const idealPurchase = Number((paymentAmount / 2).toFixed(2));
+            const idealMain = Number((paymentAmount - idealPurchase).toFixed(2));
+            const mainDeficit = Math.max(0, idealMain - mainWallet);
+            const takeFromPurchase = Math.min(purchaseWallet, Number((idealPurchase + mainDeficit).toFixed(2)));
+            const takeFromMain = Number((paymentAmount - takeFromPurchase).toFixed(2));
+            tx.update(walletRef, {
+              "usdt.mainUsdt": Number((mainWallet - takeFromMain).toFixed(2)),
+              "usdt.purchaseUsdt": Number((purchaseWallet - takeFromPurchase).toFixed(2))
+            });
           } else {
-            const halfAmountInr = Math.floor(paymentAmount / 2);
-            const mainWallet = Number(w.mainInr || 0);
-            const purchaseWallet = Number(w.purchaseInr || 0);
-            
-            // Check if main wallet has enough for full amount
-            if (mainWallet < paymentAmount) {
-              throw new Error("Insufficient balance in main wallet. Please deposit more funds.");
+            const mainWallet = Number(w?.inr?.mainInr || 0);
+            const purchaseWallet = Number(w?.inr?.purchaseInr || 0);
+            const totalAvailable = mainWallet + purchaseWallet;
+            if (totalAvailable < paymentAmount) {
+              throw new Error("Not enough balance across wallets. Please deposit funds to continue.");
             }
-            
-            // If purchase wallet has enough for 50%, split the payment
-            if (purchaseWallet >= halfAmountInr) {
-              tx.update(walletRef, { 
-                mainInr: mainWallet - halfAmountInr, 
-                purchaseInr: purchaseWallet - halfAmountInr 
-              });
-            } else {
-              // Use only main wallet if purchase wallet is insufficient
-              tx.update(walletRef, { 
-                mainInr: mainWallet - paymentAmount
-              });
-            }
+            const idealPurchase = Math.floor(paymentAmount / 2);
+            const idealMain = paymentAmount - idealPurchase;
+            const mainDeficit = Math.max(0, idealMain - mainWallet);
+            const takeFromPurchase = Math.min(purchaseWallet, idealPurchase + mainDeficit);
+            const takeFromMain = paymentAmount - takeFromPurchase;
+            tx.update(walletRef, {
+              "inr.mainInr": mainWallet - takeFromMain,
+              "inr.purchaseInr": purchaseWallet - takeFromPurchase
+            });
           }
         } else if (purchaseOption === "currency_choice") {
           // Pay from main wallet with chosen currency
           if (currencyToUse === "USDT") {
-            const mainWallet = Number(w.mainUsdt || 0);
+            const mainWallet = Number(w?.usdt?.mainUsdt || 0);
             if (mainWallet < paymentAmount) {
               throw new Error("Insufficient balance in main wallet. Please deposit more funds.");
             }
             tx.update(walletRef, { 
-              mainUsdt: mainWallet - paymentAmount
+              "usdt.mainUsdt": Number((mainWallet - paymentAmount).toFixed(2))
             });
           } else {
-            const mainWallet = Number(w.mainInr || 0);
+            const mainWallet = Number(w?.inr?.mainInr || 0);
             if (mainWallet < paymentAmount) {
               throw new Error("Insufficient balance in main wallet. Please deposit more funds.");
             }
             tx.update(walletRef, { 
-              mainInr: mainWallet - paymentAmount
+              "inr.mainInr": mainWallet - paymentAmount
             });
           }
         }
 
-        // Create order document with required fields
-        await addDoc(ordersRef, {
+        // Create order document with required fields (align with main section)
+        const orderRef = doc(ordersRef);
+        tx.set(orderRef, {
           userId: user.id,
           productId: selectedProduct.id,
           productName: selectedProduct.title,
-          productPrice: productPrice,
+          amountUsd: productPrice,
           productLink: selectedProduct.downloadUrl ?? selectedProduct.productLink ?? "",
-          status: "completed", // Changed to completed since payment is successful
+          status: "Completed",
           purchaseOption: purchaseOption,
           currency: currencyToUse,
-          createdAt: serverTimestamp(),
+          timestamp: serverTimestamp(),
         });
       });
 
-      setToast({ message: "Purchase successful! Access link available in Orders.", type: "success" });
-      setTimeout(() => setToast(null), 2500);
+      setShowSuccessPopup(true);
       setShowProductModal(false);
       setSelectedProduct(null);
     } catch (e: any) {
-      setToast({ message: e?.message || "Payment failed. Please try again.", type: "error" });
-      setTimeout(() => setToast(null), 3000);
+      if (e?.message?.includes("Insufficient") || e?.message?.includes("balance")) {
+        setShowFailurePopup(true);
+      } else {
+        setToast({ message: e?.message || "Payment failed. Please try again.", type: "error" });
+        setTimeout(() => setToast(null), 3000);
+      }
     } finally {
       setProcessing(false);
     }
@@ -734,10 +858,10 @@ export default function DashboardHome() {
           <div className="absolute -bottom-8 left-1/2 w-72 h-72 bg-indigo-600/20 rounded-full mix-blend-soft-light filter blur-3xl opacity-30 animate-blob animation-delay-4000"></div>
         </div>
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
+        <div className="relative max-w-7xl mx-auto px-0 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
           
           {/* Welcome Header */}
-          <div className="mb-8 sm:mb-12">
+          <div className="mb-8 sm:mb-12 px-4 sm:px-0">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
                 <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-2">
@@ -790,8 +914,157 @@ export default function DashboardHome() {
             </div>
           </div>
 
+          {/* Banner Slider */}
+          <div className="mb-8 sm:mb-12 px-0 sm:px-6 lg:px-8">
+            <div 
+              className="relative overflow-hidden rounded-none sm:rounded-2xl bg-slate-800/40 backdrop-blur-sm border-0 sm:border border-slate-700/50 shadow-lg hover:shadow-xl transition-shadow duration-300"
+              onMouseEnter={handleBannerHover}
+              onMouseLeave={handleBannerLeave}
+              style={{ margin: 0, padding: 0 }}
+            >
+              {/* Banner Container */}
+              <div 
+                ref={bannerRef}
+                className="flex transition-transform duration-500 ease-in-out"
+                style={{ transform: `translateX(-${currentBannerIndex * 100}%)` }}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+              >
+                {banners.map((banner, index) => (
+                  <div
+                    key={banner.id}
+                    className="w-full flex-shrink-0 cursor-pointer touch-manipulation"
+                    onClick={() => handleBannerClick(banner.route)}
+                    style={{ width: '100%' }}
+                  >
+                    <div className="relative h-48 sm:h-48 md:h-56 rounded-none sm:rounded-2xl overflow-hidden group hover:shadow-2xl transition-all duration-300" style={{ margin: 0, padding: 0 }}>
+                      {/* Background Image - Full Size No Gaps */}
+                      <div 
+                        className={`absolute inset-0 transition-opacity duration-500 ${
+                          loadedImages.has(banner.id) ? 'opacity-100' : 'opacity-0'
+                        }`}
+                        style={{ 
+                          backgroundImage: `url(${banner.image})`,
+                          backgroundSize: 'cover',
+                          backgroundPosition: 'center center',
+                          backgroundRepeat: 'no-repeat',
+                          width: '100%',
+                          height: '100%',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          margin: 0,
+                          padding: 0
+                        }}
+                      />
+                      
+                      {/* Fallback Gradient Background */}
+                      <div 
+                        className={`absolute inset-0 bg-gradient-to-r ${banner.gradient} transition-opacity duration-500 ${
+                          loadedImages.has(banner.id) ? 'opacity-0' : 'opacity-100'
+                        }`}
+                        style={{ 
+                          width: '100%',
+                          height: '100%',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          margin: 0,
+                          padding: 0
+                        }}
+                      />
+                      
+                      {/* Dark Overlay for Text Readability */}
+                      <div 
+                        className={`absolute inset-0 bg-gradient-to-r ${banner.overlayGradient}`}
+                        style={{ 
+                          width: '100%',
+                          height: '100%',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          margin: 0,
+                          padding: 0
+                        }}
+                      />
+                      
+                      {/* Content - Positioned to avoid overlap with navigation */}
+                      <div className="relative h-full flex flex-col sm:flex-row items-center justify-between px-6 sm:px-8 md:px-12 py-6 sm:py-8 z-10">
+                        <div className="flex-1 w-full sm:w-auto">
+                          <h3 className={`text-xl sm:text-2xl md:text-3xl font-bold bg-gradient-to-r ${banner.gradient} bg-clip-text text-transparent leading-tight mb-3 drop-shadow-2xl`}>
+                            {banner.title}
+                          </h3>
+                          <p className="text-white/95 text-sm sm:text-base md:text-lg font-medium leading-relaxed drop-shadow-lg max-w-md">
+                            {banner.subtitle}
+                          </p>
+                        </div>
+                        
+                        {/* Action Button */}
+                        <div className="flex items-center gap-3 mt-4 sm:mt-0">
+                          <div className={`px-4 py-3 sm:px-6 sm:py-3 rounded-xl bg-gradient-to-r ${banner.gradient} text-white font-semibold text-sm sm:text-base group-hover:scale-105 transition-transform duration-200 whitespace-nowrap shadow-xl backdrop-blur-sm`}>
+                            Explore Now
+                          </div>
+                          <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6 text-white group-hover:translate-x-1 transition-transform duration-200 drop-shadow-lg" />
+                        </div>
+                      </div>
+                      
+                      {/* Hover Effect */}
+                      <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                      
+                      {/* Hidden Image for Preloading */}
+                      <img
+                        src={banner.image}
+                        alt={banner.title}
+                        className="hidden"
+                        onLoad={() => handleImageLoad(banner.id)}
+                        onError={() => handleImageLoad(banner.id)} // Still mark as loaded to show fallback
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Navigation Arrows - Positioned outside image area */}
+              <button
+                onClick={prevBanner}
+                className="absolute left-2 sm:-left-6 top-1/2 transform -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 bg-slate-800/95 hover:bg-slate-700/95 rounded-full flex items-center justify-center text-white transition-all duration-200 hover:scale-110 shadow-xl backdrop-blur-sm touch-manipulation border border-slate-600/50"
+                aria-label="Previous banner"
+              >
+                <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+              </button>
+              
+              <button
+                onClick={nextBanner}
+                className="absolute right-2 sm:-right-6 top-1/2 transform -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 bg-slate-800/95 hover:bg-slate-700/95 rounded-full flex items-center justify-center text-white transition-all duration-200 hover:scale-110 shadow-xl backdrop-blur-sm touch-manipulation border border-slate-600/50"
+                aria-label="Next banner"
+              >
+                <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
+              </button>
+
+              {/* Dots Indicator - Positioned below image area */}
+              <div className="absolute bottom-4 sm:-bottom-8 left-1/2 transform -translate-x-1/2 flex gap-2 sm:gap-3">
+                {banners.map((_, index) => (
+                  <button
+                    key={index}
+                    onClick={() => goToBanner(index)}
+                    className={`w-3 h-3 sm:w-4 sm:h-4 rounded-full transition-all duration-200 touch-manipulation ${
+                      index === currentBannerIndex 
+                        ? 'bg-slate-300 scale-125 shadow-lg' 
+                        : 'bg-slate-500/60 hover:bg-slate-400/80 hover:scale-110'
+                    }`}
+                    aria-label={`Go to banner ${index + 1}`}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+
           {/* Stats Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8 px-4 sm:px-0">
             
             {/* Earnings Card (USD from referrals) */}
             <div className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-cyan-500/20 hover:shadow-2xl transition-all duration-300 overflow-hidden border border-slate-700/50 hover:border-cyan-500/50">
@@ -1079,7 +1352,7 @@ export default function DashboardHome() {
           )}
 
           {/* Services Section */}
-          <div className="mb-8">
+          <div id="services-section" className="mb-8 px-4 sm:px-0">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
               <div>
                 <h2 className="text-2xl sm:text-3xl font-bold text-slate-200 mb-1">
@@ -1275,7 +1548,7 @@ export default function DashboardHome() {
           </div>
 
           {/* Digital Products Section */}
-          <div className="mb-8">
+          <div className="mb-8 px-4 sm:px-0">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
               <div>
                 <h2 className="text-2xl sm:text-3xl font-bold text-slate-200 mb-1">
@@ -1477,13 +1750,6 @@ export default function DashboardHome() {
         isFirstTime={false}
       />
 
-      {/* First Time User Modal */}
-      <AffiliateJoinModal
-        isOpen={showFirstTimeModal}
-        onClose={() => setShowFirstTimeModal(false)}
-        onJoin={handleJoinAffiliate}
-        isFirstTime={true}
-      />
 
       {/* Congratulations Modal */}
       <AffiliateCongratulationsModal
@@ -1731,6 +1997,117 @@ export default function DashboardHome() {
           animation-delay: 3s;
         }
       `}</style>
+
+      {/* Success Popup */}
+      <AnimatePresence>
+        {showSuccessPopup && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onClick={() => setShowSuccessPopup(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-gradient-to-br from-slate-900/95 to-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl shadow-2xl max-w-md w-full p-8 text-center"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+                className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center"
+              >
+                <CheckCircle className="w-10 h-10 text-white" />
+              </motion.div>
+              
+              <h3 className="text-2xl font-bold text-white mb-2">
+                🎉 Congratulations!
+              </h3>
+              <p className="text-slate-300 mb-6">
+                Your product is ready.<br />
+                You can view it in your Orders Section.
+              </p>
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowSuccessPopup(false)}
+                  className="flex-1 px-4 py-2 bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 rounded-lg transition-colors"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    setShowSuccessPopup(false);
+                    navigate('/dashboard/orders');
+                  }}
+                  className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold rounded-lg transition-all duration-200"
+                >
+                  Go to Orders
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Failure Popup */}
+      <AnimatePresence>
+        {showFailurePopup && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onClick={() => setShowFailurePopup(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-gradient-to-br from-slate-900/95 to-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl shadow-2xl max-w-md w-full p-8 text-center"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+                className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-red-500 to-pink-500 flex items-center justify-center"
+              >
+                <XCircle className="w-10 h-10 text-white" />
+              </motion.div>
+              
+              <h3 className="text-2xl font-bold text-white mb-2">
+                ⚠️ Insufficient Balance!
+              </h3>
+              <p className="text-slate-300 mb-6">
+                Please deposit funds to complete your purchase.
+              </p>
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowFailurePopup(false)}
+                  className="flex-1 px-4 py-2 bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 rounded-lg transition-colors"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    setShowFailurePopup(false);
+                    navigate('/wallet');
+                  }}
+                  className="flex-1 px-4 py-2 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white font-semibold rounded-lg transition-all duration-200"
+                >
+                  Go to Wallet
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }

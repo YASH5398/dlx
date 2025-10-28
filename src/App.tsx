@@ -35,8 +35,9 @@ import AdminDLXListing from './pages/SecretAdmin/AdminDLXListing';
 // Public pages
 // Removed public pages: Exchanges, Pricing, Tutorials, Docs, Blogs, Apply
 import DigitalProducts from './pages/DigitalProducts';
-import Services from './pages/Services';
 import AboutUs from './pages/AboutUs';
+import TermsOfService from './pages/TermsOfService';
+import PrivacyPolicy from './pages/PrivacyPolicy';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Otp from './pages/Otp';
@@ -71,15 +72,21 @@ import DLXListing from './pages/DLXListing';
 function PublicLayout() {
   const location = useLocation();
   const isHome = location.pathname === '/';
-  const isAuthRoute = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/phone-signup' || location.pathname === '/google-referral-signup';
   return (
     <div className="min-h-screen flex flex-col">
       {!isHome && <Header />}
       <main className="flex-1">
         <Outlet />
       </main>
-      {/* Hide footer on home and auth pages */}
-      {!isHome && !isAuthRoute && <Footer />}
+      {!isHome && <Footer />}
+    </div>
+  );
+}
+
+function AuthLayout() {
+  return (
+    <div className="min-h-screen">
+      <Outlet />
     </div>
   );
 }
@@ -90,13 +97,17 @@ function App() {
       {/* Public site */}
       <Route element={<PublicLayout />}>
         <Route path="/" element={<Home />} />
-        {/* Removed public routes: exchanges, pricing, tutorials, docs, blogs, apply */}
-        {/* Removed public route: digital-products (dashboard-only now) */}
+        {/* Public pages */}
+        <Route path="/about" element={<AboutUs />} />
+        <Route path="/terms" element={<TermsOfService />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+      </Route>
+
+      {/* Authentication pages - no header/footer */}
+      <Route element={<AuthLayout />}>
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
-        {/* New phone signup route */}
         <Route path="/phone-signup" element={<PhoneSignup />} />
-        {/* Google signup with referral */}
         <Route path="/google-referral-signup" element={<GoogleReferralSignup />} />
         <Route path="/otp" element={<Otp />} />
       </Route>
@@ -123,7 +134,6 @@ function App() {
         <Route path="/support" element={<Support />} />
         <Route path="/settings" element={<SettingsFull />} />
         <Route path="/dashboard/profile" element={<Profile />} />
-        <Route path="/dashboard/services" element={<Services />} />
         <Route path="/dashboard/digital-products" element={<DigitalProducts />} />
         <Route path="/database-marketing" element={<DatabaseMarketing />} />
         <Route path="/database-marketing/categories" element={<DatabaseCategories />} />

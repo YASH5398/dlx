@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useUser } from '../context/UserContext';
 import { 
   trackReferralClick, 
+  trackReferralVisit,
   trackReferralSignup, 
   trackReferralPurchase,
   getReferralStats,
@@ -64,7 +65,16 @@ export function useReferralTracking() {
       setIsValidCode(isValid);
       
       if (isValid) {
-        // Track the click
+        // Track the page visit (impression)
+        await trackReferralVisit(code, {
+          userAgent: navigator.userAgent,
+          referrer: document.referrer,
+          utmSource: new URLSearchParams(window.location.search).get('utm_source') || undefined,
+          utmMedium: new URLSearchParams(window.location.search).get('utm_medium') || undefined,
+          utmCampaign: new URLSearchParams(window.location.search).get('utm_campaign') || undefined
+        });
+        
+        // Track the click (for link clicks)
         await trackReferralClick(code, {
           userAgent: navigator.userAgent,
           referrer: document.referrer,

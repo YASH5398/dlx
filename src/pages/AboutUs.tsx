@@ -142,177 +142,183 @@ export default function AboutUs() {
 
   const features = [
     {
-      id: 'orders',
-      icon: ShoppingCartIcon,
-      title: 'Orders & Digital Products',
-      description: 'Browse, select, and purchase digital products, databases, and services with seamless payment processing.',
+      id: 'signup',
+      icon: UserIcon,
+      title: 'User Registration & Onboarding',
+      description: 'Simple and secure registration process with multiple signup options and instant account activation.',
       features: [
-        '30+ database categories available',
-        'WhatsApp Marketing Software with unlimited messages',
-        'Custom data ordering with admin review',
-        'Real-time order tracking and history',
-        'Instant download links after payment',
-        'Secure payment via main wallet'
+        'Phone number and email verification',
+        'Google OAuth integration for quick signup',
+        'Referral code integration during registration',
+        'Automatic wallet creation (Main, Purchase, Mining)',
+        'Profile setup with rank-based commission rates',
+        'Instant access to all platform features'
       ]
     },
     {
-      id: 'mining',
-      icon: CurrencyDollarIcon,
-      title: 'Mining & Earnings',
-      description: 'Earn DLX tokens through mining activities, referral bonuses, and platform engagement.',
-      features: [
-        'Real-time mining statistics and tracking',
-        'Referral bonus calculations',
-        'Earnings displayed in USDT/INR',
-        'Automatic reward distribution',
-        'Mining growth charts and analytics',
-        'Wallet balance impact tracking'
-      ]
-    },
-    {
-      id: 'wallet',
+      id: 'wallets',
       icon: WalletIcon,
-      title: 'Main Wallet System',
-      description: 'Centralized wallet for all transactions including deposits, payments, and balance management.',
+      title: 'Multi-Wallet System',
+      description: 'Three specialized wallets for different purposes with real-time balance tracking and seamless transfers.',
       features: [
-        'Real-time balance updates',
-        'Transaction history and records',
-        'Deposit and withdrawal requests',
-        'Payment processing for all services',
+        'Main Wallet: Primary balance for all transactions',
+        'Purchase Wallet: Dedicated for product purchases',
+        'Mining Wallet: Earns DLX tokens through mining activities',
+        'Real-time balance updates across all wallets',
         'Multi-currency support (USDT/INR)',
-        'Secure transaction verification'
+        'Secure deposit and withdrawal processing'
       ]
     },
     {
       id: 'affiliate',
       icon: UserGroupIcon,
-      title: 'Affiliate Program',
-      description: 'Comprehensive referral system with tracking, rewards, and performance analytics.',
+      title: 'Advanced Affiliate Program',
+      description: 'Comprehensive referral system with real-time tracking, commission calculations, and performance analytics.',
       features: [
-        'Personal referral codes and links',
-        'Referral tracking dashboard',
-        'Commission calculations and payouts',
-        'Referral banners and marketing materials',
-        'Performance statistics and analytics',
-        'Multi-level referral rewards'
+        'Personal referral codes and custom links',
+        'Real-time tracking dashboard (impressions, clicks, joins)',
+        'Rank-based commission rates (20% to 45%)',
+        '2-level referral system with automatic payouts',
+        'Referral link management with cooldown periods',
+        'Detailed analytics and conversion tracking'
       ]
     },
     {
-      id: 'rewards',
-      icon: GiftIcon,
-      title: 'Rewards & Bonuses',
-      description: 'Earn reward points through various activities and redeem them for platform benefits.',
-      features: [
-        'Points from referrals and purchases',
-        'Campaign bonuses and promotions',
-        'Reward redemption system',
-        'Bonus tracking and history',
-        'Special achievement rewards',
-        'Loyalty program benefits'
-      ]
-    },
-    {
-      id: 'database',
+      id: 'databases',
       icon: ChartBarIcon,
-      title: 'Database & Marketing Tools',
-      description: 'Access to premium databases and marketing software for business growth.',
+      title: 'Database & Marketing Solutions',
+      description: 'Access to 30+ specialized database categories and advanced marketing tools for business growth.',
       features: [
-        '30+ specialized database categories',
-        'WhatsApp Marketing Software (unlimited messages)',
-        'Telegram and Facebook tools (coming soon)',
-        'Custom data ordering service',
-        'Admin review and approval system',
-        'Color-coded status tracking'
+        '30+ database categories (leads, contacts, business data)',
+        'WhatsApp Marketing Software with unlimited messages',
+        'Custom data ordering with admin review system',
+        'Instant download after payment confirmation',
+        'Color-coded order status tracking',
+        'Bulk data export and management tools'
+      ]
+    },
+    {
+      id: 'digital-products',
+      icon: ShoppingCartIcon,
+      title: 'Digital Products Store',
+      description: 'Comprehensive marketplace for digital products with flexible payment options and instant delivery.',
+      features: [
+        'Wide range of digital products and tools',
+        'Flexible payment options (Main wallet, split payments)',
+        'Currency choice (USDT/INR) with live conversion',
+        'Real-time balance validation before purchase',
+        'Instant product delivery after payment',
+        'Order history and download management'
+      ]
+    },
+    {
+      id: 'mining',
+      icon: CurrencyDollarIcon,
+      title: 'Mining & Earning System',
+      description: 'Earn DLX tokens through mining activities, referral bonuses, and platform engagement with real-time tracking.',
+      features: [
+        'Real-time mining statistics and progress tracking',
+        'Automatic DLX token generation',
+        'Referral bonus calculations and payouts',
+        'Mining wallet balance management',
+        'Earnings displayed in multiple currencies',
+        'Performance analytics and growth charts'
+      ]
+    },
+    {
+      id: 'withdrawals',
+      icon: CreditCardIcon,
+      title: 'Withdrawal & Payout System',
+      description: 'Secure withdrawal system with multiple payment methods and real-time processing status.',
+      features: [
+        'Multiple withdrawal methods (Bank, UPI, Crypto)',
+        'Real-time withdrawal request tracking',
+        'Admin approval and processing system',
+        'Transaction history and status updates',
+        'Minimum withdrawal limits and processing fees',
+        'Secure verification and fraud prevention'
       ]
     },
     {
       id: 'support',
       icon: LifebuoyIcon,
-      title: 'Support & Help',
-      description: 'Comprehensive support system with multiple channels for user assistance.',
+      title: '24/7 Support System',
+      description: 'Comprehensive support system with multiple channels for user assistance and platform guidance.',
       features: [
-        'Live chat support system',
-        'Ticket-based support requests',
-        'FAQ and knowledge base',
-        'Quick response times',
-        'Multi-language support',
-        '24/7 customer service'
-      ]
-    },
-    {
-      id: 'settings',
-      icon: Cog6ToothIcon,
-      title: 'Settings & Profile',
-      description: 'Complete user profile management and platform customization options.',
-      features: [
-        'Profile information management',
-        'Password and security settings',
-        'Wallet information display',
-        'Notification preferences',
-        'Privacy and data settings',
-        'Account verification status'
+        'Live chat support with instant responses',
+        'Ticket-based support for complex issues',
+        'FAQ and comprehensive knowledge base',
+        'Video tutorials and step-by-step guides',
+        'Multi-language support options',
+        'Priority support for premium users'
       ]
     }
   ];
 
-  const orderFlow = [
+  const userJourney = [
     {
       step: 1,
-      title: 'Browse Products',
-      description: 'Explore our extensive catalog of digital products, databases, and marketing software.',
-      icon: ComputerDesktopIcon
+      title: 'Sign Up & Get Started',
+      description: 'Register with phone/email or Google OAuth, get your referral code, and access three specialized wallets.',
+      icon: UserIcon
     },
     {
       step: 2,
-      title: 'Select Package',
-      description: 'Choose the perfect package that fits your needs and budget requirements.',
-      icon: CheckCircleIcon
+      title: 'Fund Your Wallets',
+      description: 'Deposit USDT/INR into your Main, Purchase, and Mining wallets to start using the platform.',
+      icon: WalletIcon
     },
     {
       step: 3,
-      title: 'Pay via Wallet',
-      description: 'Complete your purchase using your main wallet balance with secure processing.',
-      icon: CreditCardIcon
+      title: 'Explore & Purchase',
+      description: 'Browse 30+ database categories, digital products, and marketing tools with flexible payment options.',
+      icon: ShoppingCartIcon
     },
     {
       step: 4,
-      title: 'Get Access',
-      description: 'Receive instant download links and access to your purchased products.',
+      title: 'Earn & Refer',
+      description: 'Earn through mining, referrals, and affiliate commissions while building your digital business.',
+      icon: CurrencyDollarIcon
+    },
+    {
+      step: 5,
+      title: 'Withdraw & Grow',
+      description: 'Withdraw your earnings through multiple payment methods and scale your business operations.',
       icon: CloudArrowDownIcon
     }
   ];
 
-  const workWithUsFlow = [
+  const affiliateFlow = [
     {
       step: 1,
-      title: 'Submit Application',
-      description: 'Fill out our comprehensive 30+ field application form with your details.',
-      icon: DocumentTextIcon
+      title: 'Join Affiliate Program',
+      description: 'Apply to become an affiliate partner and get your personalized referral code and tracking dashboard.',
+      icon: UserGroupIcon
     },
     {
       step: 2,
-      title: 'Admin Review',
-      description: 'Our team reviews your application and credentials thoroughly.',
-      icon: ShieldCheckIcon
+      title: 'Auto-Approval Process',
+      description: 'Get automatically approved within 30 minutes and start earning commissions immediately.',
+      icon: ClockIcon
     },
     {
       step: 3,
-      title: 'Pay Trust Fee',
-      description: 'Complete the $12 trust fee payment to proceed with verification.',
-      icon: CurrencyDollarIcon
+      title: 'Share & Track',
+      description: 'Share your referral links, track impressions, clicks, and conversions in real-time.',
+      icon: ChartBarIcon
     },
     {
       step: 4,
-      title: 'Get Verified',
-      description: 'Provide WhatsApp and Telegram details for final verification and onboarding.',
-      icon: CheckBadgeIcon
+      title: 'Earn Commissions',
+      description: 'Earn 20-45% commissions based on your rank through 2-level referral system.',
+      icon: CurrencyDollarIcon
     }
   ];
 
   const stats = [
     { value: '30+', label: 'Database Categories', icon: ChartBarIcon, color: 'blue' },
-    { value: 'Unlimited', label: 'WhatsApp Messages', icon: ChatBubbleLeftRightIcon, color: 'green' },
-    { value: '200', label: 'Free Contacts', icon: UserIcon, color: 'purple' },
+    { value: '3', label: 'Wallet Types', icon: WalletIcon, color: 'green' },
+    { value: '45%', label: 'Max Commission Rate', icon: CurrencyDollarIcon, color: 'purple' },
     { value: '24/7', label: 'Support Available', icon: LifebuoyIcon, color: 'orange' }
   ];
 
@@ -333,19 +339,23 @@ export default function AboutUs() {
                 DigiLinex Platform
               </span>
             </h1>
-            <p className="text-xl text-gray-300 mb-8 max-w-3xl mx-auto leading-relaxed">
-              Your comprehensive digital ecosystem for databases, marketing tools, mining rewards, 
-              and affiliate programs. Experience the future of digital business solutions.
+            <p className="text-xl text-gray-300 mb-8 max-w-4xl mx-auto leading-relaxed">
+              The ultimate digital ecosystem that empowers users to grow their business through comprehensive 
+              database access, advanced marketing tools, multi-wallet systems, and lucrative affiliate programs. 
+              Join thousands of entrepreneurs who are building their digital empire with DigiLinex.
             </p>
             <div className="flex flex-wrap justify-center gap-4">
               <div className="px-6 py-3 bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-400/30 rounded-xl backdrop-blur-sm">
-                <span className="text-blue-300 font-semibold">🚀 All-in-One Platform</span>
+                <span className="text-blue-300 font-semibold">🚀 Complete Digital Ecosystem</span>
               </div>
               <div className="px-6 py-3 bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-400/30 rounded-xl backdrop-blur-sm">
-                <span className="text-green-300 font-semibold">💰 Earn While You Learn</span>
+                <span className="text-green-300 font-semibold">💰 Multi-Wallet Earning System</span>
               </div>
               <div className="px-6 py-3 bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-400/30 rounded-xl backdrop-blur-sm">
-                <span className="text-purple-300 font-semibold">🔒 Secure & Reliable</span>
+                <span className="text-purple-300 font-semibold">🔗 Advanced Affiliate Program</span>
+              </div>
+              <div className="px-6 py-3 bg-gradient-to-r from-orange-500/20 to-red-500/20 border border-orange-400/30 rounded-xl backdrop-blur-sm">
+                <span className="text-orange-300 font-semibold">📊 30+ Database Categories</span>
               </div>
             </div>
           </div>
@@ -366,11 +376,13 @@ export default function AboutUs() {
         <div className="text-center mb-16">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">
             <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-              Platform Features
+              Complete Platform Overview
             </span>
           </h2>
-          <p className="text-gray-300 text-lg max-w-2xl mx-auto">
-            Discover all the powerful features that make DigiLinex the ultimate digital business platform
+          <p className="text-gray-300 text-lg max-w-3xl mx-auto">
+            DigiLinex is a comprehensive digital ecosystem that combines database access, marketing tools, 
+            multi-wallet systems, and affiliate programs to help users build and scale their digital businesses. 
+            From registration to earning and withdrawal, every aspect is designed for maximum growth and profitability.
           </p>
         </div>
         
@@ -389,24 +401,25 @@ export default function AboutUs() {
         </div>
       </div>
 
-      {/* Order Flow Section */}
+      {/* User Journey Section */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="text-center mb-16">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">
             <span className="bg-gradient-to-r from-green-400 to-blue-400 bg-clip-text text-transparent">
-              How Orders Work
+              Your DigiLinex Journey
             </span>
           </h2>
-          <p className="text-gray-300 text-lg max-w-2xl mx-auto">
-            Simple 4-step process to get your digital products and services
+          <p className="text-gray-300 text-lg max-w-3xl mx-auto">
+            From registration to earning and withdrawal, follow this complete journey to maximize your success 
+            on the DigiLinex platform. Each step is designed to help you grow your digital business and earnings.
           </p>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {orderFlow.map((step, index) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+          {userJourney.map((step, index) => (
             <div key={index} className="relative">
               <FlowStep {...step} />
-              {index < orderFlow.length - 1 && (
+              {index < userJourney.length - 1 && (
                 <div className="hidden lg:block absolute top-1/2 -right-3 transform -translate-y-1/2">
                   <ArrowRightIcon className="h-6 w-6 text-blue-400" />
                 </div>
@@ -416,24 +429,25 @@ export default function AboutUs() {
         </div>
       </div>
 
-      {/* Work With Us Flow */}
+      {/* Affiliate Program Flow */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="text-center mb-16">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">
             <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-              Join Our Team
+              Affiliate Program
             </span>
           </h2>
-          <p className="text-gray-300 text-lg max-w-2xl mx-auto">
-            Become part of our developer and freelancer network
+          <p className="text-gray-300 text-lg max-w-3xl mx-auto">
+            Join our advanced affiliate program and start earning 20-45% commissions through our 2-level referral system. 
+            Track your performance in real-time and build a sustainable income stream.
           </p>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {workWithUsFlow.map((step, index) => (
+          {affiliateFlow.map((step, index) => (
             <div key={index} className="relative">
               <FlowStep {...step} />
-              {index < workWithUsFlow.length - 1 && (
+              {index < affiliateFlow.length - 1 && (
                 <div className="hidden lg:block absolute top-1/2 -right-3 transform -translate-y-1/2">
                   <ArrowRightIcon className="h-6 w-6 text-purple-400" />
                 </div>
@@ -443,100 +457,101 @@ export default function AboutUs() {
         </div>
       </div>
 
-      {/* Database & Marketing Details */}
+      {/* Wallet System & Earning Details */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="text-center mb-16">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">
             <span className="bg-gradient-to-r from-orange-400 to-red-400 bg-clip-text text-transparent">
-              Database & Marketing Solutions
+              Multi-Wallet System & Earning
             </span>
           </h2>
-          <p className="text-gray-300 text-lg max-w-2xl mx-auto">
-            Comprehensive tools for your business growth and marketing needs
+          <p className="text-gray-300 text-lg max-w-3xl mx-auto">
+            DigiLinex features a sophisticated 3-wallet system that maximizes your earning potential and 
+            provides flexible payment options for all your digital business needs.
           </p>
         </div>
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Buy Database */}
+          {/* Main Wallet */}
           <div className="bg-gradient-to-br from-blue-500/10 to-blue-600/10 border border-blue-400/30 rounded-2xl p-8">
             <div className="flex items-center gap-4 mb-6">
               <div className="p-3 rounded-xl bg-blue-500/20">
-                <ChartBarIcon className="h-8 w-8 text-blue-300" />
+                <WalletIcon className="h-8 w-8 text-blue-300" />
               </div>
-              <h3 className="text-2xl font-bold text-white">Buy Database</h3>
+              <h3 className="text-2xl font-bold text-white">Main Wallet</h3>
             </div>
             <ul className="space-y-3 text-gray-300">
               <li className="flex items-center gap-3">
                 <CheckCircleIcon className="h-5 w-5 text-green-400 flex-shrink-0" />
-                <span>30+ specialized database categories</span>
+                <span>Primary balance for all transactions</span>
               </li>
               <li className="flex items-center gap-3">
                 <CheckCircleIcon className="h-5 w-5 text-green-400 flex-shrink-0" />
-                <span>Flexible package options and pricing</span>
+                <span>Deposit and withdrawal processing</span>
               </li>
               <li className="flex items-center gap-3">
                 <CheckCircleIcon className="h-5 w-5 text-green-400 flex-shrink-0" />
-                <span>Instant download after payment</span>
+                <span>Multi-currency support (USDT/INR)</span>
               </li>
               <li className="flex items-center gap-3">
                 <CheckCircleIcon className="h-5 w-5 text-green-400 flex-shrink-0" />
-                <span>Complete order history tracking</span>
+                <span>Real-time balance updates</span>
               </li>
             </ul>
           </div>
 
-          {/* Marketing Software */}
+          {/* Purchase Wallet */}
           <div className="bg-gradient-to-br from-green-500/10 to-green-600/10 border border-green-400/30 rounded-2xl p-8">
             <div className="flex items-center gap-4 mb-6">
               <div className="p-3 rounded-xl bg-green-500/20">
-                <ChatBubbleLeftRightIcon className="h-8 w-8 text-green-300" />
+                <ShoppingCartIcon className="h-8 w-8 text-green-300" />
               </div>
-              <h3 className="text-2xl font-bold text-white">Marketing Software</h3>
+              <h3 className="text-2xl font-bold text-white">Purchase Wallet</h3>
             </div>
             <ul className="space-y-3 text-gray-300">
               <li className="flex items-center gap-3">
                 <CheckCircleIcon className="h-5 w-5 text-green-400 flex-shrink-0" />
-                <span>WhatsApp Marketing (unlimited messages)</span>
+                <span>Dedicated for product purchases</span>
               </li>
               <li className="flex items-center gap-3">
                 <CheckCircleIcon className="h-5 w-5 text-green-400 flex-shrink-0" />
-                <span>200 free contacts included</span>
+                <span>Split payment options (50/50)</span>
               </li>
               <li className="flex items-center gap-3">
                 <CheckCircleIcon className="h-5 w-5 text-green-400 flex-shrink-0" />
-                <span>Telegram & Facebook (coming soon)</span>
+                <span>Digital products and databases</span>
               </li>
               <li className="flex items-center gap-3">
                 <CheckCircleIcon className="h-5 w-5 text-green-400 flex-shrink-0" />
-                <span>Advanced campaign management</span>
+                <span>Marketing software purchases</span>
               </li>
             </ul>
           </div>
 
-          {/* Order Data */}
+          {/* Mining Wallet */}
           <div className="bg-gradient-to-br from-purple-500/10 to-purple-600/10 border border-purple-400/30 rounded-2xl p-8">
             <div className="flex items-center gap-4 mb-6">
               <div className="p-3 rounded-xl bg-purple-500/20">
-                <DocumentTextIcon className="h-8 w-8 text-purple-300" />
+                <CurrencyDollarIcon className="h-8 w-8 text-purple-300" />
               </div>
-              <h3 className="text-2xl font-bold text-white">Order Data</h3>
+              <h3 className="text-2xl font-bold text-white">Mining Wallet</h3>
             </div>
             <ul className="space-y-3 text-gray-300">
               <li className="flex items-center gap-3">
                 <CheckCircleIcon className="h-5 w-5 text-green-400 flex-shrink-0" />
-                <span>Custom data requests</span>
+                <span>Earns DLX tokens automatically</span>
               </li>
               <li className="flex items-center gap-3">
                 <CheckCircleIcon className="h-5 w-5 text-green-400 flex-shrink-0" />
-                <span>Admin review and approval</span>
+                <span>Referral bonus accumulation</span>
               </li>
               <li className="flex items-center gap-3">
                 <CheckCircleIcon className="h-5 w-5 text-green-400 flex-shrink-0" />
-                <span>Color-coded status tracking</span>
+                <span>Real-time mining statistics</span>
               </li>
               <li className="flex items-center gap-3">
                 <CheckCircleIcon className="h-5 w-5 text-green-400 flex-shrink-0" />
-                <span>Flexible pricing options</span>
+                <span>Performance analytics tracking</span>
               </li>
             </ul>
           </div>
@@ -588,18 +603,20 @@ export default function AboutUs() {
         <div className="text-center bg-gradient-to-r from-blue-600/20 via-purple-600/20 to-pink-600/20 border border-white/20 rounded-3xl p-12">
           <h2 className="text-3xl md:text-4xl font-bold mb-6">
             <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-              Ready to Get Started?
+              Ready to Build Your Digital Empire?
             </span>
           </h2>
-          <p className="text-gray-300 text-lg mb-8 max-w-2xl mx-auto">
-            Join thousands of users who are already growing their business with DigiLinex
+          <p className="text-gray-300 text-lg mb-8 max-w-3xl mx-auto">
+            Join thousands of entrepreneurs who are already earning through DigiLinex's comprehensive ecosystem. 
+            From database access to affiliate commissions, mining rewards to marketing tools - everything you need 
+            to grow your digital business is right here.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold rounded-xl hover:from-blue-600 hover:to-purple-700 transition-all duration-300 hover:scale-105 shadow-lg hover:shadow-xl">
-              Start Your Journey
+              Start Earning Today
             </button>
             <button className="px-8 py-4 bg-white/10 text-white font-semibold rounded-xl border border-white/20 hover:bg-white/20 transition-all duration-300 hover:scale-105">
-              Learn More
+              Explore Features
             </button>
           </div>
         </div>

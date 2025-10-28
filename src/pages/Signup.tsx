@@ -346,9 +346,9 @@ const Signup: React.FC = () => {
                   />
                   <span className="text-sm text-slate-400 group-hover:text-slate-300 leading-relaxed">
                     I agree to the{' '}
-                    <a href="#" className="text-purple-400 hover:text-purple-300 underline underline-offset-2 font-medium">Terms of Service</a>
+                    <Link to="/terms" className="text-purple-400 hover:text-purple-300 underline underline-offset-2 font-medium">Terms of Service</Link>
                     {' '}and{' '}
-                    <a href="#" className="text-purple-400 hover:text-purple-300 underline underline-offset-2 font-medium">Privacy Policy</a>
+                    <Link to="/privacy" className="text-purple-400 hover:text-purple-300 underline underline-offset-2 font-medium">Privacy Policy</Link>
                   </span>
                 </label>
 

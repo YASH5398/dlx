@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useUser } from '../context/UserContext';
-import { firestore } from '../firebase.ts';
+import { firestore } from '../firebase';
 import { collection, doc, onSnapshot, query, where, getDocs } from 'firebase/firestore';
 
 export type EarningsPoint = { t: number; usd: number };
@@ -29,8 +29,10 @@ export function useReferral() {
   const [tier, setTier] = useState<number>(1);
   const [rate, setRate] = useState<number>(20);
   const [loading, setLoading] = useState(true);
+  const [referralCode, setReferralCode] = useState<string>('DLX0000');
 
-  const referralCode = useMemo(() => {
+  // Fallback referral code generator (used only if user doc missing code)
+  const fallbackReferralCode = useMemo(() => {
     const uid = user?.id;
     if (!uid) return 'DLX0000';
     const suffix = uid.slice(-4).toUpperCase();
@@ -58,6 +60,9 @@ export function useReferral() {
           const data = snap.data() as any;
           console.log('useReferral: User document data:', data);
           
+          // Ensure we expose the actual referral code from Firestore (fallback if missing)
+          setReferralCode(String(data.referralCode || fallbackReferralCode));
+
           // Use user document as primary source
           setActiveReferrals(Number(data.activeReferrals || 0));
           setReferralCount(Number(data.referralCount || 0));
@@ -86,6 +91,7 @@ export function useReferral() {
           setTier(1);
           setRate(20);
           setLevel('Starter');
+          setReferralCode(fallbackReferralCode);
         }
         setLoading(false);
       } catch (error) {
@@ -146,22 +152,58 @@ export function useReferral() {
     const userDocListener = onSnapshot(userDoc, (snap) => {
       if (snap.exists()) {
         const userData = snap.data() as any;
-        const userReferralCode = userData?.referralCode;
+        const userReferralCode = userData?.referralCode || referralCode || fallbackReferralCode;
         
         if (userReferralCode && !unsubReferrals) {
-          const referralsQuery = query(
+          // Query for users with referrerCode field (new format)
+          const referrerCodeQuery = query(
             collection(firestore, 'users'),
             where('referrerCode', '==', userReferralCode)
           );
-          unsubReferrals = onSnapshot(referralsQuery, (referralsSnap) => {
-            const totalReferrals = referralsSnap.size;
+          
+          // Query for users with referredBy field (old format)
+          const referredByQuery = query(
+            collection(firestore, 'users'),
+            where('referredBy', '==', userReferralCode)
+          );
+          
+          let referrerCodeCount = 0;
+          let referredByCount = 0;
+          let totalReferrals = 0;
+          
+          // Listen to referrerCode query
+          const unsubReferrerCode = onSnapshot(referrerCodeQuery, (referrerCodeSnap) => {
+            referrerCodeCount = referrerCodeSnap.size;
+            totalReferrals = referrerCodeCount + referredByCount;
             setReferralCount(totalReferrals);
             
-            console.log('useReferral: Referrals count updated:', { 
+            console.log('useReferral: Referrals count updated (referrerCode):', { 
+              referrerCodeCount,
+              referredByCount,
               totalReferrals,
               referralCode: userReferralCode
             });
           });
+          
+          // Listen to referredBy query
+          const unsubReferredBy = onSnapshot(referredByQuery, (referredBySnap) => {
+            referredByCount = referredBySnap.size;
+            totalReferrals = referrerCodeCount + referredByCount;
+            setReferralCount(totalReferrals);
+            
+            console.log('useReferral: Referrals count updated (referredBy):', { 
+              referrerCodeCount,
+              referredByCount,
+              totalReferrals,
+              referralCode: userReferralCode
+            });
+          });
+          
+          // Store both unsubscribe functions
+          unsubReferrals = () => {
+            unsubReferrerCode();
+            unsubReferredBy();
+          };
         }
       }
     });

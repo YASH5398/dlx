@@ -5,6 +5,7 @@ import { useAffiliateStatus } from '../hooks/useAffiliateStatus';
 import { firestore } from '../firebase';
 import AffiliateAnalytics from '../components/AffiliateAnalytics';
 import { doc, updateDoc, onSnapshot, collection, query, where, orderBy, limit, getDocs, serverTimestamp } from 'firebase/firestore';
+import { RANK_DEFINITIONS, getRankInfo } from '../utils/rankSystem';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card';
 import { Badge } from '../components/ui/badge';
@@ -63,13 +64,12 @@ interface CommissionRate {
   color: string;
 }
 
-const COMMISSION_RATES: CommissionRate[] = [
-  { rank: 'Starter', rate: 30, color: 'from-gray-500 to-gray-600' },
-  { rank: 'Bronze', rate: 32, color: 'from-orange-500 to-orange-600' },
-  { rank: 'Silver', rate: 35, color: 'from-gray-400 to-gray-500' },
-  { rank: 'Gold', rate: 38, color: 'from-yellow-500 to-yellow-600' },
-  { rank: 'Platinum', rate: 40, color: 'from-purple-500 to-purple-600' },
-];
+// Generate commission rates from rank system
+const COMMISSION_RATES: CommissionRate[] = Object.entries(RANK_DEFINITIONS).map(([key, rankInfo]) => ({
+  rank: rankInfo.name,
+  rate: rankInfo.commission,
+  color: rankInfo.color.replace('bg-', 'from-').replace('-500', '-500 to-' + rankInfo.color.split('-')[1] + '-600')
+}));
 
 export default function AffiliateProgram() {
   const { user } = useUser();
@@ -82,6 +82,8 @@ export default function AffiliateProgram() {
     totalEarnings: 0,
     lastUpdated: null
   });
+  const [userRank, setUserRank] = useState<string>('starter');
+  const [userCommissionRate, setUserCommissionRate] = useState<number>(20);
   const [referralUsers, setReferralUsers] = useState<ReferralUser[]>([]);
   const [customLink, setCustomLink] = useState('');
   const [isEditingLink, setIsEditingLink] = useState(false);
@@ -99,7 +101,7 @@ export default function AffiliateProgram() {
     return `${baseUrl}/signup?ref=${linkId}`;
   }, [user?.id, customLink]);
 
-  // Load affiliate stats
+  // Load affiliate stats and user rank
   useEffect(() => {
     if (!user?.id || !affiliateStatus.isApproved) return;
 
@@ -107,6 +109,8 @@ export default function AffiliateProgram() {
       if (doc.exists()) {
         const data = doc.data();
         const affiliateStats = data.affiliateStats || {};
+        
+        // Update affiliate stats
         setStats({
           impressions: affiliateStats.impressions || 0,
           clicks: affiliateStats.clicks || 0,
@@ -115,8 +119,25 @@ export default function AffiliateProgram() {
           totalEarnings: affiliateStats.totalEarnings || 0,
           lastUpdated: affiliateStats.lastUpdated
         });
+        
+        // Update user rank and commission rate
+        const currentRank = data.rank || 'starter';
+        const rankInfo = getRankInfo(currentRank);
+        setUserRank(currentRank);
+        setUserCommissionRate(rankInfo.commission);
+        
         setCustomLink(data.customReferralLink || '');
         setLoadingStats(false);
+        
+        console.log('AffiliateProgram: Real-time stats updated', {
+          impressions: affiliateStats.impressions || 0,
+          clicks: affiliateStats.clicks || 0,
+          joins: affiliateStats.joins || 0,
+          conversionRate: affiliateStats.conversionRate || 0,
+          totalEarnings: affiliateStats.totalEarnings || 0,
+          userRank: currentRank,
+          commissionRate: rankInfo.commission
+        });
       }
     });
 
@@ -127,17 +148,36 @@ export default function AffiliateProgram() {
   useEffect(() => {
     if (!user?.id || !affiliateStatus.isApproved) return;
 
-    const unsubscribe = onSnapshot(
-      query(
-        collection(firestore, 'users'),
-        where('referrerCode', '==', user.id.slice(-8)),
-        orderBy('createdAt', 'desc'),
-        limit(50)
-      ),
-      (snapshot) => {
-        const users: ReferralUser[] = snapshot.docs.map(doc => {
+    const loadReferralUsers = async () => {
+      try {
+        // Query for users with referrerCode field (new format)
+        const referrerCodeQuery = query(
+          collection(firestore, 'users'),
+          where('referrerCode', '==', user.id.slice(-8)),
+          orderBy('createdAt', 'desc'),
+          limit(50)
+        );
+        
+        // Query for users with referredBy field (old format)
+        const referredByQuery = query(
+          collection(firestore, 'users'),
+          where('referredBy', '==', user.id.slice(-8)),
+          orderBy('createdAt', 'desc'),
+          limit(50)
+        );
+        
+        const [referrerCodeSnapshot, referredBySnapshot] = await Promise.all([
+          getDocs(referrerCodeQuery),
+          getDocs(referredByQuery)
+        ]);
+        
+        // Combine results and remove duplicates
+        const allUsers = new Map();
+        
+        // Add users from referrerCode query
+        referrerCodeSnapshot.docs.forEach(doc => {
           const data = doc.data();
-          return {
+          allUsers.set(doc.id, {
             id: doc.id,
             name: data.name || 'Unknown',
             email: data.email || '',
@@ -145,13 +185,40 @@ export default function AffiliateProgram() {
             status: data.status === 'active' ? 'active' : 'inactive',
             commissionEarned: data.commissionEarned || 0,
             totalSpent: data.totalSpent || 0
-          };
+          });
         });
+        
+        // Add users from referredBy query
+        referredBySnapshot.docs.forEach(doc => {
+          const data = doc.data();
+          allUsers.set(doc.id, {
+            id: doc.id,
+            name: data.name || 'Unknown',
+            email: data.email || '',
+            joinedAt: data.createdAt,
+            status: data.status === 'active' ? 'active' : 'inactive',
+            commissionEarned: data.commissionEarned || 0,
+            totalSpent: data.totalSpent || 0
+          });
+        });
+        
+        const users = Array.from(allUsers.values());
+        users.sort((a, b) => b.joinedAt?.getTime?.() - a.joinedAt?.getTime?.());
+        
+        console.log(`AffiliateProgram: Loaded ${users.length} referral users for affiliate ${user.id.slice(-8)}`, {
+          referrerCodeCount: referrerCodeSnapshot.size,
+          referredByCount: referredBySnapshot.size,
+          totalUnique: users.length
+        });
+        
         setReferralUsers(users);
+      } catch (error) {
+        console.error('Error loading referral users:', error);
+        setReferralUsers([]);
       }
-    );
+    };
 
-    return () => unsubscribe();
+    loadReferralUsers();
   }, [user?.id, affiliateStatus.isApproved]);
 
   // Check if user can edit referral link (once every 7 days)
@@ -510,7 +577,10 @@ export default function AffiliateProgram() {
             <div className="mb-4">
               <div className="text-sm text-slate-400 mb-2">Your Current Rate</div>
               <div className="text-3xl font-bold text-blue-400">
-                {affiliateStatus.commissionRate}%
+                {userCommissionRate}%
+              </div>
+              <div className="text-sm text-slate-500 mt-1">
+                {getRankInfo(userRank).name}
               </div>
             </div>
 
