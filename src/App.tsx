@@ -31,6 +31,7 @@ import SecretAdminReferrals from './pages/SecretAdmin/AdminReferrals';
 import SecretAdminAffiliates from './pages/SecretAdmin/AdminAffiliates';
 import SecretAdminNotifications from './pages/SecretAdmin/AdminNotifications';
 import AdminDLXListing from './pages/SecretAdmin/AdminDLXListing';
+import AdminReviews from './pages/SecretAdmin/AdminReviews';
 
 // Public pages
 // Removed public pages: Exchanges, Pricing, Tutorials, Docs, Blogs, Apply
@@ -174,6 +175,7 @@ function App() {
         <Route path="/secret-admin/service-requests" element={<SecretAdminSupport />} />
         <Route path="/secret-admin/service-requests/manage" element={<AdminServiceManage />} />
         <Route path="/secret-admin/dlx-listing" element={<AdminDLXListing />} />
+        <Route path="/secret-admin/reviews" element={<AdminReviews />} />
         <Route path="/secret-admin/settings" element={<SecretAdminSettings />} />
       </Route>
 

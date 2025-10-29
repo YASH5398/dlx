@@ -341,6 +341,61 @@ app.get('/api/messages', async (req, res) => {
   }
 });
 
+// Service Reviews API - fetch reviews for a service (dummy + real)
+// GET /api/services/:serviceId/reviews
+app.get('/api/services/:serviceId/reviews', async (req, res) => {
+  try {
+    const { serviceId } = req.params;
+    if (!serviceId || typeof serviceId !== 'string') {
+      return res.status(400).json({ error: 'Invalid or missing serviceId' });
+    }
+
+    const colRef = db.collection('services').doc(serviceId).collection('reviews');
+    // Prefer server-side ordering when possible
+    let snap;
+    try {
+      snap = await colRef.orderBy('createdAt', 'desc').get();
+    } catch {
+      snap = await colRef.get();
+    }
+
+    const reviews = [];
+    snap.forEach((d) => {
+      const r = d.data() || {};
+      const created = r.createdAt;
+      let createdAtIso = '';
+      try {
+        if (created && typeof created.toDate === 'function') {
+          createdAtIso = created.toDate().toISOString();
+        } else if (typeof created === 'string') {
+          createdAtIso = new Date(created).toISOString();
+        }
+      } catch {}
+
+      reviews.push({
+        id: d.id,
+        userName: r.userName || 'Anonymous',
+        rating: Number(r.rating || 0),
+        review: String(r.review || ''),
+        isDummy: Boolean(r.isDummy || false),
+        createdAt: createdAtIso,
+      });
+    });
+
+    // Fallback client-side sort if needed
+    reviews.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+
+    if (reviews.length === 0) {
+      return res.json({ reviews: [], message: 'No reviews yet.' });
+    }
+
+    return res.json({ reviews });
+  } catch (e) {
+    console.error('Failed to fetch service reviews:', e);
+    return res.status(500).json({ error: 'Failed to fetch service reviews' });
+  }
+});
+
 app.post('/api/support/tickets/:ticketId/ai-chat', async (req, res) => {
   try {
     const { ticketId } = req.params;

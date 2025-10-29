@@ -66,14 +66,23 @@ const REVIEWER_NAMES = [
   "Brandon Lewis"
 ];
 
-function generateDummyReviews(serviceName: string, min = 12, max = 18): Review[] {
+function generateDummyReviews(serviceName: string, serviceId: string, min = 12, max = 18): Review[] {
   const count = Math.floor(Math.random() * (max - min + 1)) + min;
   const list: Review[] = [];
+  
+  // Generate consistent random seed based on serviceId for reproducible ratings
+  const seed = serviceId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const seededRandom = (index: number) => {
+    const x = Math.sin(seed + index) * 10000;
+    return x - Math.floor(x);
+  };
+  
   for (let i = 0; i < count; i++) {
-    const name = REVIEWER_NAMES[Math.floor(Math.random() * REVIEWER_NAMES.length)];
-    const text = REVIEW_TEXTS[Math.floor(Math.random() * REVIEW_TEXTS.length)];
-    const avatar = REVIEW_AVATARS[Math.floor(Math.random() * REVIEW_AVATARS.length)];
-    const rating = Math.round((Math.random() * 0.5 + 4.5) * 10) / 10;
+    const name = REVIEWER_NAMES[Math.floor(seededRandom(i) * REVIEWER_NAMES.length)];
+    const text = REVIEW_TEXTS[Math.floor(seededRandom(i + 100) * REVIEW_TEXTS.length)];
+    const avatar = REVIEW_AVATARS[Math.floor(seededRandom(i + 200) * REVIEW_AVATARS.length)];
+    // Generate rating between 4.0 and 5.0 with some variation
+    const rating = Math.round((seededRandom(i + 300) * 1.0 + 4.0) * 10) / 10;
     list.push({ id: `dummy-${serviceName}-${i}`, name, text, rating, avatar });
   }
   return list;
@@ -152,7 +161,7 @@ export const useReviews = (serviceId: string | null, serviceName: string) => {
     return () => { cancelled = true; };
   }, [user?.id, serviceId, serviceName]);
 
-  const dummy = useMemo(() => generateDummyReviews(serviceName), [serviceName]);
+  const dummy = useMemo(() => generateDummyReviews(serviceName, serviceId || ''), [serviceName, serviceId]);
 
   const mergedReviews = useMemo(() => {
     // Real first, then dummy; keep cap around 18-24 to maintain UX density
@@ -161,11 +170,25 @@ export const useReviews = (serviceId: string | null, serviceName: string) => {
   }, [firestoreReviews, dummy]);
 
   const averageRating = useMemo(() => {
-    if (firestoreReviews.length === 0) return 4.8; // baseline from dummy
-    const sum = firestoreReviews.reduce((acc, r) => acc + (Number(r.rating) || 0), 0);
-    const avg = sum / firestoreReviews.length;
-    return Math.round(avg * 10) / 10;
-  }, [firestoreReviews]);
+    // If we have real Firestore reviews, calculate average from them
+    if (firestoreReviews.length > 0) {
+      const sum = firestoreReviews.reduce((acc, r) => acc + (Number(r.rating) || 0), 0);
+      const avg = sum / firestoreReviews.length;
+      return Math.round(avg * 10) / 10;
+    }
+    
+    // If no real reviews, generate a unique random rating between 4.0-5.0 based on serviceId
+    if (serviceId) {
+      const seed = serviceId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      const random = Math.sin(seed) * 10000;
+      const normalized = random - Math.floor(random);
+      const rating = Math.round((normalized * 1.0 + 4.0) * 10) / 10;
+      return Math.max(4.0, Math.min(5.0, rating));
+    }
+    
+    // Fallback to 4.8 if no serviceId
+    return 4.8;
+  }, [firestoreReviews, serviceId]);
 
   const openReviewModal = () => setIsReviewModalOpen(true);
   const closeReviewModal = () => setIsReviewModalOpen(false);
@@ -203,6 +226,7 @@ export const useReviews = (serviceId: string | null, serviceName: string) => {
     reviews: mergedReviews,
     averageRating,
     realReviewsCount: firestoreReviews.length,
+    totalReviewsCount: mergedReviews.length,
     loading,
     error,
     canWriteReview,

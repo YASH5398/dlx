@@ -236,6 +236,7 @@ export default function SecretAdminLayout() {
     { to: '/secret-admin/affiliates', label: 'Affiliates', icon: UserGroupIcon },
     { to: '/secret-admin/notifications', label: 'Notifications', icon: BellIcon, badge: 5 },
     { to: '/secret-admin/dlx-listing', label: 'DLX Listing', icon: RocketLaunchIcon },
+    { to: '/secret-admin/reviews', label: 'Reviews Management', icon: Package },
     { to: '/secret-admin/settings', label: 'Settings', icon: Cog6ToothIcon },
   ];
 

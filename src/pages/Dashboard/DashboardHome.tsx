@@ -19,7 +19,7 @@ import AffiliateJoinModal from '../../components/AffiliateJoinModal';
 import AffiliateCongratulationsModal from '../../components/AffiliateCongratulationsModal';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
-import { Share2, Crown, Sparkles, CheckCircle, TrendingUp, Package, ShoppingCart, ArrowRight, X, AlertCircle, DollarSign, Download, ChevronLeft, ChevronRight, XCircle } from 'lucide-react';
+import { Star, Share2, Crown, Sparkles, CheckCircle, TrendingUp, Package, ShoppingCart, ArrowRight, X, AlertCircle, DollarSign, Download, ChevronLeft, ChevronRight, XCircle } from 'lucide-react';
 import ReviewSystem from '../../components/ReviewSystem';
 
 import type { ServiceItem } from '../../utils/services';
@@ -47,6 +47,34 @@ interface StaticService {
   gradient: string;
   features: string[];
   category: string;
+}
+
+// Helper function to generate consistent ratings for service cards
+function getServiceRating(serviceId: string): number {
+  const seed = serviceId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const random = Math.sin(seed) * 10000;
+  const normalized = random - Math.floor(random);
+  const rating = Math.round((normalized * 1.0 + 4.0) * 10) / 10;
+  return Math.max(4.0, Math.min(5.0, rating));
+}
+
+// Persistent unique rating for digital products (localStorage)
+function getProductRating(productId: string): number {
+  const STORAGE_KEY = 'dlx_product_ratings_v1';
+  let map: Record<string, number> = {};
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) map = JSON.parse(raw) || {};
+  } catch {}
+  if (map[productId] !== undefined) return map[productId];
+  // Deterministic rating based on productId
+  const seed = productId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const random = Math.sin(seed) * 10000;
+  const normalized = random - Math.floor(random);
+  const rating = Math.max(4.0, Math.min(5.0, Math.round((normalized * 1.0 + 4.0) * 10) / 10));
+  map[productId] = rating;
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(map)); } catch {}
+  return rating;
 }
 
 export default function DashboardHome() {
@@ -91,12 +119,7 @@ export default function DashboardHome() {
   const [openReviewServiceName, setOpenReviewServiceName] = useState<string>('');
   const [showReviews, setShowReviews] = useState(false);
 
-  const reviewEnabledServiceNames = new Set<string>([
-    'Affiliate + Referral App System',
-    'E-commerce Mobile App',
-    'Android App (Linked with Website)',
-    'MLM Website Setup',
-  ]);
+  // All services now support reviews - no need for specific service filtering
 
   const reviewerAvatars = [
     '/assets/reviewers/avatar1.svg',
@@ -962,7 +985,7 @@ export default function DashboardHome() {
                       </svg>
                     ))}
                   </div>
-                  <span className="text-white text-xs font-semibold ml-1">4.8</span>
+                  <span className="text-white text-xs font-semibold ml-1">{getServiceRating(cat.id).toFixed(1)}★</span>
                 </div>
               </div>
 
@@ -1167,7 +1190,7 @@ export default function DashboardHome() {
                         </p>
                       </div>
 
-                    {/* Rating + Reviewer Avatars (only for selected services in MLM & Mobile) */}
+                    {/* Rating + Reviewer Avatars (for all services) */}
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-1">
                         <div className="flex">
@@ -1177,25 +1200,24 @@ export default function DashboardHome() {
                             </svg>
                           ))}
                         </div>
-                        <span className="text-sm text-slate-400 ml-1">4.8</span>
+                        <span className="text-sm text-slate-400 ml-1">{getServiceRating(service.id).toFixed(1)}★</span>
                       </div>
 
-                      {categoryName === 'MLM & Mobile' && reviewEnabledServiceNames.has(service.name) && (
-                        <button
-                          onClick={() => { setOpenReviewServiceId(service.id); setOpenReviewServiceName(service.name); setShowReviews(true); }}
-                          className="flex -space-x-2 hover:space-x-1 transition-all"
-                          aria-label="View Reviews"
-                        >
-                          {reviewerAvatars.slice(0, 4).map((src, i) => (
-                            <img
-                              key={i}
-                              src={src}
-                              alt="Reviewer"
-                              className="w-6 h-6 rounded-full border border-slate-700"
-                            />
-                          ))}
-                        </button>
-                      )}
+                      {/* Show review avatars for all services */}
+                      <button
+                        onClick={() => { setOpenReviewServiceId(service.id); setOpenReviewServiceName(service.name); setShowReviews(true); }}
+                        className="flex -space-x-2 hover:space-x-1 transition-all"
+                        aria-label="View Reviews"
+                      >
+                        {reviewerAvatars.slice(0, 4).map((src, i) => (
+                          <img
+                            key={i}
+                            src={src}
+                            alt="Reviewer"
+                            className="w-6 h-6 rounded-full border border-slate-700"
+                          />
+                        ))}
+                      </button>
                     </div>
 
                     {/* Buttons */}
@@ -1206,22 +1228,13 @@ export default function DashboardHome() {
                       >
                         View Service
                       </button>
-                      {categoryName === 'MLM & Mobile' && reviewEnabledServiceNames.has(service.name) && (
-                        <button
-                          onClick={() => { setOpenReviewServiceId(service.id); setOpenReviewServiceName(service.name); setShowReviews(true); }}
-                          className="px-4 py-3 rounded-xl bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 hover:text-white transition-all duration-300 border border-slate-600/50 hover:border-slate-500/50 text-sm"
-                        >
-                          View Reviews
-                        </button>
-                      )}
+                      {/* View Reviews icon button for all services */}
                       <button
-                        onClick={() => {
-                          const referralLink = `${window.location.origin}/signup?ref=${user?.id}`;
-                          navigator.clipboard.writeText(referralLink);
-                        }}
+                        onClick={() => { setOpenReviewServiceId(service.id); setOpenReviewServiceName(service.name); setShowReviews(true); }}
                         className="px-4 py-3 rounded-xl bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 hover:text-white transition-all duration-300 border border-slate-600/50 hover:border-slate-500/50"
+                        title="View Reviews"
                       >
-                        <Share2 className="w-4 h-4" />
+                        <Star className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
@@ -1323,14 +1336,14 @@ export default function DashboardHome() {
                       {[...Array(5)].map((_, i) => (
                         <svg
                           key={i}
-                          className={`w-4 h-4 ${i < 4 ? 'text-yellow-400' : 'text-slate-600'}`}
+                          className={`w-4 h-4 ${i < Math.round(getProductRating(product.id)) ? 'text-yellow-400' : 'text-slate-600'}`}
                           fill="currentColor"
                           viewBox="0 0 20 20"
                         >
                           <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                         </svg>
                       ))}
-                      <span className="text-xs text-slate-400 ml-1">(4.2)</span>
+                      <span className="text-xs text-slate-400 ml-1">({getProductRating(product.id).toFixed(1)})</span>
                     </div>
 
                     {/* Title */}
@@ -1361,19 +1374,7 @@ export default function DashboardHome() {
                         </button>
                       </div>
 
-                      {/* Share Icon for Affiliates */}
-                      {affiliateStatus.isApproved && (
-                        <button
-                          onClick={() => {
-                            const referralLink = `${window.location.origin}/digital-products?ref=${user?.id}`;
-                            navigator.clipboard.writeText(referralLink);
-                          }}
-                          className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-slate-700/30 hover:bg-slate-600/30 text-slate-300 hover:text-white transition-all duration-200 text-sm"
-                        >
-                          <Share2 className="w-4 h-4" />
-                          Share & Earn
-                        </button>
-                      )}
+                      {/* Share & Earn removed */}
                     </div>
                   </div>
 
@@ -1476,14 +1477,14 @@ export default function DashboardHome() {
                       {[...Array(5)].map((_, i) => (
                         <svg
                           key={i}
-                          className={`w-4 h-4 ${i < 4 ? 'text-yellow-400' : 'text-slate-600'}`}
+                          className={`w-4 h-4 ${i < Math.round(getProductRating(product.id)) ? 'text-yellow-400' : 'text-slate-600'}`}
                           fill="currentColor"
                           viewBox="0 0 20 20"
                         >
                           <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                         </svg>
                       ))}
-                      <span className="text-xs text-slate-400 ml-1">(4.2)</span>
+                      <span className="text-xs text-slate-400 ml-1">({getProductRating(product.id).toFixed(1)})</span>
                     </div>
 
                     {/* Title */}
@@ -1514,19 +1515,7 @@ export default function DashboardHome() {
                         </button>
                       </div>
 
-                      {/* Share Icon for Affiliates */}
-                      {affiliateStatus.isApproved && (
-                        <button
-                          onClick={() => {
-                            const referralLink = `${window.location.origin}/digital-products?ref=${user?.id}`;
-                            navigator.clipboard.writeText(referralLink);
-                          }}
-                          className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-slate-700/30 hover:bg-slate-600/30 text-slate-300 hover:text-white transition-all duration-200 text-sm"
-                        >
-                          <Share2 className="w-4 h-4" />
-                          Share & Earn
-                        </button>
-                      )}
+                      {/* Share & Earn removed */}
                     </div>
                   </div>
 

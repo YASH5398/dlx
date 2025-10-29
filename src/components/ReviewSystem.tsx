@@ -13,7 +13,7 @@ const ReviewSystem: React.FC<ReviewSystemProps> = ({ serviceId, serviceName, isO
   const {
     reviews,
     averageRating,
-    realReviewsCount,
+    totalReviewsCount,
     loading,
     error,
     canWriteReview,
@@ -65,7 +65,7 @@ const ReviewSystem: React.FC<ReviewSystemProps> = ({ serviceId, serviceName, isO
               ))}
             </div>
             <span className="text-2xl font-bold text-white">{averageRating.toFixed(1)}</span>
-            <span className="text-slate-400">({realReviewsCount} real)</span>
+            <span className="text-slate-400">★ ({totalReviewsCount} Reviews)</span>
           </div>
 
           {error && <div className="mt-2 text-sm text-red-400">{error}</div>}
