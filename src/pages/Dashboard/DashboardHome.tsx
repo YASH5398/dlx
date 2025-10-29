@@ -50,7 +50,7 @@ interface StaticService {
 export default function DashboardHome() {
   const { user } = useUser();
   // const { wallet } = useWallet();
-  const { totalEarnings, activeReferrals, tier, loading: referralsLoading } = useReferral();
+  const { totalEarnings, activeReferrals, referralCount, tier, loading: referralsLoading } = useReferral();
   const { userRankInfo } = useUserRank();
   const { affiliateStatus, joinAffiliateProgram, getAffiliateBadgeText, getAffiliateStatusText, canJoinAffiliate, canReapply } = useAffiliateStatus();
   const { shouldHideBanners } = useAffiliateBannerVisibility();
@@ -239,10 +239,15 @@ export default function DashboardHome() {
 
   // Removed automatic affiliate popup - users must manually join
 
-  // Show congratulations modal when affiliate gets approved
+  // Show congratulations modal when affiliate gets approved (only once)
   useEffect(() => {
     if (affiliateStatus.isApproved && affiliateStatus.isPartner) {
-      setAffiliateCongratulationsModalOpen(true);
+      // Check if we've already shown the congratulations modal
+      const hasShownCongratulations = localStorage.getItem('affiliate-congratulations-shown');
+      if (!hasShownCongratulations) {
+        setAffiliateCongratulationsModalOpen(true);
+        localStorage.setItem('affiliate-congratulations-shown', 'true');
+      }
     }
   }, [affiliateStatus.isApproved, affiliateStatus.isPartner]);
 
@@ -1129,7 +1134,7 @@ export default function DashboardHome() {
               <div className="h-1 bg-gradient-to-r from-orange-500 to-amber-600"></div>
             </div>
 
-            {/* Active Referrals Card */}
+            {/* Total Referrals Card */}
             <div className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-purple-500/20 hover:shadow-2xl transition-all duration-300 overflow-hidden border border-slate-700/50 hover:border-purple-500/50">
               <div className="absolute inset-0 bg-gradient-to-br from-purple-600/10 to-pink-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               <div className="relative p-6">
@@ -1141,11 +1146,11 @@ export default function DashboardHome() {
                     Live
                   </div>
                 </div>
-                <h3 className="text-sm font-medium text-slate-400 mb-1">Active Referrals</h3>
+                <h3 className="text-sm font-medium text-slate-400 mb-1">Total Referrals</h3>
                 <p className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-                  {referralsLoading ? 'Loading...' : (activeReferrals || 0)}
+                  {referralsLoading ? 'Loading...' : (referralCount || 0)}
                 </p>
-                <p className="text-xs text-slate-500 mt-2">Total Referrals • Orders: {ordersCount}</p>
+                <p className="text-xs text-slate-500 mt-2">All Referrals • Orders: {ordersCount}</p>
               </div>
               <div className="h-1 bg-gradient-to-r from-purple-500 to-pink-600"></div>
             </div>
@@ -1754,7 +1759,11 @@ export default function DashboardHome() {
       {/* Congratulations Modal */}
       <AffiliateCongratulationsModal
         isOpen={affiliateCongratulationsModalOpen}
-        onClose={() => setAffiliateCongratulationsModalOpen(false)}
+        onClose={() => {
+          setAffiliateCongratulationsModalOpen(false);
+          // Clear the flag so it can be shown again if status changes
+          localStorage.removeItem('affiliate-congratulations-shown');
+        }}
         commissionRate={userRankInfo.commissionPercentage}
       />
 

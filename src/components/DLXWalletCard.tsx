@@ -2,10 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { doc, onSnapshot, collection, query, orderBy, where } from 'firebase/firestore';
 import { firestore } from '../firebase';
 import { useUser } from '../context/UserContext';
-import { useDailyIncome } from '../hooks/useDailyIncome';
 import { useReferralIncome } from '../hooks/useReferralIncome';
 import { Dialog, Transition } from '@headlessui/react';
-import { XMarkIcon, CurrencyDollarIcon, ClockIcon, UserGroupIcon, UsersIcon, UserIcon, UserPlusIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, CurrencyDollarIcon, ClockIcon, UserGroupIcon } from '@heroicons/react/24/outline';
 
 interface DLXWalletCardProps {
   className?: string;
@@ -36,16 +35,6 @@ interface PriceData {
 
 const DLXWalletCard: React.FC<DLXWalletCardProps> = ({ className = '' }) => {
   const { user } = useUser();
-  const { 
-    stats: dailyIncomeStats, 
-    refreshing, 
-    refreshStats,
-    getTotalEarnings,
-    getLevel1Earnings,
-    getLevel2Earnings,
-    getUserEarnings,
-    getActiveReferralsCount
-  } = useDailyIncome();
   
   const {
     incomeData: referralIncomeData,
@@ -285,65 +274,6 @@ const DLXWalletCard: React.FC<DLXWalletCardProps> = ({ className = '' }) => {
           </div>
         </div>
 
-        {/* Daily Income Breakdown */}
-        {dailyIncomeStats.today && (
-          <div className="mt-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-cyan-300 text-sm font-medium">Today's Income</span>
-              <button
-                onClick={refreshStats}
-                disabled={refreshing}
-                className="p-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 transition-colors duration-200 disabled:opacity-50"
-              >
-                <svg className={`w-4 h-4 text-cyan-400 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-3">
-              {/* User Daily Earnings */}
-              <div className="bg-white/5 rounded-xl p-3 border border-white/10">
-                <div className="flex items-center gap-2 mb-1">
-                  <UserIcon className="w-4 h-4 text-green-400" />
-                  <div className="text-xs text-cyan-300">Your Daily</div>
-                </div>
-                <div className="text-lg font-semibold text-white">{getUserEarnings()} DLX</div>
-                <div className="text-xs text-gray-400">Active: 15, Inactive: 10</div>
-              </div>
-
-              {/* Level 1 Referral Income */}
-              <div className="bg-white/5 rounded-xl p-3 border border-white/10">
-                <div className="flex items-center gap-2 mb-1">
-                  <UsersIcon className="w-4 h-4 text-blue-400" />
-                  <div className="text-xs text-cyan-300">Level 1 (Rank-based)</div>
-                </div>
-                <div className="text-lg font-semibold text-white">{getReferralLevel1Earnings('DLX').toFixed(1)} DLX</div>
-                <div className="text-xs text-gray-400">{getReferralCounts().level1} referrals</div>
-              </div>
-
-              {/* Level 2 Referral Income */}
-              <div className="bg-white/5 rounded-xl p-3 border border-white/10">
-                <div className="flex items-center gap-2 mb-1">
-                  <UserPlusIcon className="w-4 h-4 text-purple-400" />
-                  <div className="text-xs text-cyan-300">Level 2 (15% of L1)</div>
-                </div>
-                <div className="text-lg font-semibold text-white">{getReferralLevel2Earnings('DLX').toFixed(1)} DLX</div>
-                <div className="text-xs text-gray-400">{getReferralCounts().level2} referrals</div>
-              </div>
-
-              {/* Total Daily Income */}
-              <div className="bg-gradient-to-r from-cyan-500/20 to-blue-500/20 rounded-xl p-3 border border-cyan-400/30">
-                <div className="flex items-center gap-2 mb-1">
-                  <CurrencyDollarIcon className="w-4 h-4 text-cyan-400" />
-                  <div className="text-xs text-cyan-300 font-medium">Total Daily</div>
-                </div>
-                <div className="text-lg font-bold text-white">{getTotalEarnings().toFixed(1)} DLX</div>
-                <div className="text-xs text-cyan-300">All sources</div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Referral Income Summary */}
         {!referralIncomeLoading && (referralIncomeData.totalIncome.total > 0 || getJoinBonus('total') > 0) && (
@@ -382,22 +312,6 @@ const DLXWalletCard: React.FC<DLXWalletCardProps> = ({ className = '' }) => {
           </div>
         )}
 
-        {/* Progress Bar */}
-        <div className="mt-4">
-          <div className="flex items-center justify-between text-xs text-cyan-300 mb-2">
-            <span>Mining Progress</span>
-            <span>{formatNumber(dlxData.totalMinedDLX)} / 1000 DLX</span>
-          </div>
-          <div className="w-full bg-slate-700/50 rounded-full h-2">
-            <div 
-              className="bg-gradient-to-r from-cyan-500 to-blue-500 h-2 rounded-full transition-all duration-1000"
-              style={{ width: `${Math.min((dlxData.totalMinedDLX / 1000) * 100, 100)}%` }}
-            />
-          </div>
-          <div className="text-xs text-cyan-300 mt-1 text-center">
-            {Math.min((dlxData.totalMinedDLX / 1000) * 100, 100).toFixed(1)}% Complete
-          </div>
-        </div>
 
         {/* Glow Effect */}
         <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-cyan-500/5 via-blue-500/5 to-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />

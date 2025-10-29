@@ -50,6 +50,7 @@ export interface ServiceRequest {
     lineItems: ProposalLineItem[];
     description: string;
     estimatedDelivery: string; // Date string
+    deliveryDuration: DeliveryDuration;
     submittedAt: Timestamp;
     submittedBy: string;
   };
@@ -107,6 +108,11 @@ export interface ProposalLineItem {
   quantity: number;
   unitPrice: number;
   totalPrice: number;
+}
+
+export interface DeliveryDuration {
+  value: number;
+  unit: 'days' | 'weeks';
 }
 
 export interface Inquiry {
@@ -194,14 +200,15 @@ export async function createServiceRequest(data: {
 
       // Create initial chat message
       const chatRef = doc(chatMessagesCol, `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
-      const initialMessage: ChatMessage = {
+      const initialMessage: ChatMessage & { requestId: string } = {
         id: chatRef.id,
         senderId: userId,
         senderName: userName,
         senderType: 'user',
         message: `New service request submitted: ${serviceTitle}`,
         createdAt: serverTimestamp() as Timestamp,
-        read: false
+        read: false,
+        requestId: requestId
       };
       tx.set(chatRef, initialMessage);
 
@@ -250,6 +257,7 @@ export async function submitAdminProposal(
     lineItems: ProposalLineItem[];
     description: string;
     estimatedDelivery: string;
+    deliveryDuration: DeliveryDuration;
   }
 ): Promise<void> {
   try {
@@ -284,7 +292,7 @@ export async function submitAdminProposal(
         type: 'proposal',
         title: 'Proposal Received',
         message: `Admin has submitted a proposal for your ${requestData.serviceTitle} request. Total: ${proposal.currency} ${proposal.totalPrice}`,
-        createdAt: serverTimestamp() as Timestamp,
+        createdAt: Timestamp.now(),
         read: false,
         actionUrl: `/orders/${requestId}`
       };
@@ -295,14 +303,15 @@ export async function submitAdminProposal(
 
       // Add chat message
       const chatRef = doc(chatMessagesCol, `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
-      const chatMessage: ChatMessage = {
+      const chatMessage: ChatMessage & { requestId: string } = {
         id: chatRef.id,
         senderId: adminId,
         senderName: adminName,
         senderType: 'admin',
         message: `Proposal submitted: ${proposal.currency} ${proposal.totalPrice}. ${proposal.description}`,
         createdAt: serverTimestamp() as Timestamp,
-        read: false
+        read: false,
+        requestId
       };
       tx.set(chatRef, chatMessage);
     });
@@ -422,7 +431,7 @@ export async function processPayment(
         message: paymentData.method === 'wallet' 
           ? `Payment of ${paymentData.currency} ${paymentData.amount} has been processed from your wallet.`
           : `Payment of ${paymentData.currency} ${paymentData.amount} has been submitted for admin review.`,
-        createdAt: serverTimestamp() as Timestamp,
+        createdAt: Timestamp.now(),
         read: false
       };
 
@@ -495,7 +504,7 @@ export async function reviewPayment(
         message: action === 'approve' 
           ? `Your payment has been approved. Work will begin shortly.`
           : `Your payment was rejected. ${reason || 'Please contact support for more information.'}`,
-        createdAt: serverTimestamp() as Timestamp,
+        createdAt: Timestamp.now(),
         read: false
       };
 
@@ -505,7 +514,7 @@ export async function reviewPayment(
 
       // Add chat message
       const chatRef = doc(chatMessagesCol, `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
-      const chatMessage: ChatMessage = {
+      const chatMessage: ChatMessage & { requestId: string } = {
         id: chatRef.id,
         senderId: adminId,
         senderName: adminName,
@@ -514,7 +523,8 @@ export async function reviewPayment(
           ? `Payment approved. Work will begin shortly.`
           : `Payment rejected. ${reason || 'Please contact support for more information.'}`,
         createdAt: serverTimestamp() as Timestamp,
-        read: false
+        read: false,
+        requestId
       };
       tx.set(chatRef, chatMessage);
     });
@@ -579,7 +589,7 @@ export async function updateOrderStatus(
         type: 'status',
         title: `Order ${status.charAt(0).toUpperCase() + status.slice(1)}`,
         message: message || statusMessages[status] || `Order status updated to ${status}.`,
-        createdAt: serverTimestamp() as Timestamp,
+        createdAt: Timestamp.now(),
         read: false
       };
 
@@ -589,14 +599,15 @@ export async function updateOrderStatus(
 
       // Add chat message
       const chatRef = doc(chatMessagesCol, `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
-      const chatMessage: ChatMessage = {
+      const chatMessage: ChatMessage & { requestId: string } = {
         id: chatRef.id,
         senderId: adminId,
         senderName: adminName,
         senderType: 'admin',
         message: message || `Order status updated to ${status}.`,
         createdAt: serverTimestamp() as Timestamp,
-        read: false
+        read: false,
+        requestId
       };
       tx.set(chatRef, chatMessage);
     });
@@ -629,6 +640,103 @@ export async function updateOrderStatus(
 }
 
 // Release Deliverables
+export async function updateDeliveryDetails(
+  requestId: string,
+  adminId: string,
+  adminName: string,
+  deliverables: {
+    websiteLink?: string;
+    adminPanelLink?: string;
+    credentials?: { username?: string; password?: string };
+    files?: string[];
+    notes?: string;
+  }
+): Promise<void> {
+  try {
+    await runTransaction(firestore, async (tx) => {
+      const requestRef = doc(serviceRequestsCol, requestId);
+      const requestSnap = await tx.get(requestRef);
+      
+      if (!requestSnap.exists()) {
+        throw new Error('Service request not found');
+      }
+
+      const requestData = requestSnap.data() as ServiceRequest;
+
+      // Update with deliverables without changing status
+      tx.update(requestRef, {
+        deliverables: {
+          ...deliverables,
+          updatedAt: serverTimestamp(),
+          updatedBy: adminId
+        },
+        updatedAt: serverTimestamp()
+      });
+
+      // Also update the corresponding order in the orders collection
+      const ordersQuery = query(
+        collection(firestore, 'orders'),
+        where('serviceRequestId', '==', requestId)
+      );
+      const ordersSnapshot = await getDocs(ordersQuery);
+      
+      if (!ordersSnapshot.empty) {
+        const orderDoc = ordersSnapshot.docs[0];
+        tx.update(orderDoc.ref, {
+          deliverables: {
+            ...deliverables,
+            updatedAt: serverTimestamp(),
+            updatedBy: adminId
+          },
+          updatedAt: serverTimestamp()
+        });
+      }
+
+      // Add notification
+      const notification: Notification = {
+        id: crypto.randomUUID(),
+        type: 'deliverable',
+        title: 'Delivery Details Updated',
+        message: 'Your order delivery details have been updated. Check your order details.',
+        createdAt: Timestamp.now(),
+        read: false,
+        actionUrl: `/orders/${requestId}`
+      };
+
+      tx.update(requestRef, {
+        notifications: arrayUnion(notification)
+      });
+
+      // Add chat message
+      const chatRef = doc(chatMessagesCol, `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+      const chatMessage: ChatMessage & { requestId: string } = {
+        id: chatRef.id,
+        senderId: adminId,
+        senderName: adminName,
+        senderType: 'admin',
+        message: 'Delivery details have been updated. Check your order details for the latest information.',
+        createdAt: serverTimestamp() as Timestamp,
+        read: false,
+        requestId
+      };
+      tx.set(chatRef, chatMessage);
+    });
+
+    // Notify user
+    const requestDoc = await getDoc(doc(firestore, 'service_requests', requestId));
+    if (requestDoc.exists()) {
+      const requestData = requestDoc.data() as ServiceRequest;
+      await notifyUser(requestData.userId,
+        'Delivery Details Updated',
+        'Your order delivery details have been updated. Check your order details for the latest information.');
+    }
+
+  } catch (error) {
+    console.error('Failed to update delivery details:', error);
+    throw error;
+  }
+}
+
 export async function releaseDeliverables(
   requestId: string,
   adminId: string,
@@ -663,13 +771,33 @@ export async function releaseDeliverables(
         updatedAt: serverTimestamp()
       });
 
+      // Also update the corresponding order in the orders collection
+      const ordersQuery = query(
+        collection(firestore, 'orders'),
+        where('serviceRequestId', '==', requestId)
+      );
+      const ordersSnapshot = await getDocs(ordersQuery);
+      
+      if (!ordersSnapshot.empty) {
+        const orderDoc = ordersSnapshot.docs[0];
+        tx.update(orderDoc.ref, {
+          deliverables: {
+            ...deliverables,
+            releasedAt: serverTimestamp(),
+            releasedBy: adminId
+          },
+          orderStatus: 'completed',
+          updatedAt: serverTimestamp()
+        });
+      }
+
       // Add notification
       const notification: Notification = {
         id: crypto.randomUUID(),
         type: 'deliverable',
         title: 'Deliverables Released',
         message: 'Your order deliverables have been released. Check your order details.',
-        createdAt: serverTimestamp() as Timestamp,
+        createdAt: Timestamp.now(),
         read: false,
         actionUrl: `/orders/${requestId}`
       };
@@ -680,14 +808,15 @@ export async function releaseDeliverables(
 
       // Add chat message
       const chatRef = doc(chatMessagesCol, `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
-      const chatMessage: ChatMessage = {
+      const chatMessage: ChatMessage & { requestId: string } = {
         id: chatRef.id,
         senderId: adminId,
         senderName: adminName,
         senderType: 'admin',
         message: 'Deliverables have been released. Check your order details for access information.',
         createdAt: serverTimestamp() as Timestamp,
-        read: false
+        read: false,
+        requestId
       };
       tx.set(chatRef, chatMessage);
     });
@@ -718,21 +847,22 @@ export async function sendChatMessage(
   attachments?: string[]
 ): Promise<void> {
   try {
-    const chatMessage: ChatMessage = {
+    // Avoid writing undefined fields to Firestore
+    const baseMessage: any = {
       id: crypto.randomUUID(),
       senderId,
       senderName,
       senderType,
       message,
-      attachments,
       createdAt: serverTimestamp() as Timestamp,
-      read: false
-    };
-
-    await addDoc(chatMessagesCol, {
-      ...chatMessage,
+      read: false,
       requestId
-    });
+    };
+    if (attachments && attachments.length > 0) {
+      baseMessage.attachments = attachments;
+    }
+
+    await addDoc(chatMessagesCol, baseMessage);
 
     // Notify recipient
     const recipientType = senderType === 'user' ? 'admin' : 'user';
@@ -893,6 +1023,43 @@ export async function getServiceRequest(requestId: string): Promise<ServiceReque
     } as ServiceRequest;
   } catch (error) {
     console.error('Failed to get service request:', error);
+    throw error;
+  }
+}
+
+// Submit/Attach Payment Reference (UTR / Transaction ID)
+export async function submitPaymentReference(
+  requestId: string,
+  data: { utr?: string; transactionId?: string }
+): Promise<void> {
+  try {
+    const requestRef = doc(serviceRequestsCol, requestId);
+    // Merge into existing payment object and set/update upiDetails
+    await updateDoc(requestRef, {
+      payment: {
+        upiDetails: {
+          utr: data.utr || null,
+          transactionId: data.transactionId || null
+        }
+      } as any,
+      updatedAt: serverTimestamp()
+    });
+
+    // Optional: add a chat message noting reference submission
+    const chatRef = doc(chatMessagesCol, `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+    const chatMessage: ChatMessage & { requestId: string } = {
+      id: chatRef.id,
+      senderId: requestId,
+      senderName: 'System',
+      senderType: 'user',
+      message: `Payment reference submitted${data.utr ? ` (UTR: ${data.utr})` : ''}${data.transactionId ? ` (TXN: ${data.transactionId})` : ''}.`,
+      createdAt: serverTimestamp() as Timestamp,
+      read: false,
+      requestId
+    };
+    await addDoc(chatMessagesCol, chatMessage);
+  } catch (error) {
+    console.error('Failed to submit payment reference:', error);
     throw error;
   }
 }
