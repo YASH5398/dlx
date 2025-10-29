@@ -121,6 +121,8 @@ export default function Orders() {
   const [usePurchase, setUsePurchase] = useState<boolean>(true);
   const [isPaying, setIsPaying] = useState<boolean>(false);
   const [upiTxnId, setUpiTxnId] = useState<string>('');
+  const [showChatOverlay, setShowChatOverlay] = useState<boolean>(false);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
 
 
   // Fetch orders (Firestore)
@@ -225,6 +227,9 @@ export default function Orders() {
     
     s.on('chat:message', (msg) => {
       setMessages((prev) => [...prev, msg]);
+      if (!showChatOverlay) {
+        setUnreadCount((c) => c + 1);
+      }
     });
     
     return () => {
@@ -1089,6 +1094,84 @@ export default function Orders() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Chat Button (bottom-right) */}
+      {selected && (
+        <button
+          onClick={() => { setShowChatOverlay(true); setUnreadCount(0); }}
+          className="fixed bottom-6 right-6 z-50 rounded-full bg-green-500 hover:bg-green-600 text-white shadow-lg w-14 h-14 flex items-center justify-center relative"
+          title="Chat"
+        >
+          <ChatBubbleLeftRightIcon className="w-6 h-6" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center">
+              {unreadCount}
+            </span>
+          )}
+        </button>
+      )}
+
+      {/* WhatsApp-style Full Screen Chat Overlay */}
+      {showChatOverlay && selected && (
+        <div className="fixed inset-0 z-[60] bg-white text-black flex flex-col animate-in fade-in-50 duration-200">
+          {/* Header - WhatsApp green */}
+          <div className="flex items-center justify-between px-4 py-3 bg-[#128C7E] text-white shadow">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-semibold">DL</div>
+              <div>
+                <div className="font-semibold">Digi Linex Support</div>
+                <div className="text-xs text-white/80">{agentOnline ? 'Online' : 'Offline'}</div>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowChatOverlay(false)}
+              className="px-3 py-1.5 bg-white/10 rounded-lg hover:bg-white/20"
+            >
+              Close
+            </button>
+          </div>
+
+          {/* Messages - white background, WhatsApp bubbles */}
+          <div className="flex-1 overflow-y-auto px-3 py-4 bg-[url('https://i.imgur.com/P0nT7mW.png')] bg-cover bg-center">
+            {chatLoading ? (
+              <div className="h-full flex items-center justify-center text-gray-500">Loading...</div>
+            ) : messages.length === 0 ? (
+              <div className="text-center text-gray-500 py-8">No messages yet</div>
+            ) : (
+              messages.map((msg, i) => {
+                const isUser = msg.senderType === 'USER';
+                const time = msg?.createdAt ? new Date(msg.createdAt).toLocaleTimeString() : '';
+                return (
+                  <div key={i} className={`mb-2 flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[75%] rounded-lg px-3 py-2 text-sm shadow ${isUser ? 'bg-[#DCF8C6]' : 'bg-white border border-gray-200'}`}>
+                      <div className="text-black">{msg.content}</div>
+                      <div className="text-[10px] text-gray-500 mt-1 text-right">{time}</div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Composer */}
+          <div className="p-3 bg-[#F0F0F0] flex gap-2 border-t border-gray-200">
+            <input
+              value={msgInput}
+              onChange={(e) => setMsgInput(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+              placeholder="Type a message"
+              className="flex-1 bg-white border border-gray-300 rounded-full px-4 py-2 text-sm focus:outline-none"
+            />
+            <button
+              onClick={sendMessage}
+              disabled={!msgInput.trim()}
+              className="px-5 py-2 rounded-full bg-[#25D366] hover:bg-[#20bd59] disabled:bg-gray-300 text-white text-sm"
+            >
+              Send
+            </button>
           </div>
         </div>
       )}

@@ -155,55 +155,22 @@ export function useReferral() {
         const userReferralCode = userData?.referralCode || referralCode || fallbackReferralCode;
         
         if (userReferralCode && !unsubReferrals) {
-          // Query for users with referrerCode field (new format)
-          const referrerCodeQuery = query(
-            collection(firestore, 'users'),
-            where('referrerCode', '==', userReferralCode)
-          );
-          
-          // Query for users with referredBy field (old format)
+          // Query for users with referredBy field equal to user ID
           const referredByQuery = query(
             collection(firestore, 'users'),
-            where('referredBy', '==', userReferralCode)
+            where('referredBy', '==', user.id)
           );
           
-          let referrerCodeCount = 0;
-          let referredByCount = 0;
-          let totalReferrals = 0;
-          
-          // Listen to referrerCode query
-          const unsubReferrerCode = onSnapshot(referrerCodeQuery, (referrerCodeSnap) => {
-            referrerCodeCount = referrerCodeSnap.size;
-            totalReferrals = referrerCodeCount + referredByCount;
-            setReferralCount(totalReferrals);
-            
-            console.log('useReferral: Referrals count updated (referrerCode):', { 
-              referrerCodeCount,
-              referredByCount,
-              totalReferrals,
-              referralCode: userReferralCode
-            });
-          });
-          
           // Listen to referredBy query
-          const unsubReferredBy = onSnapshot(referredByQuery, (referredBySnap) => {
-            referredByCount = referredBySnap.size;
-            totalReferrals = referrerCodeCount + referredByCount;
+          unsubReferrals = onSnapshot(referredByQuery, (referredBySnap) => {
+            const totalReferrals = referredBySnap.size;
             setReferralCount(totalReferrals);
             
             console.log('useReferral: Referrals count updated (referredBy):', { 
-              referrerCodeCount,
-              referredByCount,
               totalReferrals,
-              referralCode: userReferralCode
+              userId: user.id
             });
           });
-          
-          // Store both unsubscribe functions
-          unsubReferrals = () => {
-            unsubReferrerCode();
-            unsubReferredBy();
-          };
         }
       }
     });

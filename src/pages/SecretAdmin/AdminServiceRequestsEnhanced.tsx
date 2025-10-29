@@ -5,6 +5,7 @@ import {
   reviewPayment,
   updateOrderStatus,
   releaseDeliverables,
+  updateDeliveryDetails,
   sendChatMessage,
   submitInquiry,
   getChatMessages,
@@ -69,7 +70,9 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
   const [activeTab, setActiveTab] = useState<'overview' | 'chat' | 'actions'>('overview');
   const [supportType, setSupportType] = useState<'all' | 'service_requests' | 'tickets' | 'ai_chat' | 'live_chat'>('all');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [showChatOverlay, setShowChatOverlay] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const detailsTopRef = useRef<HTMLDivElement>(null);
 
   // Filters and sorting
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -84,6 +87,7 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
     currency: 'USD' as 'USD' | 'INR',
     description: '',
     estimatedDelivery: '',
+    deliveryDuration: { value: 5, unit: 'days' as 'days' | 'weeks' },
     lineItems: [] as ProposalLineItem[]
   });
 
@@ -111,6 +115,28 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
   useEffect(() => {
     if (selectedRequest) {
       loadChatMessages(selectedRequest.id!);
+      
+      // Load existing delivery details if they exist
+      if (selectedRequest.deliverables) {
+        setDeliverables({
+          websiteLink: selectedRequest.deliverables.websiteLink || '',
+          adminPanelLink: selectedRequest.deliverables.adminPanelLink || '',
+          username: selectedRequest.deliverables.credentials?.username || '',
+          password: selectedRequest.deliverables.credentials?.password || '',
+          files: selectedRequest.deliverables.files || [],
+          notes: selectedRequest.deliverables.notes || ''
+        });
+      } else {
+        // Reset form if no delivery details exist
+        setDeliverables({
+          websiteLink: '',
+          adminPanelLink: '',
+          username: '',
+          password: '',
+          files: [],
+          notes: ''
+        });
+      }
     }
   }, [selectedRequest]);
 
@@ -119,6 +145,12 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
       chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [chatMessages]);
+
+  useEffect(() => {
+    if (detailsTopRef.current) {
+      detailsTopRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [activeTab]);
 
   const loadRequests = async () => {
     try {
@@ -156,7 +188,8 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
           currency: proposalForm.currency,
           lineItems: proposalForm.lineItems,
           description: proposalForm.description,
-          estimatedDelivery: proposalForm.estimatedDelivery
+          estimatedDelivery: proposalForm.estimatedDelivery,
+          deliveryDuration: proposalForm.deliveryDuration
         }
       );
       setProposalForm({
@@ -164,6 +197,7 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
         currency: 'USD',
         description: '',
         estimatedDelivery: '',
+        deliveryDuration: { value: 5, unit: 'days' },
         lineItems: []
       });
       await loadRequests();
@@ -224,7 +258,7 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
     if (!selectedRequest || !user) return;
     try {
       setSaving(true);
-      await releaseDeliverables(
+      await updateDeliveryDetails(
         selectedRequest.id!,
         user.id,
         user.name,
@@ -239,20 +273,14 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
           notes: deliverables.notes
         }
       );
-      setDeliverables({
-        websiteLink: '',
-        adminPanelLink: '',
-        username: '',
-        password: '',
-        files: [],
-        notes: ''
-      });
+      
+      // Don't clear the form - let admin see what they just saved
       await loadRequests();
       await loadChatMessages(selectedRequest.id!);
-      toast.success('Deliverables released successfully!');
+      toast.success(selectedRequest.deliverables ? 'Delivery details updated successfully!' : 'Delivery details sent successfully!');
     } catch (error) {
-      console.error('Failed to release deliverables:', error);
-      toast.error('Failed to release deliverables. Please try again.');
+      console.error('Failed to update delivery details:', error);
+      toast.error('Failed to update delivery details. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -617,7 +645,7 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
             transition={{ duration: 0.5 }}
             className="lg:col-span-1"
           >
-            <Card className="bg-white/80 backdrop-blur-sm border-gray-200 shadow-lg rounded-2xl sticky top-24">
+            <Card className="bg-white/80 backdrop-blur-sm border-gray-200 shadow-lg rounded-2xl lg:sticky lg:top-24">
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-gray-900 text-xl flex items-center gap-3">
@@ -705,6 +733,21 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
                                 <span>{request.createdAt?.toDate ? request.createdAt.toDate().toLocaleDateString() : new Date(request.createdAt as any).toLocaleDateString()}</span>
                               </div>
                             </div>
+                            <div className="mt-3 flex items-center justify-end">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedRequest(request);
+                                  setShowChatOverlay(true);
+                                }}
+                                className="gap-2 rounded-lg"
+                              >
+                                <MessageSquare className="w-4 h-4" />
+                                Chat
+                              </Button>
+                            </div>
                           </CardContent>
                         </Card>
                       </motion.div>
@@ -724,7 +767,7 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
               className="lg:col-span-3"
             >
               <Card className="bg-white/80 backdrop-blur-sm border-gray-200 shadow-lg rounded-2xl">
-                <CardHeader className="pb-6">
+                <CardHeader className="pb-6" ref={detailsTopRef}>
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex-1">
                       <CardTitle className="text-2xl font-bold text-gray-900 mb-2">{selectedRequest.serviceTitle}</CardTitle>
@@ -751,9 +794,9 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-8">
-                  {/* Mobile Tabs */}
-                  <div className="lg:hidden">
-                    <div className="flex border-b border-gray-200">
+                  {/* Mobile Tabs (sticky, touch friendly) */}
+                  <div className="lg:hidden sticky top-16 z-40 bg-white/90 backdrop-blur border-b border-gray-200 -mx-6 px-6">
+                    <div className="grid grid-cols-3">
                       {[
                         { id: 'overview', label: 'Overview', icon: Eye },
                         { id: 'chat', label: 'Chat', icon: MessageSquare },
@@ -762,11 +805,13 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
                         <button
                           key={tab.id}
                           onClick={() => setActiveTab(tab.id as any)}
-                          className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 text-sm font-medium border-b-2 transition-colors ${
+                          className={`flex items-center justify-center gap-2 py-3.5 px-2 text-[13px] font-semibold border-b-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
                             activeTab === tab.id
-                              ? 'border-blue-500 text-blue-600'
+                              ? 'border-blue-600 text-blue-700'
                               : 'border-transparent text-gray-500 hover:text-gray-700'
                           }`}
+                          aria-current={activeTab === tab.id ? 'page' : undefined}
+                          aria-label={tab.label}
                         >
                           <tab.icon className="w-4 h-4" />
                           {tab.label}
@@ -1102,85 +1147,95 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
                         transition={{ duration: 0.3 }}
                         className="space-y-6"
                       >
-                        {/* Chat Section */}
-                        <Card className="bg-gradient-to-r from-purple-50 to-pink-50 border-purple-200 rounded-xl">
-                          <CardHeader className="pb-4">
-                            <CardTitle className="text-gray-900 text-lg flex items-center gap-3">
-                              <div className="w-8 h-8 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg flex items-center justify-center">
-                                <MessageSquare className="w-5 h-5 text-white" />
-                              </div>
-                              Live Chat
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="space-y-4">
-                              <div className="h-96 overflow-y-auto border border-gray-200 rounded-xl p-4 bg-white scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-                                {chatMessages.length === 0 ? (
-                                  <div className="flex items-center justify-center h-full text-gray-500">
-                                    <div className="text-center">
-                                      <MessageSquare className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                                      <p className="text-sm">No messages yet</p>
-                                      <p className="text-xs text-gray-400">Start a conversation with the user</p>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  chatMessages.map((message) => (
-                                    <motion.div
-                                      key={message.id}
-                                      initial={{ opacity: 0, y: 10 }}
-                                      animate={{ opacity: 1, y: 0 }}
-                                      transition={{ duration: 0.3 }}
-                                      className={`mb-4 ${message.senderType === 'admin' ? 'text-right' : 'text-left'}`}
-                                    >
-                                      <div
-                                        className={`inline-block p-4 rounded-2xl max-w-lg ${
-                                          message.senderType === 'admin' 
-                                            ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white' 
-                                            : 'bg-gray-100 text-gray-900'
-                                        }`}
-                                      >
-                                        <div className="text-xs font-medium opacity-75 mb-1">
-                                          {message.senderName}
-                                        </div>
-                                        <div className="text-sm">{message.message}</div>
-                                        <div className="text-xs opacity-75 mt-1">
-                                          {message.createdAt?.toDate ? message.createdAt.toDate().toLocaleTimeString() : new Date(message.createdAt as any).toLocaleTimeString()}
-                                        </div>
+                        {/* Chat Section - WhatsApp style overlay trigger for mobile */}
+                        <div className="lg:hidden">
+                          <Button
+                            onClick={() => setShowChatOverlay(true)}
+                            className="w-full bg-green-600 hover:bg-green-700 text-white rounded-xl h-12"
+                          >
+                            Open Chat
+                          </Button>
+                        </div>
+                        <div className="hidden lg:block">
+                          <Card className="bg-white border border-gray-200 rounded-xl">
+                            <CardHeader className="pb-4">
+                              <CardTitle className="text-gray-900 text-lg flex items-center gap-3">
+                                <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center">
+                                  <MessageSquare className="w-5 h-5 text-white" />
+                                </div>
+                                Live Chat
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="space-y-4">
+                                <div className="h-96 overflow-y-auto border border-gray-200 rounded-xl p-4 bg-white">
+                                  {chatMessages.length === 0 ? (
+                                    <div className="flex items-center justify-center h-full text-gray-500">
+                                      <div className="text-center">
+                                        <MessageSquare className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                                        <p className="text-sm">No messages yet</p>
+                                        <p className="text-xs text-gray-400">Start a conversation with the user</p>
                                       </div>
-                                    </motion.div>
-                                  ))
-                                )}
-                                <div ref={chatEndRef} />
+                                    </div>
+                                  ) : (
+                                    chatMessages.map((message) => (
+                                      <motion.div
+                                        key={message.id}
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ duration: 0.3 }}
+                                        className={`mb-4 ${message.senderType === 'admin' ? 'text-right' : 'text-left'}`}
+                                      >
+                                        <div
+                                          className={`inline-block px-3 py-2 rounded-2xl max-w-lg ${
+                                            message.senderType === 'admin' 
+                                              ? 'bg-[#d9fdd3] text-gray-900' 
+                                              : 'bg-white border border-gray-200 text-gray-900'
+                                          }`}
+                                        >
+                                          <div className="text-[11px] text-gray-500 mb-1">
+                                            {message.senderName}
+                                          </div>
+                                          <div className="text-sm leading-relaxed">{message.message}</div>
+                                          <div className="text-[10px] text-gray-400 mt-1">
+                                            {message.createdAt?.toDate ? message.createdAt.toDate().toLocaleTimeString() : new Date(message.createdAt as any).toLocaleTimeString()}
+                                          </div>
+                                        </div>
+                                      </motion.div>
+                                    ))
+                                  )}
+                                  <div ref={chatEndRef} />
+                                </div>
+                                <div className="flex gap-3">
+                                  <Input
+                                    type="text"
+                                    value={newMessage}
+                                    onChange={(e) => setNewMessage(e.target.value)}
+                                    className="flex-1 bg-gray-50 border-gray-200 text-gray-900 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 h-12"
+                                    placeholder="Type a message..."
+                                    onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                                  />
+                                  <Button
+                                    onClick={handleConnectToUser}
+                                    disabled={saving}
+                                    className="bg-green-600 hover:bg-green-700 text-white rounded-xl disabled:opacity-50 transition-all duration-300 h-12 px-6"
+                                  >
+                                    <User className="w-4 h-4 mr-2" />
+                                    Connect
+                                  </Button>
+                                  <Button
+                                    onClick={handleSendMessage}
+                                    disabled={saving || !newMessage.trim()}
+                                    className="bg-green-600 hover:bg-green-700 text-white rounded-xl disabled:opacity-50 transition-all duration-300 h-12 px-6"
+                                  >
+                                    <Send className="w-4 h-4 mr-2" />
+                                    Send
+                                  </Button>
+                                </div>
                               </div>
-                              <div className="flex gap-3">
-                                <Input
-                                  type="text"
-                                  value={newMessage}
-                                  onChange={(e) => setNewMessage(e.target.value)}
-                                  className="flex-1 bg-gray-50 border-gray-200 text-gray-900 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 h-12"
-                                  placeholder="Type a message..."
-                                  onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                                />
-                                <Button
-                                  onClick={handleConnectToUser}
-                                  disabled={saving}
-                                  className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-xl disabled:opacity-50 transition-all duration-300 h-12 px-6"
-                                >
-                                  <User className="w-4 h-4 mr-2" />
-                                  Connect
-                                </Button>
-                                <Button
-                                  onClick={handleSendMessage}
-                                  disabled={saving || !newMessage.trim()}
-                                  className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl disabled:opacity-50 transition-all duration-300 h-12 px-6"
-                                >
-                                  <Send className="w-4 h-4 mr-2" />
-                                  Send
-                                </Button>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
+                            </CardContent>
+                          </Card>
+                        </div>
                       </motion.div>
                     )}
 
@@ -1244,15 +1299,49 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
                                   aria-label="Proposal description"
                                 />
                               </div>
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Estimated Delivery</label>
-                                <Input
-                                  type="date"
-                                  value={proposalForm.estimatedDelivery}
-                                  onChange={(e) => setProposalForm(prev => ({ ...prev, estimatedDelivery: e.target.value }))}
-                                  className="bg-white border-gray-200 text-gray-900 rounded-xl focus:ring-2 focus:ring-blue-500 h-12"
-                                  aria-label="Estimated delivery date"
-                                />
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">Estimated Delivery</label>
+                                  <Input
+                                    type="date"
+                                    value={proposalForm.estimatedDelivery}
+                                    onChange={(e) => setProposalForm(prev => ({ ...prev, estimatedDelivery: e.target.value }))}
+                                    className="bg-white border-gray-200 text-gray-900 rounded-xl focus:ring-2 focus:ring-blue-500 h-12"
+                                    aria-label="Estimated delivery date"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">Delivery Duration</label>
+                                  <div className="flex gap-2">
+                                    <Input
+                                      type="number"
+                                      min="1"
+                                      value={proposalForm.deliveryDuration.value}
+                                      onChange={(e) => setProposalForm(prev => ({ 
+                                        ...prev, 
+                                        deliveryDuration: { ...prev.deliveryDuration, value: Number(e.target.value) }
+                                      }))}
+                                      className="bg-white border-gray-200 text-gray-900 rounded-xl focus:ring-2 focus:ring-blue-500 h-12"
+                                      placeholder="5"
+                                      aria-label="Delivery duration value"
+                                    />
+                                    <Select
+                                      value={proposalForm.deliveryDuration.unit}
+                                      onValueChange={(value) => setProposalForm(prev => ({ 
+                                        ...prev, 
+                                        deliveryDuration: { ...prev.deliveryDuration, unit: value as 'days' | 'weeks' }
+                                      }))}
+                                    >
+                                      <SelectTrigger className="bg-white border-gray-200 text-gray-900 rounded-xl focus:ring-2 focus:ring-blue-500 h-12 w-24">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent className="bg-white border-gray-200 text-gray-900 rounded-xl">
+                                        <SelectItem value="days">Days</SelectItem>
+                                        <SelectItem value="weeks">Weeks</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                </div>
                               </div>
                               <div>
                                 <div className="flex justify-between items-center mb-4">
@@ -1506,15 +1595,23 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
                           </Card>
                         )}
 
-                        {/* Release Deliverables */}
-                        {selectedRequest.status === 'completed' && (
+                        {/* Project Delivery Details */}
+                        {selectedRequest && (
                           <Card className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 rounded-xl">
                             <CardHeader className="pb-4">
-                              <CardTitle className="text-gray-900 text-lg flex items-center gap-3">
-                                <div className="w-8 h-8 bg-gradient-to-r from-green-600 to-emerald-600 rounded-lg flex items-center justify-center">
-                                  <Download className="w-5 h-5 text-white" />
+                              <CardTitle className="text-gray-900 text-lg flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 bg-gradient-to-r from-green-600 to-emerald-600 rounded-lg flex items-center justify-center">
+                                    <Download className="w-5 h-5 text-white" />
+                                  </div>
+                                  🧩 Project Delivery Details
                                 </div>
-                                Release Deliverables
+                                {selectedRequest.deliverables && (
+                                  <div className="flex items-center gap-2 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+                                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                    Details Sent
+                                  </div>
+                                )}
                               </CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-6">
@@ -1590,23 +1687,43 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
                                   aria-label="Deliverable notes"
                                 />
                               </div>
-                              <Button
-                                onClick={handleReleaseDeliverables}
-                                disabled={saving}
-                                className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-xl disabled:opacity-50 transition-all duration-300 h-12"
-                              >
-                                {saving ? (
-                                  <div className="flex items-center gap-2">
-                                    <RefreshCw className="w-4 h-4 animate-spin" />
-                                    Releasing...
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center gap-2">
-                                    <Download className="w-4 h-4" />
-                                    Release Deliverables
-                                  </div>
+                              <div className="flex gap-3">
+                                <Button
+                                  onClick={handleReleaseDeliverables}
+                                  disabled={saving}
+                                  className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-xl disabled:opacity-50 transition-all duration-300 h-12"
+                                >
+                                  {saving ? (
+                                    <div className="flex items-center gap-2">
+                                      <RefreshCw className="w-4 h-4 animate-spin" />
+                                      {selectedRequest.deliverables ? 'Updating...' : 'Saving...'}
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-2">
+                                      <Download className="w-4 h-4" />
+                                      {selectedRequest.deliverables ? 'Update Delivery Details' : 'Send Delivery Details'}
+                                    </div>
+                                  )}
+                                </Button>
+                                {selectedRequest.deliverables && (
+                                  <Button
+                                    onClick={() => {
+                                      setDeliverables({
+                                        websiteLink: '',
+                                        adminPanelLink: '',
+                                        username: '',
+                                        password: '',
+                                        files: [],
+                                        notes: ''
+                                      });
+                                    }}
+                                    variant="outline"
+                                    className="px-6 bg-white border-gray-300 text-gray-700 hover:bg-gray-50 rounded-xl h-12"
+                                  >
+                                    Clear Form
+                                  </Button>
                                 )}
-                              </Button>
+                              </div>
                             </CardContent>
                           </Card>
                         )}
@@ -1677,6 +1794,63 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
           )}
         </div>
       </div>
+      {/* WhatsApp-style Chat Overlay */}
+      {showChatOverlay && selectedRequest && (
+        <div className="fixed inset-0 z-50 bg-[#111b21] text-white flex flex-col">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 bg-[#128C7E]">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowChatOverlay(false)}
+                className="px-3 py-1.5 bg-black/10 rounded-lg hover:bg-black/20"
+              >
+                Back
+              </button>
+              <div>
+                <div className="font-semibold">{selectedRequest.userName}</div>
+                <div className="text-xs text-white/80">Online</div>
+              </div>
+            </div>
+          </div>
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto px-3 py-4 bg-[url('https://i.imgur.com/jW5G4Gv.png')] bg-cover bg-center">
+            {chatMessages.length === 0 ? (
+              <div className="text-center text-white/70 py-8">No messages yet</div>
+            ) : (
+              chatMessages.map((m) => (
+                <div key={m.id} className={`mb-2 flex ${m.senderType === 'admin' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`${m.senderType === 'admin' ? 'bg-[#d9fdd3] text-gray-900' : 'bg-white'} max-w-[75%] rounded-lg px-3 py-2 text-sm shadow-md`}>
+                    <div className="text-[10px] opacity-60 mb-0.5">{m.senderName}</div>
+                    <div>{m.message}</div>
+                    <div className="text-[10px] text-black/50 mt-1 text-right">
+                      {m.createdAt?.toDate ? m.createdAt.toDate().toLocaleTimeString() : new Date(m.createdAt as any).toLocaleTimeString()}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+            <div ref={chatEndRef} />
+          </div>
+          {/* Composer */}
+          <div className="p-3 bg-[#202c33] flex gap-2">
+            <Input
+              type="text"
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+              placeholder="Type a message"
+              className="flex-1 bg-[#2a3942] border border-black/20 rounded-lg px-3 py-2 text-sm focus:outline-none text-white placeholder-white/60"
+            />
+            <Button
+              onClick={handleSendMessage}
+              disabled={saving || !newMessage.trim()}
+              className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white text-sm"
+            >
+              Send
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
