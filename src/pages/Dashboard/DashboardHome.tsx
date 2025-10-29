@@ -21,7 +21,6 @@ import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Share2, Crown, Sparkles, CheckCircle, TrendingUp, Package, ShoppingCart, ArrowRight, X, AlertCircle, DollarSign, Download, ChevronLeft, ChevronRight, XCircle } from 'lucide-react';
 import ReviewSystem from '../../components/ReviewSystem';
-import { useReviews } from '../../hooks/useReviews';
 
 import type { ServiceItem } from '../../utils/services';
 import { restoreDefaultServiceForms } from '../../utils/services';
@@ -88,8 +87,8 @@ export default function DashboardHome() {
   const servicesScrollRef = useRef<HTMLDivElement>(null);
   const [categoryScrollPositions, setCategoryScrollPositions] = useState<{ [key: string]: number }>({});
   const [scrollPositions, setScrollPositions] = useState<{ [key: string]: number }>({});
-  const [openReviewService, setOpenReviewService] = useState<string | null>(null);
-  const { reviews, isReviewModalOpen, openReviewModal, closeReviewModal } = useReviews(openReviewService || '');
+  const [openReviewServiceId, setOpenReviewServiceId] = useState<string | null>(null);
+  const [openReviewServiceName, setOpenReviewServiceName] = useState<string>('');
 
   const reviewEnabledServiceNames = new Set<string>([
     'Affiliate + Referral App System',
@@ -1182,7 +1181,7 @@ export default function DashboardHome() {
 
                       {categoryName === 'MLM & Mobile' && reviewEnabledServiceNames.has(service.name) && (
                         <button
-                          onClick={() => { setOpenReviewService(service.name); openReviewModal(); }}
+                          onClick={() => { setOpenReviewServiceId(service.id); setOpenReviewServiceName(service.name); setShowReviews(true); }}
                           className="flex -space-x-2 hover:space-x-1 transition-all"
                           aria-label="View Reviews"
                         >
@@ -1208,7 +1207,7 @@ export default function DashboardHome() {
                       </button>
                       {categoryName === 'MLM & Mobile' && reviewEnabledServiceNames.has(service.name) && (
                         <button
-                          onClick={() => { setOpenReviewService(service.name); openReviewModal(); }}
+                          onClick={() => { setOpenReviewServiceId(service.id); setOpenReviewServiceName(service.name); setShowReviews(true); }}
                           className="px-4 py-3 rounded-xl bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 hover:text-white transition-all duration-300 border border-slate-600/50 hover:border-slate-500/50 text-sm"
                         >
                           View Reviews
@@ -2329,10 +2328,10 @@ export default function DashboardHome() {
 
             {/* Reviews Bottom Sheet */}
             <ReviewSystem
-              serviceName={openReviewService || ''}
-              reviews={reviews}
-              isOpen={isReviewModalOpen}
-              onClose={() => { closeReviewModal(); setOpenReviewService(null); }}
+              serviceId={openReviewServiceId}
+              serviceName={openReviewServiceName}
+              isOpen={Boolean(showReviews)}
+              onClose={() => { setShowReviews(false); setOpenReviewServiceId(null); }}
             />
 
             {/* View All Button for Services */}
