@@ -20,6 +20,8 @@ import AffiliateCongratulationsModal from '../../components/AffiliateCongratulat
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Share2, Crown, Sparkles, CheckCircle, TrendingUp, Package, ShoppingCart, ArrowRight, X, AlertCircle, DollarSign, Download, ChevronLeft, ChevronRight, XCircle } from 'lucide-react';
+import ReviewSystem from '../../components/ReviewSystem';
+import { useReviews } from '../../hooks/useReviews';
 
 import type { ServiceItem } from '../../utils/services';
 import { restoreDefaultServiceForms } from '../../utils/services';
@@ -86,6 +88,22 @@ export default function DashboardHome() {
   const servicesScrollRef = useRef<HTMLDivElement>(null);
   const [categoryScrollPositions, setCategoryScrollPositions] = useState<{ [key: string]: number }>({});
   const [scrollPositions, setScrollPositions] = useState<{ [key: string]: number }>({});
+  const [openReviewService, setOpenReviewService] = useState<string | null>(null);
+  const { reviews, isReviewModalOpen, openReviewModal, closeReviewModal } = useReviews(openReviewService || '');
+
+  const reviewEnabledServiceNames = new Set<string>([
+    'Affiliate + Referral App System',
+    'E-commerce Mobile App',
+    'Android App (Linked with Website)',
+    'MLM Website Setup',
+  ]);
+
+  const reviewerAvatars = [
+    '/assets/reviewers/avatar1.svg',
+    '/assets/reviewers/avatar2.svg',
+    '/assets/reviewers/avatar3.svg',
+    '/assets/reviewers/avatar4.svg',
+  ];
 
   // Popups persist until user action (no auto-hide)
 
@@ -821,6 +839,28 @@ export default function DashboardHome() {
     setCurrency('USDT'); // Reset to default
   };
 
+  const handleDatabaseBuy = (category: any) => {
+    // Create a product-like object for the checkout flow
+    const productData = {
+      id: category.id,
+      title: category.name,
+      description: category.description || '',
+      priceUsd: parseFloat(category.priceUSD?.replace(/[$,]/g, '') || '0'),
+      priceInr: parseFloat(category.priceINR?.replace(/[₹,]/g, '') || '0'),
+      thumbnailUrl: category.image || 'https://images.unsplash.com/photo-1521737604893-d14cc237f11d?q=80',
+      category: category.category || 'Database Marketing',
+      type: 'database',
+      contactCount: category.contactCount || 0
+    };
+    
+    // Store in sessionStorage for checkout page
+    sessionStorage.setItem('selectedDatabaseProduct', JSON.stringify(productData));
+    setSelectedProduct(productData);
+    setShowProductModal(true);
+    setPurchaseOption('split');
+    setCurrency('USDT');
+  };
+
   const scrollCarousel = (carouselId: string, direction: 'left' | 'right') => {
     const container = document.getElementById(`carousel-${carouselId}`);
     if (!container) return;
@@ -893,35 +933,41 @@ export default function DashboardHome() {
           {items.map((cat) => (
             <div
               key={cat.id}
-              onClick={() => navigate(`/database-marketing/buy-database?category=${encodeURIComponent((cat as any).category || cat.id)}`)}
-              className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-slate-700/50 hover:border-blue-500/50 hover:-translate-y-1 hover:scale-105 flex-shrink-0 w-64 sm:w-72 h-72 cursor-pointer"
+              className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-slate-700/50 hover:border-blue-500/50 hover:-translate-y-1 hover:scale-105 flex-shrink-0 w-64 sm:w-72 h-80 cursor-pointer"
               style={{ scrollSnapAlign: 'start' }}
             >
               {/* Thumbnail / Image */}
-              <div className={`relative h-36 bg-gradient-to-br from-blue-500/20 to-cyan-500/20`}>
+              <div className={`relative h-40 bg-gradient-to-br from-blue-500/20 to-cyan-500/20`}>
                 {(cat as any).image ? (
-                  <img src={(cat as any).image} alt={cat.name} className="w-full h-full object-cover" />
+                  <img src={(cat as any).image} alt={cat.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center">
                     <span className="text-4xl">📁</span>
                   </div>
                 )}
-                {/* Badge - Top Left */}
+                
+                {/* Discount Badge */}
                 <div className="absolute top-3 left-3">
-                  <span className="px-2 py-1 text-xs font-semibold bg-slate-700/60 backdrop-blur-sm text-slate-200 rounded-full border border-slate-600/50">
-                    {cat.name}
+                  <span className="px-2 py-1 bg-red-500 text-white text-xs font-bold rounded-full shadow-lg">
+                    70% OFF
                   </span>
                 </div>
-                {/* Fresh badge - Top Right */}
-                <div className="absolute top-3 right-3">
-                  <span className="px-2 py-1 text-[10px] font-bold bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-full shadow-lg">
-                    2025
-                  </span>
+                
+                {/* Star Rating */}
+                <div className="absolute top-3 right-3 flex items-center gap-1 bg-black/50 backdrop-blur-sm rounded-full px-2 py-1">
+                  <div className="flex">
+                    {[...Array(5)].map((_, i) => (
+                      <svg key={i} className="w-3 h-3 text-yellow-400 fill-current" viewBox="0 0 20 20">
+                        <path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/>
+                      </svg>
+                    ))}
+                  </div>
+                  <span className="text-white text-xs font-semibold ml-1">4.8</span>
                 </div>
               </div>
 
               {/* Content */}
-              <div className="p-4 h-[calc(100%-9rem)] flex flex-col">
+              <div className="p-4 h-[calc(100%-10rem)] flex flex-col">
                 <h3 className="text-base sm:text-lg font-bold text-white mb-1 line-clamp-1">{cat.name}</h3>
                 <p className="text-slate-300 text-xs sm:text-sm mb-3 line-clamp-2">{(cat as any).description || ''}</p>
 
@@ -933,11 +979,23 @@ export default function DashboardHome() {
                   <div className="flex items-center justify-between text-xs sm:text-sm">
                     <span className="text-slate-400">Price</span>
                     <span className="text-green-400 font-semibold">
+                      <span className="line-through text-gray-500 text-xs mr-1">₹{(parseFloat((cat as any).priceINR?.replace(/[₹,]/g, '') || '0') * 1.7).toFixed(0)}</span>
                       {((cat as any).priceINR || (cat as any).priceRange || '—')}
                       {(cat as any).priceUSD ? ` · ${(cat as any).priceUSD}` : ''}
                     </span>
                   </div>
                 </div>
+                
+                {/* Buy Button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDatabaseBuy(cat);
+                  }}
+                  className="mt-3 w-full py-2 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold hover:from-green-700 hover:to-emerald-700 transition-all duration-300 shadow-lg hover:shadow-xl text-sm"
+                >
+                  Buy Database
+                </button>
               </div>
 
               {/* Bottom Accent */}
@@ -1109,16 +1167,35 @@ export default function DashboardHome() {
                         </p>
                       </div>
 
-                    {/* Rating */}
-                    <div className="flex items-center gap-1 mb-4">
-                      <div className="flex">
-                        {[...Array(5)].map((_, i) => (
-                          <svg key={i} className="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                          </svg>
-                        ))}
+                    {/* Rating + Reviewer Avatars (only for selected services in MLM & Mobile) */}
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-1">
+                        <div className="flex">
+                          {[...Array(5)].map((_, i) => (
+                            <svg key={i} className="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                            </svg>
+                          ))}
+                        </div>
+                        <span className="text-sm text-slate-400 ml-1">4.8</span>
                       </div>
-                      <span className="text-sm text-slate-400 ml-1">4.8</span>
+
+                      {categoryName === 'MLM & Mobile' && reviewEnabledServiceNames.has(service.name) && (
+                        <button
+                          onClick={() => { setOpenReviewService(service.name); openReviewModal(); }}
+                          className="flex -space-x-2 hover:space-x-1 transition-all"
+                          aria-label="View Reviews"
+                        >
+                          {reviewerAvatars.slice(0, 4).map((src, i) => (
+                            <img
+                              key={i}
+                              src={src}
+                              alt="Reviewer"
+                              className="w-6 h-6 rounded-full border border-slate-700"
+                            />
+                          ))}
+                        </button>
+                      )}
                     </div>
 
                     {/* Buttons */}
@@ -1129,6 +1206,14 @@ export default function DashboardHome() {
                       >
                         View Service
                       </button>
+                      {categoryName === 'MLM & Mobile' && reviewEnabledServiceNames.has(service.name) && (
+                        <button
+                          onClick={() => { setOpenReviewService(service.name); openReviewModal(); }}
+                          className="px-4 py-3 rounded-xl bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 hover:text-white transition-all duration-300 border border-slate-600/50 hover:border-slate-500/50 text-sm"
+                        >
+                          View Reviews
+                        </button>
+                      )}
                       <button
                         onClick={() => {
                           const referralLink = `${window.location.origin}/signup?ref=${user?.id}`;
@@ -1640,7 +1725,7 @@ export default function DashboardHome() {
 
         // Create order document with required fields (align with main section)
         const orderRef = doc(ordersRef);
-        tx.set(orderRef, {
+        const orderData: any = {
           userId: user.id,
           productId: selectedProduct.id,
           productName: selectedProduct.title,
@@ -1650,12 +1735,29 @@ export default function DashboardHome() {
           purchaseOption: purchaseOption,
           currency: currencyToUse,
           timestamp: serverTimestamp(),
-        });
+        };
+
+        // Add database-specific fields if it's a database product
+        if (selectedProduct.type === 'database') {
+          orderData.productType = 'database';
+          orderData.contactCount = selectedProduct.contactCount || 0;
+          orderData.category = selectedProduct.category || 'Database Marketing';
+          orderData.description = selectedProduct.description || '';
+          orderData.thumbnailUrl = selectedProduct.thumbnailUrl || '';
+          orderData.priceInr = selectedProduct.priceInr || 0;
+        }
+
+        tx.set(orderRef, orderData);
       });
 
       setShowSuccessPopup(true);
       setShowProductModal(false);
       setSelectedProduct(null);
+      
+      // Clear session storage if it was a database product
+      if (selectedProduct?.type === 'database') {
+        sessionStorage.removeItem('selectedDatabaseProduct');
+      }
     } catch (e: any) {
       if (e?.message?.includes("Insufficient") || e?.message?.includes("balance")) {
         setShowFailurePopup(true);
@@ -2225,6 +2327,14 @@ export default function DashboardHome() {
               {renderServicesByCategory()}
             </div>
 
+            {/* Reviews Bottom Sheet */}
+            <ReviewSystem
+              serviceName={openReviewService || ''}
+              reviews={reviews}
+              isOpen={isReviewModalOpen}
+              onClose={() => { closeReviewModal(); setOpenReviewService(null); }}
+            />
+
             {/* View All Button for Services */}
             {filteredServices.length > 0 && (
               <div className="text-center mt-8">
@@ -2450,8 +2560,18 @@ export default function DashboardHome() {
                     <p className="text-slate-300 text-sm mb-3 line-clamp-2">{selectedProduct.description}</p>
                     <div className="flex items-center gap-2">
                       <DollarSign className="w-4 h-4 text-green-400" />
-                      <span className="text-2xl font-bold text-green-400">${selectedProduct.priceUsd.toFixed(2)}</span>
+                      <span className="text-2xl font-bold text-green-400">
+                        ${selectedProduct.priceUsd?.toFixed(2) || '0.00'}
+                        {selectedProduct.priceInr && (
+                          <span className="text-sm text-slate-400 ml-2">(₹{selectedProduct.priceInr.toFixed(0)})</span>
+                        )}
+                      </span>
                     </div>
+                    {selectedProduct.contactCount && (
+                      <div className="text-sm text-slate-400 mt-1">
+                        {selectedProduct.contactCount.toLocaleString()} contacts included
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -2668,8 +2788,10 @@ export default function DashboardHome() {
                 🎉 Congratulations!
               </h3>
               <p className="text-slate-300 mb-6">
-                Your product is ready.<br />
-                You can view it in your Orders Section.
+                {selectedProduct?.type === 'database' 
+                  ? `Your database purchase is complete!<br />You can view it in your Orders Section.`
+                  : `Your product is ready.<br />You can view it in your Orders Section.`
+                }
               </p>
               
               <div className="flex gap-3">

@@ -73,6 +73,25 @@ export default function DatabaseCategories() {
     navigate(`/database-marketing/buy-database?category=${encodeURIComponent(categoryId)}`);
   };
 
+  const handleBuyDatabase = (category: Category) => {
+    // Create a product-like object for the checkout flow
+    const productData = {
+      id: category.id,
+      title: category.name,
+      description: category.description,
+      priceUsd: parseFloat(category.priceUSD?.replace(/[$,]/g, '') || '0'),
+      priceInr: parseFloat(category.priceINR?.replace(/[₹,]/g, '') || '0'),
+      thumbnailUrl: category.image || FALLBACK_IMAGE,
+      category: category.category || 'Database Marketing',
+      type: 'database',
+      contactCount: category.contactCount || 0
+    };
+    
+    // Store in sessionStorage for checkout page
+    sessionStorage.setItem('selectedDatabaseProduct', JSON.stringify(productData));
+    navigate('/dashboard/digital-products');
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0a0e1f] via-[#0b1230] to-black text-white">
       <div className="container mx-auto px-6 py-12">
@@ -100,16 +119,35 @@ export default function DatabaseCategories() {
             {items.map((cat) => (
               <div
                 key={cat.id}
-                className="group bg-white/5 border border-white/10 rounded-2xl overflow-hidden hover:shadow-2xl hover:border-white/20 transition-all duration-300"
+                className="group bg-white/5 border border-white/10 rounded-2xl overflow-hidden hover:shadow-2xl hover:border-white/20 transition-all duration-300 hover:scale-105"
               >
-                <div className="relative h-40 w-full overflow-hidden">
+                <div className="relative h-48 w-full overflow-hidden">
                   {(cat.image ? (
                     <img src={cat.image} alt={cat.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                   ) : (
                     <img src={FALLBACK_IMAGE} alt={cat.name} className="w-full h-full object-cover" />
                   ))}
+                  
+                  {/* Discount Badge */}
+                  <div className="absolute top-3 left-3">
+                    <span className="px-2 py-1 bg-red-500 text-white text-xs font-bold rounded-full shadow-lg">
+                      70% OFF
+                    </span>
+                  </div>
+                  
+                  {/* Star Rating */}
+                  <div className="absolute top-3 right-3 flex items-center gap-1 bg-black/50 backdrop-blur-sm rounded-full px-2 py-1">
+                    <div className="flex">
+                      {[...Array(5)].map((_, i) => (
+                        <svg key={i} className="w-3 h-3 text-yellow-400 fill-current" viewBox="0 0 20 20">
+                          <path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/>
+                        </svg>
+                      ))}
+                    </div>
+                    <span className="text-white text-xs font-semibold ml-1">4.8</span>
+                  </div>
                 </div>
-                <div className="p-5">
+                <div className="p-6">
                   <h3 className="text-lg font-bold text-white mb-1">{cat.name}</h3>
                   <p className="text-gray-300 text-sm mb-4 line-clamp-2">{cat.description}</p>
                   <div className="flex items-center justify-between text-sm mb-4">
@@ -118,18 +156,21 @@ export default function DatabaseCategories() {
                   </div>
                   <div className="flex items-center justify-between text-sm mb-5">
                     <div className="text-gray-400">Price</div>
-                    <div className="text-green-400 font-semibold">{cat.priceINR || cat.priceRange || '—'}{cat.priceUSD ? ` · ${cat.priceUSD}` : ''}</div>
+                    <div className="text-green-400 font-semibold">
+                      <span className="line-through text-gray-500 text-xs mr-2">₹{(parseFloat(cat.priceINR?.replace(/[₹,]/g, '') || '0') * 1.7).toFixed(0)}</span>
+                      {cat.priceINR || cat.priceRange || '—'}{cat.priceUSD ? ` · ${cat.priceUSD}` : ''}
+                    </div>
                   </div>
                   <div className="flex gap-3">
                     <button
-                      onClick={() => handleCategoryClick(cat.category || cat.id)}
-                      className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold hover:from-blue-700 hover:to-cyan-700 transition-colors"
+                      onClick={() => handleBuyDatabase(cat)}
+                      className="flex-1 py-3 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold hover:from-green-700 hover:to-emerald-700 transition-all duration-300 shadow-lg hover:shadow-xl"
                     >
-                      Buy Now
+                      Buy Database
                     </button>
                     <button
-                      onClick={() => navigate(`/database-marketing/buy-database?category=${encodeURIComponent(cat.category || cat.id)}`)}
-                      className="px-4 py-2.5 rounded-xl bg-white/10 text-white border border-white/20 hover:bg-white/15 transition-colors"
+                      onClick={() => handleCategoryClick(cat.category || cat.id)}
+                      className="px-4 py-3 rounded-xl bg-white/10 text-white border border-white/20 hover:bg-white/15 transition-colors"
                     >
                       View Details
                     </button>
