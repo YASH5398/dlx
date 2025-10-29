@@ -423,6 +423,25 @@ export async function processPayment(
         updatedAt: serverTimestamp()
       });
 
+      // When wallet payment is auto-approved, unlock reviews on corresponding order
+      if (paymentData.method === 'wallet') {
+        const ordersQueryRef = query(
+          collection(firestore, 'orders'),
+          where('serviceRequestId', '==', requestId)
+        );
+        const ordersSnapshot = await getDocs(ordersQueryRef);
+        if (!ordersSnapshot.empty) {
+          const orderDoc = ordersSnapshot.docs[0];
+          tx.update(orderDoc.ref, {
+            userId: requestData.userId,
+            serviceId: requestData.serviceId,
+            paymentStatus: 'success',
+            reviewAllowed: true,
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
+
       // Add notification
       const notification: Notification = {
         id: crypto.randomUUID(),
@@ -495,6 +514,25 @@ export async function reviewPayment(
         },
         updatedAt: serverTimestamp()
       });
+
+  // If approved, mark corresponding order as reviewAllowed
+  if (action === 'approve') {
+    const ordersQueryRef = query(
+      collection(firestore, 'orders'),
+      where('serviceRequestId', '==', requestId)
+    );
+    const ordersSnapshot = await getDocs(ordersQueryRef);
+    if (!ordersSnapshot.empty) {
+      const orderDoc = ordersSnapshot.docs[0];
+      tx.update(orderDoc.ref, {
+        userId: requestData.userId,
+        serviceId: requestData.serviceId,
+        paymentStatus: 'success',
+        reviewAllowed: true,
+        updatedAt: serverTimestamp(),
+      });
+    }
+  }
 
       // Add notification
       const notification: Notification = {

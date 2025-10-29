@@ -89,6 +89,7 @@ export default function DashboardHome() {
   const [scrollPositions, setScrollPositions] = useState<{ [key: string]: number }>({});
   const [openReviewServiceId, setOpenReviewServiceId] = useState<string | null>(null);
   const [openReviewServiceName, setOpenReviewServiceName] = useState<string>('');
+  const [showReviews, setShowReviews] = useState(false);
 
   const reviewEnabledServiceNames = new Set<string>([
     'Affiliate + Referral App System',
