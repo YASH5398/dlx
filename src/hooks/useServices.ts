@@ -45,21 +45,17 @@ export function useActiveServices() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadActiveServices = async () => {
+    setLoading(true);
+    const unsubscribe = ServiceManager.subscribeToServices((servicesData) => {
       try {
-        setLoading(true);
-        const activeServices = await ServiceManager.getActiveServices();
-        setServices(activeServices);
+        const active = servicesData.filter((s) => s.isActive);
+        setServices(active);
         setError(null);
-      } catch (err) {
-        setError('Failed to load active services');
-        console.error('Error loading active services:', err);
       } finally {
         setLoading(false);
       }
-    };
-
-    loadActiveServices();
+    });
+    return () => unsubscribe();
   }, []);
 
   return {

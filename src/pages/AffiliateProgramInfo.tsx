@@ -1,18 +1,49 @@
-import React, { useEffect, useState } from 'react';
-import { useForm, FormProvider } from 'react-hook-form';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, onSnapshot, collection, query, where, orderBy, limit, getDocs, serverTimestamp, addDoc } from 'firebase/firestore';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useNavigate } from 'react-router-dom';
-import { UserPlusIcon, LinkIcon, ShoppingCartIcon, CurrencyDollarIcon, ChartBarIcon, WalletIcon, QuestionMarkCircleIcon } from '@heroicons/react/24/outline';
+import { UserPlusIcon, ShoppingCartIcon, CurrencyDollarIcon, ChartBarIcon, WalletIcon, QuestionMarkCircleIcon } from '@heroicons/react/24/outline';
 import { firestore } from '../firebase.ts';
 import { useUser } from '../context/UserContext';
 import { useAffiliateStatus } from '../hooks/useAffiliateStatus';
+import AffiliateApplicationFlow from '../components/AffiliateApplicationFlow';
+import AffiliateAnalytics from '../components/AffiliateAnalytics';
+import { useForm, FormProvider } from 'react-hook-form';
+import { RANK_DEFINITIONS, getRankInfo } from '../utils/rankSystem';
+import { Button } from '../components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card';
+import { Badge } from '../components/ui/badge';
+import { Input } from '../components/ui/input';
+import { 
+  Crown, 
+  CheckCircle, 
+  Clock, 
+  XCircle, 
+  TrendingUp, 
+  Users, 
+  DollarSign,
+  ExternalLink,
+  RefreshCw,
+  Copy,
+  Share2,
+  BarChart3,
+  PieChart,
+  Eye,
+  MousePointer,
+  UserPlus,
+  Calendar,
+  Star,
+  AlertCircle,
+  Settings,
+  Link as LinkIcon,
+  Edit3,
+  Save,
+  X,
+  ArrowRight
+} from 'lucide-react';
 
-const validators = {
-  email: (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v || ''),
-};
 
 const affiliateService = {
   async getStats(userId: string): Promise<AffiliateStats> {
@@ -20,15 +51,13 @@ const affiliateService = {
     const docSnap = await getDoc(docRef);
     const data: any = docSnap.exists() ? docSnap.data() : {};
     return {
+      impressions: typeof data.impressions === 'number' ? data.impressions : 0,
       clicks: typeof data.clicks === 'number' ? data.clicks : 0,
-      referrals: typeof data.referrals === 'number' ? data.referrals : 0,
-      sales: typeof data.sales === 'number' ? data.sales : 0,
-      earnings: typeof data.earnings === 'number' ? data.earnings : 0,
+      joins: typeof data.joins === 'number' ? data.joins : 0,
+      conversionRate: typeof data.conversionRate === 'number' ? data.conversionRate : 0,
+      totalEarnings: typeof data.totalEarnings === 'number' ? data.totalEarnings : 0,
+      lastUpdated: data.lastUpdated || null,
     };
-  },
-  async joinProgram(data: { email: string; fullName: string }) {
-    await new Promise((r) => setTimeout(r, 900));
-    return { success: true, referralLink: `https://digilinex.com/ref/${data.email.split('@')[0]}` };
   },
 };
 
@@ -113,387 +142,759 @@ const CONTENT = {
 };
 
 interface AffiliateStats {
+  impressions: number;
   clicks: number;
-  referrals: number;
-  sales: number;
-  earnings: number;
+  joins: number;
+  conversionRate: number;
+  totalEarnings: number;
+  lastUpdated: any;
 }
 
-interface FormData {
+interface ReferralUser {
+  id: string;
+  name: string;
   email: string;
-  fullName: string;
+  joinedAt: any;
+  status: 'active' | 'inactive';
+  commissionEarned: number;
+  totalSpent: number;
 }
 
-const AffiliateProgramInfo: React.FC = () => {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const navigate = useNavigate();
-  const { user } = useUser();
-  const { canJoinAffiliate, canReapply, affiliateStatus } = useAffiliateStatus();
+interface CommissionRate {
+  rank: string;
+  rate: number;
+  color: string;
+}
 
-  const methods = useForm<FormData>({
-    defaultValues: { email: '', fullName: '' },
-    mode: 'onChange',
+// Generate commission rates from rank system
+const COMMISSION_RATES: CommissionRate[] = Object.entries(RANK_DEFINITIONS).map(([key, rankInfo]) => ({
+  rank: rankInfo.name,
+  rate: rankInfo.commission,
+  color: rankInfo.color.replace('bg-', 'from-').replace('-500', '-500 to-' + rankInfo.color.split('-')[1] + '-600')
+}));
+
+// Affiliate Registration Form Component
+interface AffiliateRegistrationFormProps {
+  onComplete: () => void;
+}
+
+interface RegistrationFormData {
+  fullName: string;
+  email: string;
+  phone: string;
+  interestedServices: string[];
+  description: string;
+  termsAgreed: boolean;
+}
+
+const AffiliateRegistrationForm: React.FC<AffiliateRegistrationFormProps> = ({ onComplete }) => {
+  const { user } = useUser();
+  const [services, setServices] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [currentStep, setCurrentStep] = useState(1);
+  const totalSteps = 3;
+
+  const methods = useForm<RegistrationFormData>({
+    defaultValues: {
+      fullName: user?.name || '',
+      email: user?.email || '',
+      phone: '',
+      interestedServices: [],
+      description: '',
+      termsAgreed: false
+    },
+    mode: 'onChange'
   });
 
-  const onSubmit = async (data: FormData) => {
-    try {
-      const res = await affiliateService.joinProgram(data);
-      if (res.success) {
-        toast.success(`Success! Your referral link: ${res.referralLink}`, {
-          position: 'top-right',
-          autoClose: 5000,
-          theme: 'colored',
-        });
-        setIsModalOpen(false);
-        methods.reset();
-        navigate('/affiliate-program');
-      } else {
-        toast.error('Failed to join the program. Please try again.', {
-          position: 'top-right',
-          autoClose: 3500,
-          theme: 'colored',
-        });
+  // Load services from Firebase
+  useEffect(() => {
+    const loadServices = async () => {
+      try {
+        const servicesSnapshot = await getDocs(collection(firestore, 'services'));
+        const servicesData = servicesSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setServices(servicesData.filter((service: any) => service.isActive));
+      } catch (error) {
+        console.error('Error loading services:', error);
       }
-    } catch (err) {
-      toast.error('An error occurred. Please try again.', {
-        position: 'top-right',
-        autoClose: 3500,
-        theme: 'colored',
+    };
+    loadServices();
+  }, []);
+
+  const onSubmit = async (data: RegistrationFormData) => {
+    if (!user?.id) return;
+    
+    setLoading(true);
+    try {
+      // Save affiliate application to Firestore
+      await addDoc(collection(firestore, 'affiliateApplications'), {
+        userId: user.id,
+        fullName: data.fullName,
+        email: data.email,
+        phone: data.phone,
+        interestedServices: data.interestedServices,
+        description: data.description,
+        status: 'pending',
+        createdAt: serverTimestamp(),
+        userRank: (user as any).rank || 'starter'
       });
+
+      // Update user document
+      await updateDoc(doc(firestore, 'users', user.id), {
+        affiliatePartner: false,
+        affiliateStatus: 'under_review',
+        affiliateJoinedAt: serverTimestamp(),
+        affiliateAppliedAt: serverTimestamp(),
+        affiliateProcessing: true,
+        affiliateProcessingStartedAt: serverTimestamp()
+      });
+
+      toast.success('Application submitted successfully! You will be approved within 30 minutes.');
+      onComplete();
+    } catch (error) {
+      console.error('Error submitting application:', error);
+      toast.error('Failed to submit application. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Show different content based on affiliate status
-  if (user && affiliateStatus.isApproved) {
-    return (
-      <section className="min-h-screen bg-gradient-to-b from-purple-900 to-indigo-900 text-white px-4 py-12 sm:py-16 lg:py-20">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center">
-            <div className="w-24 h-24 mx-auto mb-8 rounded-full bg-green-500/20 flex items-center justify-center">
-              <span className="text-5xl">✅</span>
-            </div>
-            <h1 className="text-4xl sm:text-5xl font-bold text-white mb-4">
-              You're Already an Affiliate Partner!
-            </h1>
-            <p className="text-xl text-indigo-100 mb-8 max-w-2xl mx-auto">
-              Congratulations! You're already part of our affiliate program. Access your dashboard to start earning commissions.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <button
-                onClick={() => navigate('/affiliate-dashboard')}
-                className="px-8 py-3 rounded-full bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold text-lg shadow-md hover:shadow-lg transition-all duration-300"
-              >
-                View Dashboard
-              </button>
-              <button
-                onClick={() => navigate('/dashboard')}
-                className="px-8 py-3 rounded-full bg-white/10 border border-white/20 text-white font-semibold text-lg hover:bg-white/20 transition-all duration-300"
-              >
-                Go to Dashboard
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-    );
-  }
-
-  if (user && affiliateStatus.isPending) {
-    return (
-      <section className="min-h-screen bg-gradient-to-b from-purple-900 to-indigo-900 text-white px-4 py-12 sm:py-16 lg:py-20">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center">
-            <div className="w-24 h-24 mx-auto mb-8 rounded-full bg-yellow-500/20 flex items-center justify-center">
-              <span className="text-5xl">⏳</span>
-            </div>
-            <h1 className="text-4xl sm:text-5xl font-bold text-white mb-4">
-              Application Under Review
-            </h1>
-            <p className="text-xl text-indigo-100 mb-8 max-w-2xl mx-auto">
-              Your affiliate application is currently being reviewed. We'll notify you via email once it's approved.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <button
-                onClick={() => navigate('/dashboard')}
-                className="px-8 py-3 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold text-lg shadow-md hover:shadow-lg transition-all duration-300"
-              >
-                Go to Dashboard
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-    );
-  }
+  const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, totalSteps));
+  const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1));
 
   return (
-    <section className="min-h-screen bg-gradient-to-b from-purple-900 to-indigo-900 text-white px-4 py-12 sm:py-16 lg:py-20">
+    <div className="min-h-screen bg-gray-900 text-white">
       <ToastContainer />
-      <div className="max-w-7xl mx-auto">
-        {/* Headline Section */}
-        <header className="text-center mb-16">
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: 'easeOut' }}
-          >
-            <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400">
-              {CONTENT.headline}
-            </h1>
-            <p className="mt-4 text-lg sm:text-xl text-indigo-100 max-w-2xl mx-auto">
-              {CONTENT.intro.description}
-            </p>
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="mt-8 px-8 py-3 rounded-full bg-gradient-to-r from-pink-500 to-purple-500 text-white font-semibold text-lg shadow-md hover:shadow-lg hover:from-pink-600 hover:to-purple-600 focus:ring-2 focus:ring-pink-400 transition-all duration-300"
-            >
-              {canReapply() ? 'Reapply to Affiliate Program' : CONTENT.intro.cta}
-            </button>
-          </motion.div>
-        </header>
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-lg">
+            <Crown className="w-10 h-10 text-white" />
+          </div>
+          <h1 className="text-4xl font-bold text-white mb-4">Join Our Affiliate Program</h1>
+          <p className="text-xl text-slate-400 mb-6">Earn 30-40% commission on every referral</p>
+          
+          {/* Progress Bar */}
+          <div className="w-full bg-slate-700 rounded-full h-2 mb-8">
+            <div 
+              className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${(currentStep / totalSteps) * 100}%` }}
+            />
+          </div>
+          <p className="text-slate-400">Step {currentStep} of {totalSteps}</p>
+        </div>
 
-        {/* Join Modal */}
-        <AnimatePresence>
-          {isModalOpen && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-            >
-              <motion.div
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.9, opacity: 0 }}
-                transition={{ duration: 0.3, ease: 'easeOut' }}
-                className="bg-indigo-950/90 rounded-xl p-8 max-w-md w-full shadow-xl border border-indigo-500/30"
-              >
-                <h2 className="text-2xl font-bold text-white mb-6">Join the Affiliate Program</h2>
-                <FormProvider {...methods}>
+        <FormProvider {...methods}>
+          <form onSubmit={methods.handleSubmit(onSubmit)}>
+            <Card className="bg-slate-800/40 backdrop-blur-sm border-slate-700/50">
+              <CardContent className="p-8">
+                {/* Step 1: Personal Information */}
+                {currentStep === 1 && (
                   <div className="space-y-6">
-                    <div>
-                      <Label htmlFor="fullName">Full Name</Label>
-                      <Input
-                        id="fullName"
-                        {...methods.register('fullName', { required: 'Full name is required' })}
-                        placeholder="Enter your full name"
-                        className="bg-indigo-800/50"
-                      />
-                      {methods.formState.errors.fullName && (
-                        <p className="mt-1 text-sm text-pink-400">{methods.formState.errors.fullName.message}</p>
-                      )}
+                    <h2 className="text-2xl font-bold text-white mb-6">Personal Information</h2>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">Full Name *</label>
+                        <Input
+                          {...methods.register('fullName', { required: 'Full name is required' })}
+                          placeholder="Enter your full name"
+                          className="bg-slate-700/50 border-slate-600 text-white"
+                        />
+                        {methods.formState.errors.fullName && (
+                          <p className="mt-1 text-sm text-red-400">{methods.formState.errors.fullName.message}</p>
+                        )}
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">Email Address *</label>
+                        <Input
+                          type="email"
+                          {...methods.register('email', { 
+                            required: 'Email is required',
+                            pattern: {
+                              value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                              message: 'Invalid email format'
+                            }
+                          })}
+                          placeholder="you@example.com"
+                          className="bg-slate-700/50 border-slate-600 text-white"
+                        />
+                        {methods.formState.errors.email && (
+                          <p className="mt-1 text-sm text-red-400">{methods.formState.errors.email.message}</p>
+                        )}
+                      </div>
                     </div>
+
                     <div>
-                      <Label htmlFor="email">Email Address</Label>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">Phone Number *</label>
                       <Input
-                        id="email"
-                        type="email"
-                        {...methods.register('email', {
-                          required: 'Email is required',
-                          validate: (v) => validators.email(v) || 'Invalid email format',
+                        {...methods.register('phone', { 
+                          required: 'Phone number is required',
+                          pattern: {
+                            value: /^\d{10}$/,
+                            message: 'Phone must be 10 digits'
+                          }
                         })}
-                        placeholder="you@example.com"
-                        className="bg-indigo-800/50"
+                        placeholder="1234567890"
+                        className="bg-slate-700/50 border-slate-600 text-white"
                       />
-                      {methods.formState.errors.email && (
-                        <p className="mt-1 text-sm text-pink-400">{methods.formState.errors.email.message}</p>
+                      {methods.formState.errors.phone && (
+                        <p className="mt-1 text-sm text-red-400">{methods.formState.errors.phone.message}</p>
                       )}
-                    </div>
-                    <div className="flex justify-end gap-4">
-                      <button
-                        type="button"
-                        onClick={() => setIsModalOpen(false)}
-                        className="px-6 py-2 rounded-lg bg-indigo-700/50 text-indigo-200 hover:bg-indigo-600/70 transition-all duration-200"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={methods.handleSubmit(onSubmit)}
-                        className="px-6 py-2 rounded-lg bg-gradient-to-r from-pink-500 to-purple-500 text-white hover:from-pink-600 hover:to-purple-600 transition-all duration-200"
-                      >
-                        Join Now
-                      </button>
                     </div>
                   </div>
-                </FormProvider>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+                )}
 
-        {/* How It Works Section */}
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: 'easeOut' }}
-          className="mb-20"
-        >
-          <h2 className="text-3xl sm:text-4xl font-bold text-center mb-10 text-white">How It Works</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {CONTENT.howItWorks.map((step, index) => (
-              <motion.div
-                key={step.title}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: index * 0.1 }}
-                className="bg-indigo-950/50 border border-indigo-500/30 rounded-xl p-6 flex flex-col items-center text-center shadow-md hover:shadow-lg transition-all duration-300"
-              >
-                <step.icon className="text-4xl text-pink-400 mb-4" />
-                <h3 className="text-xl font-semibold text-white mb-2">{step.title}</h3>
-                <p className="text-indigo-100">{step.description}</p>
-              </motion.div>
-            ))}
-          </div>
-        </motion.section>
+                {/* Step 2: Services Selection */}
+                {currentStep === 2 && (
+                  <div className="space-y-6">
+                    <h2 className="text-2xl font-bold text-white mb-6">Interested Services</h2>
+                    <p className="text-slate-400 mb-6">Select the services you're interested in promoting</p>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {services.map((service) => (
+                        <div
+                          key={service.id}
+                          className={`p-4 rounded-lg border-2 cursor-pointer transition-all duration-200 ${
+                            methods.watch('interestedServices')?.includes(service.id)
+                              ? 'border-purple-500 bg-purple-500/10'
+                              : 'border-slate-600 bg-slate-700/30 hover:border-slate-500'
+                          }`}
+                          onClick={() => {
+                            const currentServices = methods.getValues('interestedServices') || [];
+                            const isSelected = currentServices.includes(service.id);
+                            const newServices = isSelected
+                              ? currentServices.filter(id => id !== service.id)
+                              : [...currentServices, service.id];
+                            methods.setValue('interestedServices', newServices);
+                          }}
+                        >
+                          <div className="text-2xl mb-2">{service.icon}</div>
+                          <h3 className="font-semibold text-white mb-1">{service.title}</h3>
+                          <p className="text-sm text-slate-400 mb-2">{service.description}</p>
+                          <p className="text-sm font-medium text-purple-400">{service.price}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-        {/* Tracking & System Flow Section */}
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: 'easeOut' }}
-          className="mb-20"
-        >
-          <h2 className="text-3xl sm:text-4xl font-bold text-center mb-10 text-white">{CONTENT.tracking.title}</h2>
-          <div className="bg-indigo-950/50 border border-indigo-500/30 rounded-xl p-6 sm:p-8 shadow-md">
-            <p className="text-indigo-100 mb-6">{CONTENT.tracking.description}</p>
-            <button
-              onClick={() => window.open('/dashboard', '_blank')}
-              className="px-6 py-3 rounded-full bg-gradient-to-r from-pink-500 to-purple-500 text-white font-semibold hover:from-pink-600 hover:to-purple-600 focus:ring-2 focus:ring-pink-400 transition-all duration-300"
-            >
-              View Dashboard Demo
-            </button>
-          </div>
-        </motion.section>
+                {/* Step 3: Additional Information */}
+                {currentStep === 3 && (
+                  <div className="space-y-6">
+                    <h2 className="text-2xl font-bold text-white mb-6">Additional Information</h2>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">What best describes you? *</label>
+                      <select
+                        {...methods.register('description', { required: 'Please select an option' })}
+                        className="w-full px-4 py-3 rounded-lg bg-slate-700/50 border border-slate-600 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      >
+                        <option value="">Select an option</option>
+                        <option value="content-creator">Content Creator</option>
+                        <option value="blogger">Blogger</option>
+                        <option value="influencer">Social Media Influencer</option>
+                        <option value="entrepreneur">Entrepreneur</option>
+                        <option value="marketer">Digital Marketer</option>
+                        <option value="other">Other</option>
+                      </select>
+                      {methods.formState.errors.description && (
+                        <p className="mt-1 text-sm text-red-400">{methods.formState.errors.description.message}</p>
+                      )}
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        {...methods.register('termsAgreed', { required: 'You must agree to the terms' })}
+                        className="mt-1 w-4 h-4 text-purple-600 bg-slate-700 border-slate-600 rounded focus:ring-purple-500"
+                      />
+                      <label className="text-sm text-slate-300">
+                        I agree to the{' '}
+                        <a href="/terms" className="text-purple-400 hover:text-purple-300 underline">
+                          Terms and Conditions
+                        </a>{' '}
+                        and{' '}
+                        <a href="/privacy" className="text-purple-400 hover:text-purple-300 underline">
+                          Privacy Policy
+                        </a>
+                      </label>
+                    </div>
+                    {methods.formState.errors.termsAgreed && (
+                      <p className="text-sm text-red-400">{methods.formState.errors.termsAgreed.message}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Navigation Buttons */}
+                <div className="flex justify-between mt-8">
+                  <Button
+                    type="button"
+                    onClick={prevStep}
+                    disabled={currentStep === 1}
+                    variant="outline"
+                    className="border-slate-600 text-slate-300 hover:bg-slate-700 disabled:opacity-50"
+                  >
+                    Previous
+                  </Button>
+                  
+                  {currentStep < totalSteps ? (
+                    <Button
+                      type="button"
+                      onClick={nextStep}
+                      className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white"
+                    >
+                      Next
+                    </Button>
+                  ) : (
+                    <Button
+                      type="submit"
+                      disabled={loading}
+                      className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white"
+                    >
+                      {loading ? 'Submitting...' : 'Submit Application'}
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </form>
+        </FormProvider>
 
         {/* Benefits Section */}
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: 'easeOut' }}
-          className="mb-20"
-        >
-          <h2 className="text-3xl sm:text-4xl font-bold text-center mb-10 text-white">Why Join DigiLinex?</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            {CONTENT.benefits.map((benefit, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: index * 0.1 }}
-                className="flex items-start gap-4 bg-indigo-950/50 border border-indigo-500/30 rounded-lg p-4 shadow-md hover:shadow-lg transition-all duration-300"
-              >
-                <div className="w-10 h-10 bg-gradient-to-r from-pink-500 to-purple-500 rounded-full flex items-center justify-center">
-                  <span className="text-white font-bold">{index + 1}</span>
-                </div>
-                <p className="text-indigo-100">{benefit}</p>
-              </motion.div>
-            ))}
-          </div>
-        </motion.section>
+        <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="bg-slate-800/40 backdrop-blur-sm border-slate-700/50">
+            <CardContent className="p-6 text-center">
+              <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center">
+                <DollarSign className="w-6 h-6 text-white" />
+              </div>
+              <h3 className="text-lg font-semibold text-white mb-2">High Commission</h3>
+              <p className="text-slate-400 text-sm">Earn 30-40% commission on every sale</p>
+            </CardContent>
+          </Card>
 
-        {/* Terms & Conditions Section */}
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: 'easeOut' }}
-          className="mb-20"
-        >
-          <h2 className="text-3xl sm:text-4xl font-bold text-center mb-10 text-white">Terms & Conditions</h2>
-          <div className="bg-indigo-950/50 border border-indigo-500/30 rounded-xl p-6 sm:p-8 shadow-md">
-            <ul className="list-disc list-inside text-indigo-100 space-y-3">
-              {CONTENT.terms.map((term, index) => (
-                <li key={index}>{term}</li>
-              ))}
-            </ul>
-            <button
-              onClick={() => window.open('/terms', '_blank')}
-              className="mt-6 inline-block text-pink-400 hover:text-pink-300 transition-colors duration-200"
-            >
-              Read Full Terms
-            </button>
-          </div>
-        </motion.section>
+          <Card className="bg-slate-800/40 backdrop-blur-sm border-slate-700/50">
+            <CardContent className="p-6 text-center">
+              <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
+                <TrendingUp className="w-6 h-6 text-white" />
+              </div>
+              <h3 className="text-lg font-semibold text-white mb-2">Real-time Tracking</h3>
+              <p className="text-slate-400 text-sm">Monitor your performance in real-time</p>
+            </CardContent>
+          </Card>
 
-        {/* FAQ Section */}
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: 'easeOut' }}
-          className="mb-20"
-        >
-          <h2 className="text-3xl sm:text-4xl font-bold text-center mb-10 text-white">Frequently Asked Questions</h2>
-          <div className="space-y-4">
-            {CONTENT.faq.map((faq, index) => (
-              <FAQItem key={index} question={faq.question} answer={faq.answer} />
-            ))}
-          </div>
-        </motion.section>
-
-        {/* Final CTA */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: 'easeOut' }}
-          className="text-center"
-        >
-          <h2 className="text-2xl sm:text-3xl font-bold mb-6 text-white">Ready to Start Earning?</h2>
-          <button
-            onClick={() => navigate('/affiliate-program')}
-            className="px-8 py-3 rounded-full bg-gradient-to-r from-pink-500 to-purple-500 text-white font-semibold text-lg shadow-md hover:shadow-lg hover:from-pink-600 hover:to-purple-600 focus:ring-2 focus:ring-pink-400 transition-all duration-300"
-          >
-            Get Your Affiliate Link
-          </button>
-        </motion.div>
+          <Card className="bg-slate-800/40 backdrop-blur-sm border-slate-700/50">
+            <CardContent className="p-6 text-center">
+              <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                <Users className="w-6 h-6 text-white" />
+              </div>
+              <h3 className="text-lg font-semibold text-white mb-2">Easy Sharing</h3>
+              <p className="text-slate-400 text-sm">Get your unique referral link instantly</p>
+            </CardContent>
+          </Card>
+        </div>
       </div>
-    </section>
+    </div>
   );
 };
 
-const Label: React.FC<{ htmlFor: string; children: React.ReactNode }> = ({ htmlFor, children }) => (
-  <label htmlFor={htmlFor} className="block text-sm font-medium text-indigo-200 mb-2">
-    {children}
-  </label>
-);
+const AffiliateProgramInfo: React.FC = () => {
+  const [isApplicationFlowOpen, setIsApplicationFlowOpen] = useState(false);
+  const navigate = useNavigate();
+  const { user } = useUser();
+  const { canJoinAffiliate, canReapply, affiliateStatus, loading } = useAffiliateStatus();
+  
+  // State for full affiliate program interface
+  const [stats, setStats] = useState<AffiliateStats>({
+    impressions: 0,
+    clicks: 0,
+    joins: 0,
+    conversionRate: 0,
+    totalEarnings: 0,
+    lastUpdated: null
+  });
+  const [userRank, setUserRank] = useState<string>('starter');
+  const [userCommissionRate, setUserCommissionRate] = useState<number>(20);
+  const [referralUsers, setReferralUsers] = useState<ReferralUser[]>([]);
+  const [customLink, setCustomLink] = useState('');
+  const [isEditingLink, setIsEditingLink] = useState(false);
+  const [tempLink, setTempLink] = useState('');
+  const [canEditLink, setCanEditLink] = useState(true);
+  const [timeUntilEdit, setTimeUntilEdit] = useState(0);
+  const [loadingStats, setLoadingStats] = useState(true);
+  const [analyticsPeriod, setAnalyticsPeriod] = useState<'7d' | '30d' | '90d' | 'all'>('30d');
 
-const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement>> = ({ className, ...props }) => (
-  <input
-    {...props}
-    className={`w-full px-4 py-3 rounded-lg bg-indigo-800/50 border border-indigo-500/30 text-white placeholder-indigo-300 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-400 transition-all duration-200 ${className || ''}`}
-  />
-);
+  // Generate referral link
+  const referralLink = useMemo(() => {
+    if (!user?.id) return '';
+    const baseUrl = window.location.origin;
+    const linkId = customLink || user.id.slice(-8);
+    return `${baseUrl}/signup?ref=${linkId}`;
+  }, [user?.id, customLink]);
 
-interface FAQItemProps {
-  question: string;
-  answer: string;
-}
+  const handleApplicationComplete = () => {
+    setIsApplicationFlowOpen(false);
+    // Redirect to affiliate program dashboard after successful application
+    navigate('/affiliate-program');
+  };
 
-const FAQItem: React.FC<FAQItemProps> = ({ question, answer }) => {
-  const [isOpen, setIsOpen] = useState(false);
+  // Load affiliate stats and user rank
+  useEffect(() => {
+    if (!user?.id || !affiliateStatus.isApproved) return;
 
+    const unsubscribe = onSnapshot(doc(firestore, 'users', user.id), (doc) => {
+      if (doc.exists()) {
+        const data = doc.data();
+        const affiliateStats = data.affiliateStats || {};
+        
+        // Update affiliate stats
+        setStats({
+          impressions: affiliateStats.impressions || 0,
+          clicks: affiliateStats.clicks || 0,
+          joins: affiliateStats.joins || 0,
+          conversionRate: affiliateStats.conversionRate || 0,
+          totalEarnings: affiliateStats.totalEarnings || 0,
+          lastUpdated: affiliateStats.lastUpdated
+        });
+        
+        // Update user rank and commission rate
+        const currentRank = data.rank || 'starter';
+        const rankInfo = getRankInfo(currentRank);
+        setUserRank(currentRank);
+        setUserCommissionRate(rankInfo.commission);
+        
+        setCustomLink(data.customReferralLink || '');
+        setLoadingStats(false);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [user?.id, affiliateStatus.isApproved]);
+
+  // Load referral users
+  useEffect(() => {
+    if (!user?.id || !affiliateStatus.isApproved) return;
+
+    const loadReferralUsers = async () => {
+      try {
+        // Query for users with referrerCode field (new format)
+        const referrerCodeQuery = query(
+          collection(firestore, 'users'),
+          where('referrerCode', '==', user.id.slice(-8)),
+          orderBy('createdAt', 'desc'),
+          limit(50)
+        );
+        
+        // Query for users with referredBy field (old format)
+        const referredByQuery = query(
+          collection(firestore, 'users'),
+          where('referredBy', '==', user.id.slice(-8)),
+          orderBy('createdAt', 'desc'),
+          limit(50)
+        );
+        
+        const [referrerCodeSnapshot, referredBySnapshot] = await Promise.all([
+          getDocs(referrerCodeQuery),
+          getDocs(referredByQuery)
+        ]);
+        
+        // Combine results and remove duplicates
+        const allUsers = new Map();
+        
+        // Add users from referrerCode query
+        referrerCodeSnapshot.docs.forEach(doc => {
+          const data = doc.data();
+          allUsers.set(doc.id, {
+            id: doc.id,
+            name: data.name || 'Unknown',
+            email: data.email || '',
+            joinedAt: data.createdAt,
+            status: data.status === 'active' ? 'active' : 'inactive',
+            commissionEarned: data.commissionEarned || 0,
+            totalSpent: data.totalSpent || 0
+          });
+        });
+        
+        // Add users from referredBy query
+        referredBySnapshot.docs.forEach(doc => {
+          const data = doc.data();
+          allUsers.set(doc.id, {
+            id: doc.id,
+            name: data.name || 'Unknown',
+            email: data.email || '',
+            joinedAt: data.createdAt,
+            status: data.status === 'active' ? 'active' : 'inactive',
+            commissionEarned: data.commissionEarned || 0,
+            totalSpent: data.totalSpent || 0
+          });
+        });
+        
+        const users = Array.from(allUsers.values());
+        users.sort((a, b) => b.joinedAt?.getTime?.() - a.joinedAt?.getTime?.());
+        
+        setReferralUsers(users);
+      } catch (error) {
+        console.error('Error loading referral users:', error);
+        setReferralUsers([]);
+      }
+    };
+
+    loadReferralUsers();
+  }, [user?.id, affiliateStatus.isApproved]);
+
+  const copyReferralLink = async () => {
+    try {
+      await navigator.clipboard.writeText(referralLink);
+      toast.success('Referral link copied to clipboard!');
+    } catch (error) {
+      toast.error('Failed to copy link');
+    }
+  };
+
+  const shareReferralLink = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Join DigiLinex',
+          text: 'Join me on DigiLinex and start earning!',
+          url: referralLink
+        });
+      } catch (error) {
+        // User cancelled sharing
+      }
+    } else {
+      copyReferralLink();
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        <div className="text-center">
+          <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-500" />
+          <p className="text-gray-400">Loading affiliate program...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show full affiliate program interface for non-approved users
+  if (!affiliateStatus.isApproved) {
+    return <AffiliateRegistrationForm onComplete={handleApplicationComplete} />;
+  }
+
+  // Show full affiliate dashboard for approved users
   return (
-    <div className="bg-indigo-950/50 border border-indigo-500/30 rounded-xl shadow-md hover:shadow-lg transition-all duration-300">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full p-5 flex justify-between items-center text-left"
-      >
-        <span className="text-lg font-medium text-white">{question}</span>
-        <QuestionMarkCircleIcon className={`w-6 h-6 text-pink-400 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: 'easeOut' }}
-            className="px-5 pb-5 text-indigo-100"
-          >
-            {answer}
-          </motion.div>
-        )}
-      </AnimatePresence>
+    <div className="min-h-screen bg-gray-900 text-white">
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg">
+              <CheckCircle className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-white">Affiliate Dashboard</h1>
+              <p className="text-slate-400">Track your referrals and earnings in real-time</p>
+            </div>
+          </div>
+          <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30">
+            <CheckCircle className="w-4 h-4 mr-2" />
+            Affiliate Partner ✅
+          </Badge>
+        </div>
+
+        {/* Analytics Dashboard */}
+        <AffiliateAnalytics
+          data={{
+            impressions: stats.impressions,
+            clicks: stats.clicks,
+            joins: stats.joins,
+            conversionRate: stats.conversionRate,
+            totalEarnings: stats.totalEarnings,
+            period: analyticsPeriod
+          }}
+          period={analyticsPeriod}
+          onPeriodChange={setAnalyticsPeriod}
+        />
+
+        {/* Stats Overview */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <Card className="bg-slate-800/40 backdrop-blur-sm border-slate-700/50">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3 mb-2">
+                <Eye className="w-5 h-5 text-blue-400" />
+                <span className="text-sm text-slate-400">Impressions</span>
+              </div>
+              <div className="text-2xl font-bold text-white">{stats.impressions}</div>
+              <p className="text-xs text-slate-500">Link views</p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-slate-800/40 backdrop-blur-sm border-slate-700/50">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3 mb-2">
+                <MousePointer className="w-5 h-5 text-green-400" />
+                <span className="text-sm text-slate-400">Clicks</span>
+              </div>
+              <div className="text-2xl font-bold text-white">{stats.clicks}</div>
+              <p className="text-xs text-slate-500">Link clicks</p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-slate-800/40 backdrop-blur-sm border-slate-700/50">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3 mb-2">
+                <UserPlus className="w-5 h-5 text-purple-400" />
+                <span className="text-sm text-slate-400">Signups</span>
+              </div>
+              <div className="text-2xl font-bold text-white">{stats.joins}</div>
+              <p className="text-xs text-slate-500">New users</p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-slate-800/40 backdrop-blur-sm border-slate-700/50">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3 mb-2">
+                <DollarSign className="w-5 h-5 text-yellow-400" />
+                <span className="text-sm text-slate-400">Earnings</span>
+              </div>
+              <div className="text-2xl font-bold text-white">${stats.totalEarnings.toFixed(2)}</div>
+              <p className="text-xs text-slate-500">Total commission</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Referral Link Section */}
+        <Card className="bg-slate-800/40 backdrop-blur-sm border-slate-700/50 mb-8">
+          <CardHeader>
+            <CardTitle className="text-xl font-bold text-white flex items-center gap-2">
+              <LinkIcon className="w-5 h-5" />
+              Your Referral Link
+            </CardTitle>
+            <CardDescription className="text-slate-400">
+              Share this link to earn commissions on every signup
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex gap-3">
+              <Input
+                value={referralLink}
+                readOnly
+                className="flex-1 bg-slate-700/50 border-slate-600 text-white"
+              />
+              <Button
+                onClick={copyReferralLink}
+                variant="outline"
+                className="border-slate-600 text-slate-300 hover:bg-slate-700"
+              >
+                <Copy className="w-4 h-4 mr-2" />
+                Copy
+              </Button>
+              <Button
+                onClick={shareReferralLink}
+                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
+              >
+                <Share2 className="w-4 h-4 mr-2" />
+                Share
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Commission Rate Section */}
+        <Card className="bg-slate-800/40 backdrop-blur-sm border-slate-700/50 mb-8">
+          <CardHeader>
+            <CardTitle className="text-xl font-bold text-white flex items-center gap-2">
+              <TrendingUp className="w-5 h-5" />
+              Your Commission Rate
+            </CardTitle>
+            <CardDescription className="text-slate-400">
+              Your current commission rate based on your rank
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center">
+              <div className="text-4xl font-bold text-blue-400 mb-2">
+                {userCommissionRate}%
+              </div>
+              <div className="text-lg text-slate-300">
+                {getRankInfo(userRank).name}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Referral History */}
+        <Card className="bg-slate-800/40 backdrop-blur-sm border-slate-700/50">
+          <CardHeader>
+            <CardTitle className="text-xl font-bold text-white flex items-center gap-2">
+              <Users className="w-5 h-5" />
+              Referral History
+            </CardTitle>
+            <CardDescription className="text-slate-400">
+              Track all users who joined through your referral link
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {referralUsers.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-700">
+                      <th className="text-left py-3 px-4 text-slate-400">User</th>
+                      <th className="text-left py-3 px-4 text-slate-400">Joined</th>
+                      <th className="text-left py-3 px-4 text-slate-400">Status</th>
+                      <th className="text-left py-3 px-4 text-slate-400">Commission</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {referralUsers.map((user) => (
+                      <tr key={user.id} className="border-b border-slate-700/50 hover:bg-slate-700/30">
+                        <td className="py-3 px-4">
+                          <div>
+                            <div className="font-medium text-white">{user.name}</div>
+                            <div className="text-slate-400 text-xs">{user.email}</div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-slate-300">
+                          {user.joinedAt ? new Date(user.joinedAt.toDate ? user.joinedAt.toDate() : user.joinedAt).toLocaleDateString() : 'N/A'}
+                        </td>
+                        <td className="py-3 px-4">
+                          <Badge
+                            className={
+                              user.status === 'active'
+                                ? 'bg-green-500/20 text-green-300 border-green-500/30'
+                                : 'bg-red-500/20 text-red-300 border-red-500/30'
+                            }
+                          >
+                            {user.status}
+                          </Badge>
+                        </td>
+                        <td className="py-3 px-4 text-green-400 font-medium">
+                          ${user.commissionEarned.toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <Users className="w-12 h-12 text-slate-500 mx-auto mb-4" />
+                <p className="text-slate-400">No referrals yet</p>
+                <p className="text-slate-500 text-sm">Start sharing your link to earn commissions!</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
+
 };
 
 export default AffiliateProgramInfo;

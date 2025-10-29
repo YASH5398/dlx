@@ -44,37 +44,37 @@ export default function DashboardLayout() {
 
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      {/* Header */}
-      <header className="fixed top-0 left-0 right-0 h-16 bg-gray-800/95 backdrop-blur-sm border-b border-gray-700 z-30 lg:left-72">
-        <div className="h-full flex items-center justify-between px-6">
-          <div className="flex items-center gap-4">
+    <div className="min-h-screen bg-gradient-to-br from-[#0A0E1A] to-[#101830] text-[#F1F5FF]">
+      {/* Compact Cyber Header */}
+      <header className="fixed top-0 left-0 right-0 h-16 bg-gradient-to-r from-[#0A0E1A] to-[#101830] backdrop-blur-xl border-b border-[#00E5FF]/10 z-30 lg:left-72 shadow-2xl">
+        <div className="h-full flex items-center justify-between px-4">
+          <div className="flex items-center gap-3">
             <button 
               onClick={() => setMenuOpen(!menuOpen)} 
-              className="lg:hidden p-2 rounded-lg hover:bg-gray-700 transition-colors"
+              className="lg:hidden p-2 rounded-lg hover:bg-[#00E5FF]/10 transition-all duration-200 hover:shadow-lg hover:shadow-cyan-500/10"
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[#F1F5FF]">
                 {menuOpen ? <path d="M6 6L18 18M6 18L18 6" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
               </svg>
             </button>
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center">
-                <span className="text-white font-bold text-sm">D</span>
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#00E5FF] to-[#0096FF] flex items-center justify-center shadow-lg shadow-cyan-500/25">
+                <span className="text-white font-bold text-xs">D</span>
               </div>
-              <span className="text-xl font-bold text-white">DigiLinex</span>
+              <span className="text-lg font-bold text-[#F1F5FF]">DigiLinex</span>
             </div>
           </div>
           
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <NotificationBell />
             <div className="relative">
               <button
                 onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
-                className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-700 transition-colors"
+                className="flex items-center gap-2 p-2 rounded-lg hover:bg-[#00E5FF]/10 transition-all duration-200 hover:shadow-lg hover:shadow-cyan-500/10"
               >
                 <UserAvatar initials={initials} size="sm" />
-                <span className="hidden lg:inline text-sm font-medium">{user?.name || "User"}</span>
-                <svg className={`h-4 w-4 transition-transform ${profileDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <span className="hidden lg:inline text-sm font-medium text-[#F1F5FF]">{user?.name || "User"}</span>
+                <svg className={`h-3 w-3 transition-transform duration-200 text-[#F1F5FF]/60 ${profileDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>

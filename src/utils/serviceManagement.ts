@@ -18,8 +18,11 @@ export interface Service {
   title: string;
   description: string;
   price: string;
+  price_usd?: number;
+  price_inr?: number;
+  commission?: number;
+  rating?: number;
   category: string;
-  icon: string;
   isActive: boolean;
   createdAt: any;
   updatedAt?: any;
@@ -59,8 +62,11 @@ export class ServiceManager {
           title: data.title || '',
           description: data.description || '',
           price: data.price || '',
+          price_usd: data.price_usd,
+          price_inr: data.price_inr,
+          commission: data.commission,
+          rating: data.rating,
           category: data.category || '',
-          icon: data.icon || '📦',
           isActive: data.isActive !== undefined ? data.isActive : true,
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,
@@ -90,8 +96,11 @@ export class ServiceManager {
           title: data.title || '',
           description: data.description || '',
           price: data.price || '',
+          price_usd: data.price_usd,
+          price_inr: data.price_inr,
+          commission: data.commission,
+          rating: data.rating,
           category: data.category || '',
-          icon: data.icon || '📦',
           isActive: data.isActive !== undefined ? data.isActive : true,
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,

@@ -55,7 +55,6 @@ export default function AdminServiceManage() {
     description: '',
     price: '',
     category: '',
-    icon: '📦',
     isActive: true,
     thumbnailUrl: '',
     formUrl: '',
@@ -87,10 +86,7 @@ export default function AdminServiceManage() {
     'Other'
   ];
 
-  const icons = [
-    '📦', '🌐', '📱', '🤖', '⚙️', '🎨', '🔒', '💻', '📊', '🚀',
-    '🛡️', '💡', '🔧', '📈', '🎯', '💎', '⭐', '🔥', '✨', '🎪'
-  ];
+  // Icons removed; use thumbnails only
 
   useEffect(() => {
     loadServices();
@@ -206,7 +202,6 @@ export default function AdminServiceManage() {
       description: '',
       price: '',
       category: '',
-      icon: '📦',
       isActive: true,
       thumbnailUrl: '',
       formUrl: '',
@@ -222,7 +217,6 @@ export default function AdminServiceManage() {
       description: service.description,
       price: service.price,
       category: service.category,
-      icon: service.icon,
       isActive: service.isActive,
       thumbnailUrl: service.thumbnailUrl || '',
       formUrl: service.formUrl || '',
@@ -494,7 +488,11 @@ export default function AdminServiceManage() {
                     <TableRow key={service.id} className="border-gray-700 hover:bg-gray-800/50">
                       <TableCell className="text-white">
                         <div className="flex items-center gap-3">
-                          <span className="text-2xl">{service.icon}</span>
+                          {service.thumbnailUrl ? (
+                            <img src={service.thumbnailUrl} alt={service.title} className="w-10 h-10 rounded object-cover" />
+                          ) : (
+                            <div className="w-10 h-10 rounded bg-gray-700 flex items-center justify-center text-gray-400 text-sm">IMG</div>
+                          )}
                           <div>
                             <div className="font-medium">{service.title}</div>
                             <div className="text-sm text-gray-400 line-clamp-2">{service.description}</div>
@@ -598,19 +596,7 @@ export default function AdminServiceManage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Icon</label>
-                <Select value={formData.icon} onValueChange={(value) => setFormData(prev => ({ ...prev, icon: value }))}>
-                  <SelectTrigger className="bg-white/5 border-white/10 text-white">
-                    <SelectValue placeholder="Select icon" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-gray-800 border-gray-700">
-                    {icons.map(icon => (
-                      <SelectItem key={icon} value={icon}>{icon}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* Icon selection removed; use thumbnails only */}
             </div>
             
             <div>
@@ -753,19 +739,7 @@ export default function AdminServiceManage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Icon</label>
-                <Select value={formData.icon} onValueChange={(value) => setFormData(prev => ({ ...prev, icon: value }))}>
-                  <SelectTrigger className="bg-white/5 border-white/10 text-white">
-                    <SelectValue placeholder="Select icon" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-gray-800 border-gray-700">
-                    {icons.map(icon => (
-                      <SelectItem key={icon} value={icon}>{icon}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* Icon selection removed; use thumbnails only */}
             </div>
             
             <div>

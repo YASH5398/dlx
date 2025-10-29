@@ -24,7 +24,7 @@ export interface ServiceItem {
   name: string;
   description: string;
   startingPrice?: string;
-  icon?: string;
+  thumbnail?: string;
   gradient?: string;
   features?: string[];
   category?: string;

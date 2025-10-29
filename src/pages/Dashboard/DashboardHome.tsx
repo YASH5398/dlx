@@ -30,7 +30,7 @@ interface Service {
   name: string;
   description: string;
   startingPrice: string;
-  icon: string;
+  thumbnail: string;
   gradient: string;
   features: string[];
   category: string;
@@ -41,7 +41,7 @@ interface StaticService {
   name: string;
   description: string;
   startingPrice: string;
-  icon: React.ReactNode;
+  thumbnail: string;
   gradient: string;
   features: string[];
   category: string;
@@ -52,7 +52,7 @@ export default function DashboardHome() {
   // const { wallet } = useWallet();
   const { totalEarnings, activeReferrals, referralCount, tier, loading: referralsLoading } = useReferral();
   const { userRankInfo } = useUserRank();
-  const { affiliateStatus, joinAffiliateProgram, getAffiliateBadgeText, getAffiliateStatusText, canJoinAffiliate, canReapply } = useAffiliateStatus();
+  const { affiliateStatus, loading: affiliateLoading, joinAffiliateProgram, getAffiliateBadgeText, getAffiliateStatusText, canJoinAffiliate, canReapply } = useAffiliateStatus();
   const { shouldHideBanners } = useAffiliateBannerVisibility();
   const navigate = useNavigate();
   const [ordersCount, setOrdersCount] = useState(0);
@@ -76,6 +76,10 @@ export default function DashboardHome() {
   const [purchaseOption, setPurchaseOption] = useState<'main_only' | 'split' | 'currency_choice'>('split');
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
   const [showFailurePopup, setShowFailurePopup] = useState(false);
+  const [servicesScrollPosition, setServicesScrollPosition] = useState(0);
+  const servicesScrollRef = useRef<HTMLDivElement>(null);
+  const [categoryScrollPositions, setCategoryScrollPositions] = useState<{ [key: string]: number }>({});
+  const [scrollPositions, setScrollPositions] = useState<{ [key: string]: number }>({});
 
   // Popups persist until user action (no auto-hide)
 
@@ -237,7 +241,19 @@ export default function DashboardHome() {
     }
   };
 
-  // Removed automatic affiliate popup - users must manually join
+  // Show affiliate join popup for first-time users who are not approved
+  useEffect(() => {
+    if (user?.id && !affiliateLoading) {
+      // Only show popup if user is not approved and hasn't seen it before
+      if (!affiliateStatus.isApproved && !affiliateStatus.hasApplied) {
+        const hasSeenPopup = localStorage.getItem('affiliate-popup-shown');
+        if (!hasSeenPopup) {
+          setAffiliateJoinModalOpen(true);
+          localStorage.setItem('affiliate-popup-shown', 'true');
+        }
+      }
+    }
+  }, [user?.id, affiliateStatus.isApproved, affiliateStatus.hasApplied, affiliateLoading]);
 
   // Show congratulations modal when affiliate gets approved (only once)
   useEffect(() => {
@@ -255,6 +271,8 @@ export default function DashboardHome() {
     const success = await joinAffiliateProgram();
     if (success) {
       setAffiliateJoinModalOpen(false);
+      // Clear the popup flag since user has now joined
+      localStorage.setItem('affiliate-popup-shown', 'true');
       // Show success toast or notification
     }
   };
@@ -458,13 +476,43 @@ export default function DashboardHome() {
     if (c === 'crypto' || c === 'blockchain') return 'from-blue-500 to-cyan-600';
     if (c === 'marketing') return 'from-teal-500 to-green-600';
     if (c === 'media') return 'from-red-500 to-pink-600';
-    if (c === 'ai') return 'from-cyan-500 to-teal-600';
+    if (c === 'ai & automation') return 'from-cyan-500 to-teal-600';
     if (c === 'mlm') return 'from-pink-500 to-rose-600';
     if (c === 'mobile') return 'from-blue-500 to-indigo-600';
     if (c === 'automation') return 'from-emerald-500 to-green-600';
     if (c === 'bot') return 'from-sky-500 to-blue-600';
     if (c === 'security') return 'from-red-500 to-orange-600';
     return 'from-cyan-500 to-blue-600';
+  };
+
+  // Normalize inconsistent category labels into the canonical ones used by the UI
+  const normalizeCategory = (cat?: string): string => {
+    const c = (cat || '').trim().toLowerCase();
+    if (c === 'mlm' || c === 'mobile' || c === 'mlm & mobile' || c === 'mlm/mobile') return 'MLM & Mobile';
+    if (c === 'web' || c === 'web dev' || c === 'web development') return 'Web Development';
+    if (c === 'crypto' || c === 'blockchain') return 'Crypto';
+    if (c === 'marketing' || c === 'digital marketing') return 'Marketing';
+    if (c === 'media' || c === 'video') return 'Media';
+    if (c === 'ai' || c === 'automation' || c === 'ai & automation') return 'AI & Automation';
+    return cat || 'Other';
+  };
+
+  // Format price as "$X / ₹Y" if not already dual-currency
+  const formatStartingPrice = (raw?: string): string => {
+    const input = raw ?? '';
+    const hasUsd = /\$/g.test(input);
+    const hasInr = /₹/g.test(input);
+    if (hasUsd && hasInr) return input; // already dual
+    // extract first number as USD
+    const match = input.match(/([0-9]+(?:\.[0-9]+)?)/);
+    if (!match) return input;
+    const usd = parseFloat(match[1]);
+    if (Number.isNaN(usd)) return input;
+    // approximate INR conversion and round to nearest 50 for cleaner display
+    const rate = 83; // static rate
+    const inr = Math.max(100, Math.round((usd * rate) / 50) * 50);
+    const usdStr = hasUsd ? input : `$${usd}`;
+    return `${usdStr} / ₹${inr.toLocaleString('en-IN')}`;
   };
 
   const getDefaultFeatures = (serviceId: string, category?: string) => {
@@ -497,20 +545,20 @@ export default function DashboardHome() {
       try {
         // Use the new service management system for real-time updates
         if (activeServices.length > 0) {
-          const items: ServiceItem[] = activeServices.map(service => ({
+          const rawItems: ServiceItem[] = activeServices.map(service => ({
             id: service.id,
             name: service.title,
             description: service.description,
             startingPrice: service.price,
-            icon: service.icon,
+            thumbnail: service.thumbnailUrl || '',
             gradient: gradientForCategory(service.category),
             features: service.features || getDefaultFeatures(service.id, service.category),
-            category: service.category,
+            category: normalizeCategory(service.category),
           }));
-          setServices(items);
+          setServices(rawItems);
         } else {
-          // Fallback to static services if no active services
-          setServices(staticServices);
+          // No services available from Firestore
+          setServices([]);
         }
 
         // Restore missing service form configs (idempotent)
@@ -537,34 +585,7 @@ export default function DashboardHome() {
           'whatsapp-marketing-software',
         ]);
 
-        const snap = await getDocs(collection(firestore, 'services'));
-        if (snap.size > allowedIds.size) {
-          const deletions: Promise<any>[] = [];
-          snap.forEach((d) => {
-            if (!allowedIds.has(d.id)) {
-              deletions.push(deleteDoc(doc(firestore, 'services', d.id)));
-            }
-          });
-          if (deletions.length) {
-            await Promise.all(deletions);
-            const snap2 = await getDocs(collection(firestore, 'services'));
-            const items2: ServiceItem[] = [];
-            snap2.forEach((d2) => {
-              const data2 = d2.data() as any;
-              items2.push({
-                id: d2.id,
-                name: data2.title ?? data2.name ?? '',
-                description: data2.description ?? '',
-                startingPrice: data2.price ?? data2.startingPrice ?? '',
-                icon: String(data2.icon ?? '✨'),
-                gradient: gradientForCategory(data2.category),
-                features: Array.isArray(data2.features) ? data2.features : getDefaultFeatures(d2.id, data2.category),
-                category: data2.category ?? 'General',
-              });
-            });
-            setServices(items2.length ? items2 : staticServices);
-          }
-        }
+        // Do not delete or mutate Firestore services; always trust live data
       } catch (e) {
         console.warn('Failed to load services from Firestore', e);
         // In case of error, still show static fallback
@@ -574,26 +595,41 @@ export default function DashboardHome() {
     load();
   }, [activeServices]);
 
-  // Fallback static list (used if backend is empty)
+  // Fallback static list (used if backend is empty) - Updated with professional images and complete descriptions
   const DEFAULT_SERVICES_BASE: Omit<ServiceItem, 'gradient' | 'features'>[] = [
-    { id: 'token', name: 'Crypto Token Creation', description: 'Launch your own cryptocurrency with smart contracts, custom tokenomics, and secure blockchain integration.', startingPrice: '$2,999', icon: '🪙', category: 'Crypto' },
-    { id: 'chatbot', name: 'Chatbot Development', description: 'AI-powered chatbots for customer service, lead generation, and automated support systems.', startingPrice: '$999', icon: '💬', category: 'ai' },
-    { id: 'mlm', name: 'MLM Plan Development', description: 'Complete MLM software with multiple compensation plans, genealogy tree, and commission tracking.', startingPrice: '$350', icon: '📊', category: 'mlm' },
-    { id: 'mobile', name: 'Mobile App Development', description: 'Native and cross-platform mobile applications with modern UI/UX and high performance.', startingPrice: '$250', icon: '📱', category: 'mobile' },
-    { id: 'automation', name: 'Business Automation', description: 'Automate your business processes and workflows with custom integration and smart automation.', startingPrice: '$1,999', icon: '⚙️', category: 'automation' },
-    { id: 'telegram', name: 'Telegram Bot', description: 'Custom Telegram bots with advanced features, payment integration, and user management.', startingPrice: '$799', icon: '🤖', category: 'bot' },
-    { id: 'audit', name: 'Crypto Audit', description: 'Comprehensive smart contract security audits with vulnerability assessment and detailed reports.', startingPrice: '$2,499', icon: '🔍', category: 'security' },
-    { id: 'landing-page', name: 'Landing Page Creation', description: 'Create a responsive and high-converting landing page with custom design, layout, and hosting-ready setup.', startingPrice: '$45 / ₹4,000', icon: '🎨', category: 'Web Development' },
-    { id: 'ecommerce-store', name: 'E-commerce Store Setup', description: 'Launch a full-featured e-commerce store with payment integration, product setup, and basic SEO optimization.', startingPrice: '$190 / ₹16,000', icon: '🛒', category: 'Web Development' },
-    { id: 'tradingview-indicator', name: 'TradingView Custom Indicator / Strategy', description: 'Get your personalized TradingView indicator or strategy with alerts and backtesting for automated trading.', startingPrice: '$30 / ₹2,500', icon: '📈', category: 'Crypto' },
-    { id: 'social-media-management', name: 'Social Media Management', description: 'Full monthly social media management with content creation, post scheduling, and engagement tracking.', startingPrice: '$20 / ₹1,700 per month', icon: '📱', category: 'Marketing' },
-    { id: 'seo-services', name: 'SEO Services', description: 'Optimize your website for better search engine visibility with technical and on-page SEO improvements.', startingPrice: '$50 / ₹4,200', icon: '🔍', category: 'Marketing' },
-    { id: 'digital-marketing-campaigns', name: 'Digital Marketing Campaigns', description: 'Setup and manage FB/IG/Google Ads campaigns with creatives, targeting, and performance tracking.', startingPrice: '$20 / ₹1,700', icon: '📊', category: 'Marketing' },
-    { id: 'video-editing', name: 'Video Editing Service', description: 'Professional video editing for YouTube, Reels, or promotional content with high-quality output.', startingPrice: '$15 / ₹1,300', icon: '🎬', category: 'Media' },
-    { id: 'daily-thumbnails', name: 'Daily Thumbnails Service', description: 'Custom thumbnail creation daily for your YouTube videos or content platform for 30/60 days.', startingPrice: '$5 / ₹450 per thumbnail', icon: '🖼️', category: 'Media' },
-    { id: 'email-marketing-setup', name: 'Automated Email Marketing Setup', description: 'Setup automated email campaigns with workflows, templates, and integrations for better engagement.', startingPrice: '$30 / ₹2,500', icon: '📧', category: 'Marketing' },
-    { id: 'whatsapp-marketing-software', name: 'WhatsApp Marketing Hidden Software', description: 'Get a cost-effective WhatsApp marketing software without API cost, fully automated for campaigns.', startingPrice: '$30 / ₹2,500', icon: '💬', category: 'Marketing' },
-    { id: 'website', name: 'Website Development', description: 'Custom, responsive website with modern design and SEO optimization.', startingPrice: '$1,499', icon: '🖥️', category: 'Web Development' },
+    // Web Development Services
+    { id: 'landing-page', name: 'Landing Page Creation', description: 'Create a responsive and high-converting landing page with custom design, layout, and hosting-ready setup.', startingPrice: '$45 / ₹4,000', thumbnail: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80', category: 'Web Development' },
+    { id: 'ecommerce-store', name: 'E-commerce Store Setup', description: 'Launch a full-featured e-commerce store with payment integration, product setup, and basic SEO optimization.', startingPrice: '$190 / ₹16,000', thumbnail: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80', category: 'Web Development' },
+    { id: 'website', name: 'Website Development', description: 'Custom, responsive website with modern design and SEO optimization.', startingPrice: '$1,499', thumbnail: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80', category: 'Web Development' },
+    { id: 'landing-page-2', name: 'Landing Page Creation', description: 'Create a responsive and high-converting landing page with custom design, layout, and hosting-ready setup.', startingPrice: '$45 / ₹4,000', thumbnail: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80', category: 'Web Development' },
+
+    // Crypto Services
+    { id: 'token', name: 'Crypto Token Creation', description: 'Launch your own cryptocurrency with smart contracts, custom tokenomics, and secure blockchain integration.', startingPrice: '$2,999', thumbnail: 'https://images.unsplash.com/photo-1639762681485-074b7f938ba0?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80', category: 'Crypto' },
+    { id: 'tradingview-indicator', name: 'TradingView Custom Indicator / Strategy', description: 'Get your personalized TradingView indicator or strategy with alerts and backtesting for automated trading.', startingPrice: '$30 / ₹2,500', thumbnail: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80', category: 'Crypto' },
+    { id: 'audit', name: 'Crypto Audit', description: 'Comprehensive smart contract security audits with vulnerability assessment and detailed reports.', startingPrice: '$2,499', thumbnail: 'https://images.unsplash.com/photo-1555949963-aa79dcee981c?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80', category: 'Crypto' },
+
+    // Marketing Services
+    { id: 'social-media-management', name: 'Social Media Management', description: 'Full monthly social media management with content creation, post scheduling, and engagement tracking.', startingPrice: '$20 / ₹1,700 per month', thumbnail: 'https://images.unsplash.com/photo-1611224923853-80b023f02d71?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80', category: 'Marketing' },
+    { id: 'seo-services', name: 'SEO Services', description: 'Optimize your website for better search engine visibility with technical and on-page SEO improvements.', startingPrice: '$50 / ₹4,200', thumbnail: 'https://images.unsplash.com/photo-1555949963-aa79dcee981c?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80', category: 'Marketing' },
+    { id: 'digital-marketing-campaigns', name: 'Digital Marketing Campaigns', description: 'Setup and manage FB/IG/Google Ads campaigns with creatives, targeting, and performance tracking.', startingPrice: '$20 / ₹1,700', thumbnail: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80', category: 'Marketing' },
+    { id: 'email-marketing-setup', name: 'Automated Email Marketing Setup', description: 'Setup automated email campaigns with workflows, templates, and integrations for better engagement.', startingPrice: '$30 / ₹2,500', thumbnail: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80', category: 'Marketing' },
+    { id: 'whatsapp-marketing-software', name: 'WhatsApp Marketing Hidden Software', description: 'Get a cost-effective WhatsApp marketing software without API cost, fully automated for campaigns.', startingPrice: '$30 / ₹2,500', thumbnail: 'https://images.unsplash.com/photo-1611224923853-80b023f02d71?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80', category: 'Marketing' },
+    { id: 'social-media-management-2', name: 'Social Media Management', description: 'Full monthly social media management with content creation, post scheduling, and engagement tracking.', startingPrice: '$20 / ₹1,700 per month', thumbnail: 'https://images.unsplash.com/photo-1611224923853-80b023f02d71?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80', category: 'Marketing' },
+
+    // Media Services
+    { id: 'video-editing', name: 'Video Editing Service', description: 'Professional video editing for YouTube, Reels, or promotional content with high-quality output.', startingPrice: '$15 / ₹1,300', thumbnail: 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80', category: 'Media' },
+    { id: 'daily-thumbnails', name: 'Daily Thumbnails Service', description: 'Custom thumbnail creation daily for your YouTube videos or content platform for 30/60 days.', startingPrice: '$5 / ₹450 per thumbnail', thumbnail: 'https://images.unsplash.com/photo-1611162616475-46b635cb6868?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80', category: 'Media' },
+
+    // AI & Automation Services
+    { id: 'chatbot', name: 'Chatbot Development', description: 'AI-powered chatbots for customer service, lead generation, and automated support systems.', startingPrice: '$999', thumbnail: 'https://images.unsplash.com/photo-1677442136019-21780ecad995?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80', category: 'AI & Automation' },
+    { id: 'automation', name: 'Business Automation', description: 'Automate your business processes and workflows with custom integration and smart automation.', startingPrice: '$1,999', thumbnail: 'https://images.unsplash.com/photo-1485827404703-89b55fcc595e?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80', category: 'AI & Automation' },
+    { id: 'telegram', name: 'Telegram Bot', description: 'Custom Telegram bots with advanced features, payment integration, and user management.', startingPrice: '$799', thumbnail: 'https://images.unsplash.com/photo-1611224923853-80b023f02d71?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80', category: 'AI & Automation' },
+
+    // MLM Services
+    { id: 'mlm', name: 'MLM Plan Development', description: 'Complete MLM software with multiple compensation plans, genealogy tree, and commission tracking.', startingPrice: '$350', thumbnail: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80', category: 'MLM' },
+
+    // Mobile Services
+    { id: 'mobile', name: 'Mobile App Development', description: 'Native and cross-platform mobile applications with modern UI/UX and high performance.', startingPrice: '$250', thumbnail: 'https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80', category: 'Mobile' },
   ];
 
   const staticServices: ServiceItem[] = DEFAULT_SERVICES_BASE.map((s) => ({
@@ -609,11 +645,60 @@ export default function DashboardHome() {
     return matchesSearch && matchesCategory;
   });
 
-  // Limit services to 10 initially, show all if showAllServices is true
-  const displayedServices = showAllServices ? filteredServices : filteredServices.slice(0, 10);
+  // Categorize services for horizontal scroll sections
+  const categorizeServices = (services: ServiceItem[]) => {
+    const categories: { [key: string]: ServiceItem[] } = {};
+    services.forEach(service => {
+      const category = service.category || 'General';
+      if (!categories[category]) {
+        categories[category] = [];
+      }
+      categories[category].push(service);
+    });
+    return Object.entries(categories);
+  };
+
+  const categorizedServices = categorizeServices(filteredServices);
+  
+  // Initialize scroll positions for all categories
+  useEffect(() => {
+    const initialPositions: { [key: string]: number } = {};
+    categorizedServices.forEach(([categoryName]) => {
+      const categoryId = categoryName.toLowerCase().replace(/\s+/g, '-');
+      initialPositions[categoryId] = 0;
+    });
+    setCategoryScrollPositions(initialPositions);
+  }, [categorizedServices]);
+  
+  // Limit services to 9 initially (3 rows of 3 cards), show all if showAllServices is true
+  const displayedServices = showAllServices ? filteredServices : filteredServices.slice(0, 9);
   
   // Limit digital products to 10 initially, show all if showAllProducts is true
-  const displayedProducts = showAllProducts ? digitalProducts : digitalProducts.slice(0, 10);
+  const displayedProducts = digitalProducts;
+  
+  // Test with sample data if no products are loaded
+  const testProducts = digitalProducts.length === 0 ? [
+    {
+      id: 'test-1',
+      title: 'Test Product 1',
+      description: 'This is a test product description',
+      priceUsd: 29.99,
+      thumbnailUrl: '',
+      downloadUrl: '',
+      status: 'approved',
+      category: 'Software'
+    },
+    {
+      id: 'test-2', 
+      title: 'Test Product 2',
+      description: 'Another test product description',
+      priceUsd: 19.99,
+      thumbnailUrl: '',
+      downloadUrl: '',
+      status: 'approved',
+      category: 'Templates'
+    }
+  ] : digitalProducts;
 
   useEffect(() => {
     if (!user?.id) return;
@@ -716,6 +801,591 @@ export default function DashboardHome() {
     setShowProductModal(true);
     setPurchaseOption('split'); // Reset to default
     setCurrency('USDT'); // Reset to default
+  };
+
+  const scrollCarousel = (carouselId: string, direction: 'left' | 'right') => {
+    const container = document.getElementById(`carousel-${carouselId}`);
+    if (!container) return;
+
+    const scrollAmount = 280; // Width of one card + gap
+    const currentScroll = scrollPositions[carouselId] || 0;
+    const newScroll = direction === 'left' 
+      ? Math.max(0, currentScroll - scrollAmount)
+      : currentScroll + scrollAmount;
+
+    container.scrollTo({
+      left: newScroll,
+      behavior: 'smooth'
+    });
+
+    setScrollPositions(prev => ({
+      ...prev,
+      [carouselId]: newScroll
+    }));
+  };
+
+  const scrollServices = (direction: 'left' | 'right') => {
+    if (!servicesScrollRef.current) return;
+    
+    const scrollAmount = 320; // Width of one card + gap
+    const currentScroll = servicesScrollPosition;
+    const newScroll = direction === 'left' 
+      ? Math.max(0, currentScroll - scrollAmount)
+      : currentScroll + scrollAmount;
+    
+    servicesScrollRef.current.scrollTo({
+      left: newScroll,
+      behavior: 'smooth'
+    });
+    
+    setServicesScrollPosition(newScroll);
+  };
+
+  const scrollCategoryServices = (categoryId: string, direction: 'left' | 'right') => {
+    const container = document.getElementById(`services-${categoryId}`);
+    if (!container) {
+      console.warn(`Container with id 'services-${categoryId}' not found`);
+      return;
+    }
+    
+    const scrollAmount = 320; // Width of one card + gap
+    const currentScroll = categoryScrollPositions[categoryId] || 0;
+    const newScroll = direction === 'left' 
+      ? Math.max(0, currentScroll - scrollAmount)
+      : currentScroll + scrollAmount;
+    
+    try {
+      container.scrollTo({
+        left: newScroll,
+        behavior: 'smooth'
+      });
+      
+      setCategoryScrollPositions(prev => ({
+        ...prev,
+        [categoryId]: newScroll
+      }));
+    } catch (error) {
+      console.warn('Error scrolling container:', error);
+    }
+  };
+
+
+  // Render services by category sections
+  const renderServicesByCategory = () => {
+    return categorizedServices.map(([categoryName, categoryServices], sectionIndex) => {
+      const categoryId = categoryName.toLowerCase().replace(/\s+/g, '-');
+      // Icons/emojis removed per requirement (image-based only)
+
+      return (
+        <div key={categoryName} className="mb-8">
+          {/* Category Header */}
+          <div className="flex items-center gap-3 mb-4">
+            <h3 className="text-xl font-bold text-slate-200">{categoryName}</h3>
+            <div className="flex-1 h-px bg-gradient-to-r from-slate-600 to-transparent"></div>
+          </div>
+
+          {/* Services Horizontal Scroll Section */}
+          <div className="relative">
+            {/* Left Arrow */}
+            <button
+              onClick={() => scrollCategoryServices(categoryId, 'left')}
+              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-gradient-to-r from-cyan-600/20 to-blue-600/20 backdrop-blur-sm border border-white/10 flex items-center justify-center hover:from-cyan-600/40 hover:to-blue-600/40 transition-all duration-200"
+            >
+              <ChevronLeft className="w-4 h-4 text-white/60" />
+            </button>
+            
+            {/* Right Arrow */}
+            <button
+              onClick={() => scrollCategoryServices(categoryId, 'right')}
+              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-gradient-to-r from-cyan-600/20 to-blue-600/20 backdrop-blur-sm border border-white/10 flex items-center justify-center hover:from-cyan-600/40 hover:to-blue-600/40 transition-all duration-200"
+            >
+              <ChevronRight className="w-4 h-4 text-white/60" />
+            </button>
+
+            {/* Services Scroll Container */}
+            <div
+              id={`services-${categoryId}`}
+              className="flex gap-6 overflow-x-auto scrollbar-hide pb-4"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+              onScroll={(e) => {
+                if (e.currentTarget && e.currentTarget.scrollLeft !== undefined) {
+                  setCategoryScrollPositions(prev => ({
+                    ...prev,
+                    [categoryId]: e.currentTarget.scrollLeft
+                  }));
+                }
+              }}
+            >
+              {categoryServices.map((service, index) => (
+                <motion.div
+                  key={service.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: index * 0.05 }}
+                  className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-slate-700/50 hover:border-cyan-500/50 hover:-translate-y-1 flex-shrink-0 w-80"
+                >
+                  {/* Service Image */}
+                  <div className="relative h-48 overflow-hidden">
+                    <img
+                      src={service.thumbnail}
+                      alt={service.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      loading="lazy"
+                      onError={(e) => {
+                        // Fallback to gradient background if image fails to load
+                        e.currentTarget.style.display = 'none';
+                        const nextElement = e.currentTarget.nextElementSibling as HTMLElement;
+                        if (nextElement) {
+                          nextElement.style.display = 'flex';
+                        }
+                      }}
+                    />
+                    <div className={`w-full h-full bg-gradient-to-br ${service.gradient} hidden`} />
+                    
+                    {/* Commission Badge */}
+                    <div className="absolute top-3 right-3">
+                      <span className="px-3 py-1 text-xs font-bold bg-green-500/90 backdrop-blur-sm text-white rounded-full border border-green-400/50">
+                        Your Commission 20%
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="relative p-6">
+                    {/* Title */}
+                    <h3 className="text-xl font-bold text-slate-200 mb-2 leading-tight">
+                      {service.name}
+                    </h3>
+
+                    {/* Description */}
+                    <p className="text-sm text-slate-400 mb-4 line-clamp-2 leading-relaxed">
+                      {service.description}
+                    </p>
+
+                    {/* Price */}
+                    <div className="mb-4">
+                      <p className="text-sm text-slate-500 mb-1">Starting at</p>
+                      <p className={`text-2xl font-bold bg-gradient-to-r ${service.gradient} bg-clip-text text-transparent`}>
+                        {formatStartingPrice(service.startingPrice || '')}
+                      </p>
+                    </div>
+
+                    {/* Rating */}
+                    <div className="flex items-center gap-1 mb-4">
+                      <div className="flex">
+                        {[...Array(5)].map((_, i) => (
+                          <svg key={i} className="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                          </svg>
+                        ))}
+                      </div>
+                      <span className="text-sm text-slate-400 ml-1">4.8</span>
+                    </div>
+
+                    {/* Buttons */}
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => handleGetService(service.id)}
+                        className={`flex-1 py-3 rounded-xl bg-gradient-to-r ${service.gradient} text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95 text-sm`}
+                      >
+                        View Service
+                      </button>
+                      <button
+                        onClick={() => {
+                          const referralLink = `${window.location.origin}/signup?ref=${user?.id}`;
+                          navigator.clipboard.writeText(referralLink);
+                        }}
+                        className="px-4 py-3 rounded-xl bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 hover:text-white transition-all duration-300 border border-slate-600/50 hover:border-slate-500/50"
+                      >
+                        <Share2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Bottom Accent Line */}
+                  <div className={`h-1 bg-gradient-to-r ${service.gradient}`}></div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    });
+  };
+
+  // Render digital products sections
+  const renderDigitalProducts = () => {
+    const categorizedProducts = categorizeProducts(testProducts);
+    
+    // If no products are categorized, show all products in a single "All Products" section
+    if (categorizedProducts.length === 0 && testProducts.length > 0) {
+      const productChunks = [];
+      for (let i = 0; i < testProducts.length; i += 6) {
+        productChunks.push(testProducts.slice(i, i + 6));
+      }
+      
+      return productChunks.map((sectionProducts, chunkIndex) => (
+        <div key={`all-products-${chunkIndex}`} className="relative">
+          <h3 className="text-lg font-semibold text-slate-300 mb-4 px-2">
+            {chunkIndex === 0 ? 'All Products' : `All Products (${chunkIndex + 1})`}
+          </h3>
+          {/* Render the same carousel structure */}
+          <div className="relative">
+            <button
+              onClick={() => scrollCarousel(`all-products-${chunkIndex}`, 'left')}
+              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-gradient-to-r from-purple-600/20 to-pink-600/20 backdrop-blur-sm border border-white/10 flex items-center justify-center hover:from-purple-600/40 hover:to-pink-600/40 transition-all duration-200"
+            >
+              <svg className="w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <button
+              onClick={() => scrollCarousel(`all-products-${chunkIndex}`, 'right')}
+              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-gradient-to-r from-purple-600/20 to-pink-600/20 backdrop-blur-sm border border-white/10 flex items-center justify-center hover:from-purple-600/40 hover:to-pink-600/40 transition-all duration-200"
+            >
+              <svg className="w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+            <div 
+              id={`carousel-all-products-${chunkIndex}`}
+              className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 px-12"
+              style={{
+                scrollBehavior: 'smooth',
+                scrollSnapType: 'x mandatory',
+                WebkitOverflowScrolling: 'touch'
+              }}
+            >
+              {sectionProducts.map((product, productIndex) => (
+                <div
+                  key={product.id}
+                  className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-visible border border-slate-700/50 hover:border-purple-500/50 hover:-translate-y-1 hover:scale-105 flex-shrink-0 w-64 sm:w-72 h-80 sm:h-96"
+                  style={{ scrollSnapAlign: 'start' }}
+                >
+                  {/* Product Image */}
+                  <div className="relative h-40 sm:h-48 bg-gradient-to-br from-purple-500/20 to-pink-500/20 overflow-hidden">
+                    {product.thumbnailUrl ? (
+                      <img
+                        src={product.thumbnailUrl}
+                        alt={product.title}
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Package className="w-16 h-16 text-purple-400" />
+                      </div>
+                    )}
+                    
+                    {/* Commission Badge - Top Right */}
+                    {affiliateStatus.isApproved && (
+                      <div className="absolute top-3 right-3">
+                        <span className="px-2 py-1 text-xs font-bold bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-full shadow-lg">
+                          {userRankInfo.commissionPercentage}% Commission
+                        </span>
+                      </div>
+                    )}
+                    
+                    {/* Category Badge - Top Left */}
+                    <div className="absolute top-3 left-3">
+                      <span className="px-2 py-1 text-xs font-semibold bg-slate-700/60 backdrop-blur-sm text-slate-300 rounded-full border border-slate-600/50">
+                        {product.category || 'Digital'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="relative p-3 sm:p-4 h-40 sm:h-48 flex flex-col" style={{ minHeight: '10rem' }}>
+                    {/* Star Rating */}
+                    <div className="flex items-center mb-2">
+                      {[...Array(5)].map((_, i) => (
+                        <svg
+                          key={i}
+                          className={`w-4 h-4 ${i < 4 ? 'text-yellow-400' : 'text-slate-600'}`}
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                        </svg>
+                      ))}
+                      <span className="text-xs text-slate-400 ml-1">(4.2)</span>
+                    </div>
+
+                    {/* Title */}
+                    <h3 className="text-lg font-bold text-slate-200 mb-2 leading-tight line-clamp-2" style={{ minHeight: '2.5rem', display: 'block', visibility: 'visible' }}>
+                      {product.title || 'Untitled Product'}
+                    </h3>
+
+                    {/* Description */}
+                    <p className="text-xs text-slate-400 mb-3 line-clamp-2 leading-relaxed flex-grow">
+                      {product.description}
+                    </p>
+
+                    {/* Bottom Section - Price and Buttons */}
+                    <div className="mt-auto">
+                      {/* Price and View Product Button */}
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <p className="text-xs text-slate-500 mb-1">Price</p>
+                          <p className="text-lg font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                            ${product.priceUsd.toFixed(2)}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleProductClick(product)}
+                          className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95 text-sm"
+                        >
+                          View Product
+                        </button>
+                      </div>
+
+                      {/* Share Icon for Affiliates */}
+                      {affiliateStatus.isApproved && (
+                        <button
+                          onClick={() => {
+                            const referralLink = `${window.location.origin}/digital-products?ref=${user?.id}`;
+                            navigator.clipboard.writeText(referralLink);
+                          }}
+                          className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-slate-700/30 hover:bg-slate-600/30 text-slate-300 hover:text-white transition-all duration-200 text-sm"
+                        >
+                          <Share2 className="w-4 h-4" />
+                          Share & Earn
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Bottom Accent Line */}
+                  <div className="h-1 bg-gradient-to-r from-purple-500 to-pink-500"></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ));
+    }
+    
+    // Normal categorized display
+    return categorizedProducts.map(([categoryName, categoryProducts], sectionIndex) => {
+      // Split products into chunks of 6 for each section
+      const productChunks = [];
+      for (let i = 0; i < categoryProducts.length; i += 6) {
+        productChunks.push(categoryProducts.slice(i, i + 6));
+      }
+
+      return productChunks.map((sectionProducts, chunkIndex) => (
+        <div key={`${categoryName}-${chunkIndex}`} className="relative">
+          <h3 className="text-lg font-semibold text-slate-300 mb-4 px-2">
+            {chunkIndex === 0 ? categoryName : `${categoryName} (${chunkIndex + 1})`}
+          </h3>
+          
+          <div className="relative">
+            <button
+              onClick={() => scrollCarousel(`${categoryName}-${chunkIndex}`, 'left')}
+              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-gradient-to-r from-purple-600/20 to-pink-600/20 backdrop-blur-sm border border-white/10 flex items-center justify-center hover:from-purple-600/40 hover:to-pink-600/40 transition-all duration-200"
+            >
+              <svg className="w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <button
+              onClick={() => scrollCarousel(`${categoryName}-${chunkIndex}`, 'right')}
+              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-gradient-to-r from-purple-600/20 to-pink-600/20 backdrop-blur-sm border border-white/10 flex items-center justify-center hover:from-purple-600/40 hover:to-pink-600/40 transition-all duration-200"
+            >
+              <svg className="w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+            
+            <div 
+              id={`carousel-${categoryName}-${chunkIndex}`}
+              className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 px-12"
+              style={{
+                scrollBehavior: 'smooth',
+                scrollSnapType: 'x mandatory',
+                WebkitOverflowScrolling: 'touch'
+              }}
+            >
+              {sectionProducts.map((product, productIndex) => (
+                <div
+                  key={product.id}
+                  className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-visible border border-slate-700/50 hover:border-purple-500/50 hover:-translate-y-1 hover:scale-105 flex-shrink-0 w-64 sm:w-72 h-80 sm:h-96"
+                  style={{ scrollSnapAlign: 'start' }}
+                >
+                  {/* Product Image */}
+                  <div className="relative h-40 sm:h-48 bg-gradient-to-br from-purple-500/20 to-pink-500/20 overflow-hidden">
+                    {product.thumbnailUrl ? (
+                      <img
+                        src={product.thumbnailUrl}
+                        alt={product.title}
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Package className="w-16 h-16 text-purple-400" />
+                      </div>
+                    )}
+                    
+                    {/* Commission Badge - Top Right */}
+                    {affiliateStatus.isApproved && (
+                      <div className="absolute top-3 right-3">
+                        <span className="px-2 py-1 text-xs font-bold bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-full shadow-lg">
+                          {userRankInfo.commissionPercentage}% Commission
+                        </span>
+                      </div>
+                    )}
+                    
+                    {/* Category Badge - Top Left */}
+                    <div className="absolute top-3 left-3">
+                      <span className="px-2 py-1 text-xs font-semibold bg-slate-700/60 backdrop-blur-sm text-slate-300 rounded-full border border-slate-600/50">
+                        {product.category || 'Digital'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="relative p-3 sm:p-4 h-40 sm:h-48 flex flex-col" style={{ minHeight: '10rem' }}>
+                    {/* Star Rating */}
+                    <div className="flex items-center mb-2">
+                      {[...Array(5)].map((_, i) => (
+                        <svg
+                          key={i}
+                          className={`w-4 h-4 ${i < 4 ? 'text-yellow-400' : 'text-slate-600'}`}
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                        </svg>
+                      ))}
+                      <span className="text-xs text-slate-400 ml-1">(4.2)</span>
+                    </div>
+
+                    {/* Title */}
+                    <h3 className="text-lg font-bold text-slate-200 mb-2 leading-tight line-clamp-2" style={{ minHeight: '2.5rem', display: 'block', visibility: 'visible' }}>
+                      {product.title || 'Untitled Product'}
+                    </h3>
+
+                    {/* Description */}
+                    <p className="text-xs text-slate-400 mb-3 line-clamp-2 leading-relaxed flex-grow">
+                      {product.description}
+                    </p>
+
+                    {/* Bottom Section - Price and Buttons */}
+                    <div className="mt-auto">
+                      {/* Price and View Product Button */}
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <p className="text-xs text-slate-500 mb-1">Price</p>
+                          <p className="text-lg font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                            ${product.priceUsd.toFixed(2)}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleProductClick(product)}
+                          className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95 text-sm"
+                        >
+                          View Product
+                        </button>
+                      </div>
+
+                      {/* Share Icon for Affiliates */}
+                      {affiliateStatus.isApproved && (
+                        <button
+                          onClick={() => {
+                            const referralLink = `${window.location.origin}/digital-products?ref=${user?.id}`;
+                            navigator.clipboard.writeText(referralLink);
+                          }}
+                          className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-slate-700/30 hover:bg-slate-600/30 text-slate-300 hover:text-white transition-all duration-200 text-sm"
+                        >
+                          <Share2 className="w-4 h-4" />
+                          Share & Earn
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Bottom Accent Line */}
+                  <div className="h-1 bg-gradient-to-r from-purple-500 to-pink-500"></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ));
+    }).flat();
+  };
+
+  // Categorize products by content
+  const categorizeProducts = (products: any[]) => {
+    const categories: { [key: string]: any[] } = {
+      'Courses': [],
+      'Software': [],
+      'Templates': [],
+      'Bundles': [],
+      'Ebooks': [],
+      'Data Packs': [],
+      'Reels Packs': [],
+      'Documents/Tools': []
+    };
+
+    products.forEach(product => {
+      const title = product.title?.toLowerCase() || '';
+      const description = product.description?.toLowerCase() || '';
+      const category = product.category?.toLowerCase() || '';
+
+      // Course-related keywords
+      if (title.includes('course') || title.includes('mastery') || title.includes('training') || 
+          title.includes('tutorial') || title.includes('learning') || title.includes('education') ||
+          description.includes('course') || description.includes('learn') || description.includes('training')) {
+        categories['Courses'].push(product);
+      }
+      // Software-related keywords
+      else if (title.includes('software') || title.includes('adobe') || title.includes('photoshop') || 
+               title.includes('filmora') || title.includes('premiere') || title.includes('after effects') ||
+               title.includes('lightroom') || title.includes('illustrator') || title.includes('indesign') ||
+               description.includes('software') || description.includes('application') || description.includes('program')) {
+        categories['Software'].push(product);
+      }
+      // Template-related keywords
+      else if (title.includes('template') || title.includes('resume') || title.includes('canva') ||
+               title.includes('landing page') || title.includes('design') || title.includes('layout') ||
+               description.includes('template') || description.includes('design') || description.includes('layout')) {
+        categories['Templates'].push(product);
+      }
+      // Bundle-related keywords
+      else if (title.includes('bundle') || title.includes('pack') || title.includes('collection') ||
+               title.includes('preset') || title.includes('pack') || description.includes('bundle') ||
+               description.includes('collection') || description.includes('pack')) {
+        categories['Bundles'].push(product);
+      }
+      // Ebook-related keywords
+      else if (title.includes('ebook') || title.includes('book') || title.includes('pdf') ||
+               title.includes('guide') || title.includes('manual') || description.includes('ebook') ||
+               description.includes('book') || description.includes('pdf')) {
+        categories['Ebooks'].push(product);
+      }
+      // Data Pack-related keywords
+      else if (title.includes('database') || title.includes('data') || title.includes('contact') ||
+               title.includes('leads') || title.includes('list') || description.includes('database') ||
+               description.includes('contact') || description.includes('leads')) {
+        categories['Data Packs'].push(product);
+      }
+      // Reels Pack-related keywords
+      else if (title.includes('reels') || title.includes('video') || title.includes('content') ||
+               title.includes('ai reels') || title.includes('gym reels') || description.includes('reels') ||
+               description.includes('video content')) {
+        categories['Reels Packs'].push(product);
+      }
+      // Documents/Tools-related keywords
+      else if (title.includes('excel') || title.includes('document') || title.includes('tool') ||
+               title.includes('spreadsheet') || title.includes('form') || description.includes('excel') ||
+               description.includes('document') || description.includes('tool')) {
+        categories['Documents/Tools'].push(product);
+      }
+      // Default fallback - put everything in Templates if no match
+      else {
+        categories['Templates'].push(product);
+      }
+    });
+
+    // Filter out empty categories
+    return Object.entries(categories).filter(([_, products]) => products.length > 0);
   };
 
   const doPurchase = async () => {
@@ -1364,7 +2034,7 @@ export default function DashboardHome() {
                   Our Services
                 </h2>
                 <p className="text-slate-400 text-sm sm:text-base">
-                  Browse and request premium digital services
+                  Grow your digital presence with high-quality, affordable services
                 </p>
               </div>
               
@@ -1398,132 +2068,20 @@ export default function DashboardHome() {
                     <option value="Crypto">Crypto</option>
                     <option value="Marketing">Marketing</option>
                     <option value="Media">Media</option>
-                    <option value="blockchain">Blockchain</option>
-                    <option value="ai">AI</option>
-                    <option value="mlm">MLM</option>
-                    <option value="mobile">Mobile</option>
-                    <option value="automation">Automation</option>
-                    <option value="bot">Bot</option>
-                    <option value="security">Security</option>
+                    <option value="AI & Automation">AI & Automation</option>
+                    <option value="MLM & Mobile">MLM & Mobile</option>
                   </select>
                 </div>
               </div>
             </div>
 
-            {/* Services Grid */}
-            <motion.div 
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6"
-              layout
-            >
-              <AnimatePresence mode="popLayout">
-                {displayedServices.map((service, index) => (
-                <motion.div
-                  key={service.id}
-                  layout
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ 
-                    duration: 0.3, 
-                    delay: index * 0.05,
-                    layout: { duration: 0.3 }
-                  }}
-                  className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-slate-700/50 hover:border-cyan-500/50 hover:-translate-y-1"
-                >
-                  {/* Gradient Overlay on Hover */}
-                  <div className={`absolute inset-0 bg-gradient-to-br ${service.gradient} opacity-0 group-hover:opacity-10 transition-opacity duration-300`}></div>
-                  
-                  <div className="relative p-4 sm:p-6">
-                    {/* Icon */}
-                    <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-gradient-to-br ${service.gradient} flex items-center justify-center text-2xl sm:text-3xl shadow-lg mb-3 sm:mb-4 group-hover:scale-110 transition-transform duration-300`}>
-                      {service.icon}
-                    </div>
-                    
-                    {/* Category Badge */}
-                    <div className="absolute top-3 right-3 sm:top-4 sm:right-4">
-                      <span className="px-2 py-1 text-xs font-semibold bg-slate-700/60 backdrop-blur-sm text-slate-300 rounded-full border border-slate-600/50">
-                        {service.category}
-                      </span>
-                    </div>
-
-                    {/* Title */}
-                    <h3 className="text-lg sm:text-xl font-bold text-slate-200 mb-2 leading-tight">
-                      {service.name}
-                    </h3>
-
-                    {/* Description */}
-                    <p className="text-xs sm:text-sm text-slate-400 mb-3 sm:mb-4 line-clamp-3 leading-relaxed">
-                      {service.description}
-                    </p>
-
-                    {/* Price */}
-                    <div className="mb-3 sm:mb-4">
-                      <p className="text-xs text-slate-500 mb-1">Starting at</p>
-                      <p className={`text-xl sm:text-2xl font-bold bg-gradient-to-r ${service.gradient} bg-clip-text text-transparent`}>
-                        {service.startingPrice}
-                      </p>
-                    </div>
-
-                    {/* Commission Info - Only for Affiliates */}
-                    {affiliateStatus.isApproved && (
-                      <div className="mb-3 sm:mb-4 p-2 sm:p-3 rounded-lg bg-slate-700/30 border border-slate-600/30">
-                        <div className="text-center">
-                          <p className="text-xs text-slate-400 mb-1">Your Commission</p>
-                          <p className={`text-lg sm:text-2xl font-bold ${userRankInfo.textColor}`}>
-                            {userRankInfo.commissionPercentage}%
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Share Button for Affiliates */}
-                    {affiliateStatus.isApproved && (
-                      <div className="mb-3 sm:mb-4">
-                        <Button
-                          onClick={() => {
-                            const referralLink = `${window.location.origin}/signup?ref=${user?.id}`;
-                            navigator.clipboard.writeText(referralLink);
-                            // Show success toast
-                          }}
-                          className="w-full bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 text-white font-semibold py-2 px-3 sm:px-4 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 text-sm sm:text-base"
-                        >
-                          <Share2 className="w-4 h-4 mr-1 sm:mr-2" />
-                          <span className="hidden sm:inline">Share & Earn {userRankInfo.commissionPercentage}%</span>
-                          <span className="sm:hidden">Share & Earn</span>
-                        </Button>
-                      </div>
-                    )}
-
-                    {/* Features */}
-                    <ul className="space-y-1 sm:space-y-2 mb-4 sm:mb-6">
-                      {(service.features ?? []).slice(0, 3).map((feature, idx) => (
-                        <li key={idx} className="flex items-start gap-2 text-xs sm:text-sm">
-                          <svg className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                          </svg>
-                          <span className="text-slate-300">{feature}</span>
-                        </li>
-                      ))}
-                    </ul>
-
-                    {/* CTA Button */}
-                    <button
-                      onClick={() => handleGetService(service.id)}
-                      className={`w-full py-2 sm:py-3 rounded-xl bg-gradient-to-r ${service.gradient} text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95 text-sm sm:text-base`}
-                    >
-                      Get Service
-                    </button>
-                  </div>
-
-                  {/* Bottom Accent Line */}
-                  <div className={`h-1 bg-gradient-to-r ${service.gradient}`}></div>
-                </motion.div>
-                ))}
-              </AnimatePresence>
-            </motion.div>
+            {/* Services by Category Sections */}
+            <div className="space-y-8">
+              {renderServicesByCategory()}
+            </div>
 
             {/* View All Button for Services */}
-            {filteredServices.length > 10 && (
+            {filteredServices.length > 0 && (
               <div className="text-center mt-8">
                 <button
                   onClick={() => setShowAllServices(!showAllServices)}
@@ -1565,113 +2123,14 @@ export default function DashboardHome() {
               </div>
             </div>
 
-            {/* Digital Products Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-              {displayedProducts.map((product) => (
-                <div
-                  key={product.id}
-                  className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-slate-700/50 hover:border-purple-500/50 hover:-translate-y-1"
-                >
-                  {/* Product Image */}
-                  <div className="relative h-48 bg-gradient-to-br from-purple-500/20 to-pink-500/20 overflow-hidden">
-                    {product.thumbnailUrl ? (
-                      <img
-                        src={product.thumbnailUrl}
-                        alt={product.title}
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Package className="w-16 h-16 text-purple-400" />
-                      </div>
-                    )}
-                    <div className="absolute top-3 right-3">
-                      <span className="px-2 py-1 text-xs font-semibold bg-slate-700/60 backdrop-blur-sm text-slate-300 rounded-full border border-slate-600/50">
-                        {product.category || 'Digital'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="relative p-4 sm:p-6">
-                    {/* Title */}
-                    <h3 className="text-lg sm:text-xl font-bold text-slate-200 mb-2 leading-tight line-clamp-2">
-                      {product.title}
-                    </h3>
-
-                    {/* Description */}
-                    <p className="text-xs sm:text-sm text-slate-400 mb-3 sm:mb-4 line-clamp-3 leading-relaxed">
-                      {product.description}
-                    </p>
-
-                    {/* Price */}
-                    <div className="mb-3 sm:mb-4">
-                      <p className="text-xs text-slate-500 mb-1">Price</p>
-                      <p className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-                        ${product.priceUsd.toFixed(2)}
-                      </p>
-                    </div>
-
-                    {/* Commission Info - Only for Affiliates */}
-                    {affiliateStatus.isApproved && (
-                      <div className="mb-3 sm:mb-4 p-2 sm:p-3 rounded-lg bg-slate-700/30 border border-slate-600/30">
-                        <div className="text-center">
-                          <p className="text-xs text-slate-400 mb-1">Your Commission</p>
-                          <p className={`text-lg sm:text-2xl font-bold ${userRankInfo.textColor}`}>
-                            {userRankInfo.commissionPercentage}%
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Share Button for Affiliates */}
-                    {affiliateStatus.isApproved && (
-                      <div className="mb-3 sm:mb-4">
-                        <Button
-                          onClick={() => {
-                            const referralLink = `${window.location.origin}/digital-products?ref=${user?.id}`;
-                            navigator.clipboard.writeText(referralLink);
-                            // Show success toast
-                          }}
-                          className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold py-2 px-3 sm:px-4 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 text-sm sm:text-base"
-                        >
-                          <Share2 className="w-4 h-4 mr-1 sm:mr-2" />
-                          <span className="hidden sm:inline">Share & Earn {userRankInfo.commissionPercentage}%</span>
-                          <span className="sm:hidden">Share & Earn</span>
-                        </Button>
-                      </div>
-                    )}
-
-                    {/* CTA Button */}
-                    <button
-                      onClick={() => handleProductClick(product)}
-                      className="w-full py-2 sm:py-3 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95 text-sm sm:text-base"
-                    >
-                      <ShoppingCart className="w-4 h-4 inline mr-2" />
-                      View Product
-                    </button>
-                  </div>
-
-                  {/* Bottom Accent Line */}
-                  <div className="h-1 bg-gradient-to-r from-purple-500 to-pink-500"></div>
-                </div>
-              ))}
+            {/* Digital Products Horizontal Scrollable Sections */}
+            <div className="space-y-8">
+              {renderDigitalProducts()}
             </div>
 
-            {/* View All Button for Digital Products */}
-            {digitalProducts.length > 10 && (
-              <div className="text-center mt-8">
-                <button
-                  onClick={() => navigate('/dashboard/digital-products')}
-                  className="group inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
-                >
-                  <span>View All Digital Products</span>
-                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                </button>
-              </div>
-            )}
 
             {/* No Products Message */}
-            {digitalProducts.length === 0 && !productsLoading && (
+            {testProducts.length === 0 && !productsLoading && (
               <div className="text-center py-16">
                 <div className="w-24 h-24 mx-auto mb-4 rounded-full bg-slate-800/40 backdrop-blur-sm border border-slate-700/50 flex items-center justify-center">
                   <Package className="w-12 h-12 text-slate-400" />
@@ -1752,7 +2211,7 @@ export default function DashboardHome() {
         isOpen={affiliateJoinModalOpen}
         onClose={() => setAffiliateJoinModalOpen(false)}
         onJoin={handleJoinAffiliate}
-        isFirstTime={false}
+        isFirstTime={!affiliateStatus.isApproved && !affiliateStatus.hasApplied}
       />
 
 
@@ -1763,6 +2222,8 @@ export default function DashboardHome() {
           setAffiliateCongratulationsModalOpen(false);
           // Clear the flag so it can be shown again if status changes
           localStorage.removeItem('affiliate-congratulations-shown');
+          // Also clear the affiliate popup flag since user is now approved
+          localStorage.removeItem('affiliate-popup-shown');
         }}
         commissionRate={userRankInfo.commissionPercentage}
       />
