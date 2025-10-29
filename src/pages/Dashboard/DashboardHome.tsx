@@ -14,6 +14,7 @@ import { useAffiliateStatus } from '../../hooks/useAffiliateStatus';
 import { useAffiliateBannerVisibility } from '../../hooks/useAffiliateBannerVisibility';
 import { useActiveServices } from '../../hooks/useServices';
 import { useDigitalProducts } from '../../hooks/useDigitalProducts';
+import { useDatabaseMarketingCategories } from '../../hooks/useDatabaseMarketingCategories';
 import AffiliateJoinModal from '../../components/AffiliateJoinModal';
 import AffiliateCongratulationsModal from '../../components/AffiliateCongratulationsModal';
 import { Button } from '../../components/ui/button';
@@ -68,12 +69,17 @@ export default function DashboardHome() {
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [showAllServices, setShowAllServices] = useState(false);
   const [showAllProducts, setShowAllProducts] = useState(false);
+  const [showAllDbCategories, setShowAllDbCategories] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [currency, setCurrency] = useState<'USDT' | 'INR'>('USDT');
   const [processing, setProcessing] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [purchaseOption, setPurchaseOption] = useState<'main_only' | 'split' | 'currency_choice'>('split');
+  const { categories: dbCategories, loading: dbCategoriesLoading, error: dbCategoriesError } = useDatabaseMarketingCategories();
+  try {
+    console.log('[DashboardHome] dbCategories loading:', dbCategoriesLoading, 'error:', dbCategoriesError, 'count:', dbCategories?.length);
+  } catch {}
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
   const [showFailurePopup, setShowFailurePopup] = useState(false);
   const [servicesScrollPosition, setServicesScrollPosition] = useState(0);
@@ -673,11 +679,23 @@ export default function DashboardHome() {
   // Limit services to 9 initially (3 rows of 3 cards), show all if showAllServices is true
   const displayedServices = showAllServices ? filteredServices : filteredServices.slice(0, 9);
   
-  // Limit digital products to 10 initially, show all if showAllProducts is true
-  const displayedProducts = digitalProducts;
+  // Latest products first by createdAt; show 3 by default, all when toggled
+  const getTimestampMs = (t: any): number => {
+    if (!t) return 0;
+    try {
+      if (typeof t.toDate === 'function') return t.toDate().getTime();
+      if (typeof t.seconds === 'number') return t.seconds * 1000;
+      const n = Number(t);
+      return Number.isFinite(n) ? n : 0;
+    } catch {
+      return 0;
+    }
+  };
+  const sortedProducts = [...digitalProducts].sort((a, b) => getTimestampMs(b.createdAt) - getTimestampMs(a.createdAt));
+  const displayedProducts = showAllProducts ? sortedProducts : sortedProducts.slice(0, 3);
   
-  // Test with sample data if no products are loaded
-  const testProducts = digitalProducts.length === 0 ? [
+  // Use displayedProducts when available; otherwise fallback sample data
+  const testProducts = displayedProducts.length === 0 ? [
     {
       id: 'test-1',
       title: 'Test Product 1',
@@ -841,6 +859,120 @@ export default function DashboardHome() {
     setServicesScrollPosition(newScroll);
   };
 
+  // Render Database Marketing Categories (horizontal swipe)
+  const renderDatabaseMarketingCategories = () => {
+    const carouselKey = 'db-marketing-categories';
+    const items = showAllDbCategories ? dbCategories : dbCategories.slice(0, 4);
+    try {
+      console.log('[DashboardHome] render DB Marketing Categories, items:', items?.length, items?.slice?.(0, 2));
+    } catch {}
+    return (
+      <div className="relative">
+        <button
+          onClick={() => scrollCarousel(carouselKey, 'left')}
+          className="hidden sm:flex absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-gradient-to-r from-blue-600/20 to-cyan-600/20 backdrop-blur-sm border border-white/10 items-center justify-center hover:from-blue-600/40 hover:to-cyan-600/40 transition-all duration-200"
+        >
+          <svg className="w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+        <button
+          onClick={() => scrollCarousel(carouselKey, 'right')}
+          className="hidden sm:flex absolute right-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-gradient-to-r from-blue-600/20 to-cyan-600/20 backdrop-blur-sm border border-white/10 items-center justify-center hover:from-blue-600/40 hover:to-cyan-600/40 transition-all duration-200"
+        >
+          <svg className="w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+
+        <div 
+          id={`carousel-${carouselKey}`}
+          className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 px-1 sm:px-12"
+          style={{ scrollBehavior: 'smooth', scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}
+        >
+          {items.map((cat) => (
+            <div
+              key={cat.id}
+              onClick={() => navigate(`/database-marketing/buy-database?category=${encodeURIComponent((cat as any).category || cat.id)}`)}
+              className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-slate-700/50 hover:border-blue-500/50 hover:-translate-y-1 hover:scale-105 flex-shrink-0 w-64 sm:w-72 h-72 cursor-pointer"
+              style={{ scrollSnapAlign: 'start' }}
+            >
+              {/* Thumbnail / Image */}
+              <div className={`relative h-36 bg-gradient-to-br from-blue-500/20 to-cyan-500/20`}>
+                {(cat as any).image ? (
+                  <img src={(cat as any).image} alt={cat.name} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-4xl">📁</span>
+                  </div>
+                )}
+                {/* Badge - Top Left */}
+                <div className="absolute top-3 left-3">
+                  <span className="px-2 py-1 text-xs font-semibold bg-slate-700/60 backdrop-blur-sm text-slate-200 rounded-full border border-slate-600/50">
+                    {cat.name}
+                  </span>
+                </div>
+                {/* Fresh badge - Top Right */}
+                <div className="absolute top-3 right-3">
+                  <span className="px-2 py-1 text-[10px] font-bold bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-full shadow-lg">
+                    2025
+                  </span>
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="p-4 h-[calc(100%-9rem)] flex flex-col">
+                <h3 className="text-base sm:text-lg font-bold text-white mb-1 line-clamp-1">{cat.name}</h3>
+                <p className="text-slate-300 text-xs sm:text-sm mb-3 line-clamp-2">{(cat as any).description || ''}</p>
+
+                <div className="mt-auto space-y-2">
+                  <div className="flex items-center justify-between text-xs sm:text-sm">
+                    <span className="text-slate-400">Contacts</span>
+                    <span className="text-white font-semibold">{typeof (cat as any).contactCount === 'number' ? (cat as any).contactCount.toLocaleString() : '—'}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs sm:text-sm">
+                    <span className="text-slate-400">Price</span>
+                    <span className="text-green-400 font-semibold">
+                      {((cat as any).priceINR || (cat as any).priceRange || '—')}
+                      {(cat as any).priceUSD ? ` · ${(cat as any).priceUSD}` : ''}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Accent */}
+              <div className={`h-1 bg-gradient-to-r from-blue-500 to-cyan-500`}></div>
+            </div>
+          ))}
+
+          {/* View All Categories Card */}
+          <div
+            onClick={() => navigate('/database-marketing/categories')}
+            className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-slate-700/50 hover:border-blue-500/50 hover:-translate-y-1 hover:scale-105 flex-shrink-0 w-64 sm:w-72 h-72 cursor-pointer"
+            style={{ scrollSnapAlign: 'start' }}
+          >
+            <div className="h-36 bg-gradient-to-br from-blue-500/20 to-cyan-500/20 flex items-center justify-center">
+              <svg className="w-12 h-12 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </div>
+            <div className="p-4 flex flex-col items-start justify-center h-[calc(100%-9rem)]">
+              <h3 className="text-lg font-bold text-white mb-2">View All Categories</h3>
+              <p className="text-slate-300 text-sm">Browse the complete list</p>
+              <div className="mt-3 text-blue-400 font-semibold flex items-center gap-1">
+                Explore
+                <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
+              </div>
+            </div>
+            <div className="h-1 bg-gradient-to-r from-blue-500 to-cyan-500"></div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const scrollCategoryServices = (categoryId: string, direction: 'left' | 'right') => {
     const container = document.getElementById(`services-${categoryId}`);
     if (!container) {
@@ -872,7 +1004,12 @@ export default function DashboardHome() {
 
   // Render services by category sections
   const renderServicesByCategory = () => {
-    return categorizedServices.map(([categoryName, categoryServices], sectionIndex) => {
+    const allowedInitially = new Set<string>(['MLM & Mobile', 'AI & Automation', 'Marketing', 'Web Development']);
+    const source = showAllServices
+      ? categorizedServices
+      : categorizedServices.filter(([categoryName]) => allowedInitially.has(categoryName));
+
+    return source.map(([categoryName, categoryServices], sectionIndex) => {
       const categoryId = categoryName.toLowerCase().replace(/\s+/g, '-');
       // Icons/emojis removed per requirement (image-based only)
 
@@ -908,12 +1045,15 @@ export default function DashboardHome() {
               className="flex gap-6 overflow-x-auto scrollbar-hide pb-4"
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
               onScroll={(e) => {
-                if (e.currentTarget && e.currentTarget.scrollLeft !== undefined) {
+                try {
+                  const target = e.currentTarget as HTMLDivElement | null;
+                  if (!target) return;
+                  const left = typeof target.scrollLeft === 'number' ? target.scrollLeft : 0;
                   setCategoryScrollPositions(prev => ({
                     ...prev,
-                    [categoryId]: e.currentTarget.scrollLeft
+                    [categoryId]: left
                   }));
-                }
+                } catch {}
               }}
             >
               {categoryServices.map((service, index) => (
@@ -962,12 +1102,12 @@ export default function DashboardHome() {
                     </p>
 
                     {/* Price */}
-                    <div className="mb-4">
-                      <p className="text-sm text-slate-500 mb-1">Starting at</p>
-                      <p className={`text-2xl font-bold bg-gradient-to-r ${service.gradient} bg-clip-text text-transparent`}>
+                      <div className="mb-4">
+                        <p className="text-sm text-slate-500 mb-1">Starting at</p>
+                        <p className={`text-2xl font-bold bg-gradient-to-r ${service.gradient} bg-clip-text text-transparent`}>
                         {formatStartingPrice(service.startingPrice || '')}
-                      </p>
-                    </div>
+                        </p>
+                      </div>
 
                     {/* Rating */}
                     <div className="flex items-center gap-1 mb-4">
@@ -1164,10 +1304,15 @@ export default function DashboardHome() {
     
     // Normal categorized display
     return categorizedProducts.map(([categoryName, categoryProducts], sectionIndex) => {
+      // Templates: show only 3 by default; reveal all on "View All Products"
+      let categoryList = categoryProducts;
+      if (categoryName === 'Templates' && !showAllProducts) {
+        categoryList = categoryProducts.slice(0, 3);
+      }
       // Split products into chunks of 6 for each section
       const productChunks = [];
-      for (let i = 0; i < categoryProducts.length; i += 6) {
-        productChunks.push(categoryProducts.slice(i, i + 6));
+      for (let i = 0; i < categoryList.length; i += 6) {
+        productChunks.push(categoryList.slice(i, i + 6));
       }
 
       return productChunks.map((sectionProducts, chunkIndex) => (
@@ -2154,6 +2299,31 @@ export default function DashboardHome() {
                   Loading digital products...
                 </h3>
               </div>
+            )}
+          </div>
+
+          {/* Database Marketing Categories Section */}
+          <div className="mb-8 px-4 sm:px-0">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
+              <div>
+                <h2 className="text-2xl sm:text-3xl font-bold text-slate-200 mb-1">
+                  📊 32 Database Marketing Categories – Fresh 2025 Data
+                </h2>
+                <p className="text-slate-400 text-sm sm:text-base">
+                  Explore curated, high-quality contact databases by industry
+                </p>
+              </div>
+            </div>
+
+            {/* Categories Horizontal Scroll */}
+            {dbCategoriesLoading ? (
+              <div className="text-center py-10 text-slate-400">Loading categories...</div>
+            ) : dbCategoriesError ? (
+              <div className="text-center py-10 text-red-400">{String(dbCategoriesError)}</div>
+            ) : dbCategories.length === 0 ? (
+              <div className="text-center py-10 text-slate-400">No data found.</div>
+            ) : (
+              renderDatabaseMarketingCategories()
             )}
           </div>
 

@@ -374,18 +374,16 @@ async function upsertServices() {
   const colRef = adminDb.collection('services');
 
   const existing = await colRef.get();
-  const existingBySlug = new Map();
-  existing.forEach((d) => {
-    const data = d.data();
-    const key = data.slug || slugify(data.title || d.id);
-    existingBySlug.set(key, d.ref);
-  });
+  const existingById = new Map();
+  existing.forEach((d) => existingById.set(d.id, d.ref));
   console.log('[seed] Existing docs:', existing.size);
 
   let creates = 0;
   let updates = 0;
+  const desiredSlugs = new Set();
   for (const svc of services) {
     const slug = slugify(svc.title);
+    desiredSlugs.add(slug);
     const now = new Date();
 
     const payload = {
@@ -405,18 +403,36 @@ async function upsertServices() {
       updatedAt: now,
     };
 
-    const existingRef = existingBySlug.get(slug);
-    if (existingRef) {
-      console.log('[seed] update ->', slug);
-      await existingRef.update({ ...payload, icon: admin.firestore.FieldValue.delete() });
+    const byIdRef = existingById.get(slug);
+    if (byIdRef) {
+      console.log('[seed] update (by id) ->', slug);
+      await byIdRef.set({ ...payload, createdAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
       updates++;
     } else {
-      const docRef = colRef.doc();
-      console.log('[seed] create ->', slug, 'id:', docRef.id);
-      await docRef.set({ ...payload, createdAt: now });
-      creates++;
+      // Search by legacy slug field match
+      let matchedRef = null;
+      existing.forEach((d) => {
+        if (!matchedRef) {
+          const data = d.data();
+          const legacySlug = data.slug || slugify(data.title || d.id);
+          if (legacySlug === slug) matchedRef = d.ref;
+        }
+      });
+
+      if (matchedRef) {
+        console.log('[seed] update (legacy match) ->', slug);
+        await matchedRef.set({ ...payload, createdAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+        updates++;
+      } else {
+        const docRef = colRef.doc(slug);
+        console.log('[seed] create ->', slug, 'id:', docRef.id);
+        await docRef.set({ ...payload, createdAt: now });
+        creates++;
+      }
     }
   }
+
+  console.log('[seed] Desired slug count:', desiredSlugs.size);
   console.log('[seed] Completed. Creates:', creates, 'Updates:', updates);
 }
 
