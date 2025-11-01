@@ -747,7 +747,7 @@ export default function Mining2() {
                       className="flex-1 sm:flex-none px-4 sm:px-6 py-2 sm:py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold text-sm sm:text-base shadow-lg hover:shadow-emerald-500/25 transition-all duration-300"
                       onClick={() => {
                         setInfoOpen(false);
-                        navigate('/dashboard/digital-products');
+                        navigate('/dashboard');
                       }}
                     >
                       🛒 Go to Store

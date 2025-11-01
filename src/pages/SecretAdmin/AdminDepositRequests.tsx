@@ -148,21 +148,21 @@ export default function AdminDepositRequests() {
   });
 
   const getStatusColor = (status: string) => {
-    const colors = {
+    const colors: Record<string, string> = {
       pending: 'bg-yellow-100 text-yellow-800',
-      approved: 'bg-green-100 text-green-800',
-      rejected: 'bg-red-100 text-red-800',
-      completed: 'bg-blue-100 text-blue-800'
+      pending_manual: 'bg-orange-100 text-orange-800',
+      done: 'bg-green-100 text-green-800',
+      rejected: 'bg-red-100 text-red-800'
     };
-    return colors[status as keyof typeof colors] || 'bg-gray-100 text-gray-800';
+    return colors[status] || 'bg-gray-100 text-gray-800';
   };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'pending': return <Clock className="w-4 h-4" />;
-      case 'approved': return <CheckCircle className="w-4 h-4" />;
+      case 'pending_manual': return <AlertCircle className="w-4 h-4" />;
+      case 'done': return <CheckCircle className="w-4 h-4" />;
       case 'rejected': return <XCircle className="w-4 h-4" />;
-      case 'completed': return <CheckCircle className="w-4 h-4" />;
       default: return <AlertCircle className="w-4 h-4" />;
     }
   };
@@ -223,9 +223,9 @@ export default function AdminDepositRequests() {
                 <SelectContent className="bg-gray-800 border-gray-700">
                   <SelectItem value="all">All Status</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="approved">Approved</SelectItem>
+                  <SelectItem value="pending_manual">Pending Manual</SelectItem>
                   <SelectItem value="rejected">Rejected</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="done">Done</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={methodFilter} onValueChange={(value) => setMethodFilter(value)}>
@@ -270,9 +270,9 @@ export default function AdminDepositRequests() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-green-300 text-sm font-medium">Approved</p>
+                  <p className="text-green-300 text-sm font-medium">Done</p>
                   <p className="text-green-100 text-2xl font-bold">
-                    {requests.filter(r => r.status === 'approved').length}
+                    {requests.filter(r => r.status === 'done').length}
                   </p>
                 </div>
                 <CheckCircle className="w-8 h-8 text-green-400" />

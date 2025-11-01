@@ -35,9 +35,7 @@ export interface ReferralPurchase {
   productName: string;
   currency: 'DLX' | 'USDT' | 'INR';
   level1Commission: number;
-  level2Commission: number;
   level1AffiliateId?: string;
-  level2AffiliateId?: string;
 }
 
 /**
@@ -182,8 +180,7 @@ export async function trackReferralClick(
  */
 export async function processJoinBonus(
   userId: string,
-  level1AffiliateId: string,
-  level2AffiliateId?: string
+  level1AffiliateId: string
 ): Promise<void> {
   try {
     const batch = writeBatch(firestore);
@@ -197,17 +194,6 @@ export async function processJoinBonus(
       'joinBonus.lastUpdated': serverTimestamp()
     });
     
-    // Level 2 referrer gets +5 DLX (if exists)
-    if (level2AffiliateId) {
-      const level2Ref = doc(firestore, 'users', level2AffiliateId);
-      batch.update(level2Ref, {
-        'wallet.miningBalance': increment(5),
-        'joinBonus.level2': increment(5),
-        'joinBonus.total': increment(5),
-        'joinBonus.lastUpdated': serverTimestamp()
-      });
-    }
-    
     // Log join bonus transactions
     const level1TransactionRef = doc(collection(firestore, 'joinBonusTransactions'));
     batch.set(level1TransactionRef, {
@@ -219,25 +205,8 @@ export async function processJoinBonus(
       description: 'Level 1 join bonus - new user signup'
     });
     
-    if (level2AffiliateId) {
-      const level2TransactionRef = doc(collection(firestore, 'joinBonusTransactions'));
-      batch.set(level2TransactionRef, {
-        userId: level2AffiliateId,
-        newUserId: userId,
-        amount: 5,
-        type: 'level2',
-        timestamp: serverTimestamp(),
-        description: 'Level 2 join bonus - new user signup'
-      });
-    }
-    
     await batch.commit();
-    console.log('Join bonus processed:', { 
-      level1AffiliateId, 
-      level2AffiliateId, 
-      level1Bonus: 10, 
-      level2Bonus: level2AffiliateId ? 5 : 0 
-    });
+    console.log('Join bonus processed (Level-1 only):', { level1AffiliateId, level1Bonus: 10 });
   } catch (error) {
     console.error('Error processing join bonus:', error);
     throw error;
@@ -294,11 +263,9 @@ export async function trackReferralSignup(
       referredAt: serverTimestamp()
     });
 
-    // Process join bonus for referrers
-    const { level1AffiliateId, level2AffiliateId } = await getReferralChain(userId);
-    if (level1AffiliateId) {
-      await processJoinBonus(userId, level1AffiliateId, level2AffiliateId || undefined);
-    }
+    // Process join bonus for direct referrer only
+    const level1AffiliateId = affiliateId;
+    await processJoinBonus(userId, level1AffiliateId);
 
     console.log('Referral signup tracked with join bonus:', { affiliateId, userId });
   } catch (error) {
@@ -309,33 +276,19 @@ export async function trackReferralSignup(
 /**
  * Calculate 2-level commission structure based on rank
  */
-export function calculate2LevelCommission(
+export function calculateLevel1Commission(
   amount: number,
   level1Rank: string,
   currency: 'DLX' | 'USDT' | 'INR' = 'DLX'
 ): {
   level1Commission: number;
-  level2Commission: number;
   level1Percentage: number;
-  level2Percentage: number;
 } {
   // Get rank-based commission percentages
   const rankInfo = getRankInfo(level1Rank);
   const level1Percentage = rankInfo.commission;
-  
-  // Level 2 gets 15% of Level 1's commission
-  const level2Percentage = 15;
-  
-  // Calculate commissions
   const level1Commission = (amount * level1Percentage) / 100;
-  const level2Commission = (level1Commission * level2Percentage) / 100;
-  
-  return {
-    level1Commission,
-    level2Commission,
-    level1Percentage,
-    level2Percentage
-  };
+  return { level1Commission, level1Percentage };
 }
 
 /**
@@ -343,35 +296,24 @@ export function calculate2LevelCommission(
  */
 export async function getReferralChain(userId: string): Promise<{
   level1AffiliateId: string | null;
-  level2AffiliateId: string | null;
 }> {
   try {
     // Get user's referrer (Level 1)
     const userDoc = await getDoc(doc(firestore, 'users', userId));
     if (!userDoc.exists()) {
-      return { level1AffiliateId: null, level2AffiliateId: null };
+      return { level1AffiliateId: null };
     }
     
     const userData = userDoc.data();
     const level1AffiliateId = userData.referredBy || userData.referrerCode;
     
     if (!level1AffiliateId) {
-      return { level1AffiliateId: null, level2AffiliateId: null };
+      return { level1AffiliateId: null };
     }
-    
-    // Get Level 1's referrer (Level 2)
-    const level1Doc = await getDoc(doc(firestore, 'users', level1AffiliateId));
-    if (!level1Doc.exists()) {
-      return { level1AffiliateId, level2AffiliateId: null };
-    }
-    
-    const level1Data = level1Doc.data();
-    const level2AffiliateId = level1Data.referredBy || level1Data.referrerCode;
-    
-    return { level1AffiliateId, level2AffiliateId };
+    return { level1AffiliateId };
   } catch (error) {
     console.error('Error getting referral chain:', error);
-    return { level1AffiliateId: null, level2AffiliateId: null };
+    return { level1AffiliateId: null };
   }
 }
 
@@ -382,7 +324,7 @@ export async function updateWalletWithCommission(
   userId: string,
   commission: number,
   currency: 'DLX' | 'USDT' | 'INR',
-  commissionType: 'level1' | 'level2',
+  commissionType: 'level1',
   orderId: string
 ): Promise<void> {
   try {
@@ -418,8 +360,8 @@ export async function trackReferralPurchase(
   commissionRate?: number
 ): Promise<void> {
   try {
-    // Get referral chain
-    const { level1AffiliateId, level2AffiliateId } = await getReferralChain(userId);
+    // Direct referrer only
+    const { level1AffiliateId } = await getReferralChain(userId);
     
     if (!level1AffiliateId) {
       console.log('No referral chain found for user:', userId);
@@ -436,8 +378,8 @@ export async function trackReferralPurchase(
     const level1Data = level1Doc.data();
     const level1Rank = level1Data.rank || 'starter';
     
-    // Calculate 2-level commissions
-    const commissionData = calculate2LevelCommission(amount, level1Rank, currency);
+    // Calculate Level-1 commission
+    const commissionData = calculateLevel1Commission(amount, level1Rank, currency);
     
     // Update Level 1 affiliate
     await updateWalletWithCommission(
@@ -447,17 +389,6 @@ export async function trackReferralPurchase(
       'level1',
       orderId
     );
-    
-    // Update Level 2 affiliate if exists
-    if (level2AffiliateId) {
-      await updateWalletWithCommission(
-        level2AffiliateId,
-        commissionData.level2Commission,
-        currency,
-        'level2',
-        orderId
-      );
-    }
     
     // Update affiliate stats
     const affiliateRef = doc(firestore, 'users', level1AffiliateId);
@@ -478,18 +409,14 @@ export async function trackReferralPurchase(
       productName,
       currency,
       level1Commission: commissionData.level1Commission,
-      level2Commission: commissionData.level2Commission,
-      level1AffiliateId,
-      level2AffiliateId: level2AffiliateId || undefined
+      level1AffiliateId
     };
 
     await setDoc(doc(firestore, 'referralPurchases', purchaseData.id), purchaseData);
 
-    console.log('2-Level referral purchase tracked:', { 
-      level1AffiliateId, 
-      level2AffiliateId, 
+    console.log('Referral purchase tracked (Level-1 only):', { 
+      level1AffiliateId,
       level1Commission: commissionData.level1Commission,
-      level2Commission: commissionData.level2Commission,
       currency
     });
   } catch (error) {
@@ -534,57 +461,28 @@ export async function getReferralStats(affiliateId: string) {
  */
 export async function getReferralUsers(affiliateId: string) {
   try {
-    // We need to fetch referrals by both the affiliate's referral code and their user id.
-    // First, resolve the affiliate's referral code.
-    const affiliateDoc = await getDoc(doc(firestore, 'users', affiliateId));
-    const affiliateData = affiliateDoc.exists() ? affiliateDoc.data() : null;
-    const affiliateReferralCode = (affiliateData as any)?.referralCode || affiliateId;
+    // Resolve referral code for current affiliate
+    const meRef = doc(firestore, 'users', affiliateId);
+    const meSnap = await getDoc(meRef);
+    const myCode = (meSnap.exists() ? (meSnap.data() as any).referralCode : null) || affiliateId;
 
-    // Query for users with referrerCode equal to affiliateReferralCode (new format)
-    const referrerCodeQuery = query(
-      collection(firestore, 'users'),
-      where('referrerCode', '==', affiliateReferralCode)
-    );
+    // Level-1 only, no "in" queries
+    const byCode = query(collection(firestore, 'users'), where('referrerCode', '==', myCode));
+    const byUid  = query(collection(firestore, 'users'), where('referredBy', '==', affiliateId));
 
-    // Query for users with referredBy equal to either referral code or user id (old/mixed formats)
-    const referredByQuery = query(
-      collection(firestore, 'users'),
-      where('referredBy', 'in', [affiliateReferralCode, affiliateId])
-    );
-    
-    // Execute both queries in parallel
-    const [referrerCodeSnapshot, referredBySnapshot] = await Promise.all([
-      getDocs(referrerCodeQuery),
-      getDocs(referredByQuery)
-    ]);
-    
-    // Combine results and remove duplicates
-    const allUsers = new Map();
-    
-    // Add users from referrerCode query
-    referrerCodeSnapshot.docs.forEach(doc => {
-      allUsers.set(doc.id, {
-        id: doc.id,
-        ...doc.data()
-      });
-    });
-    
-    // Add users from referredBy query
-    referredBySnapshot.docs.forEach(doc => {
-      allUsers.set(doc.id, {
-        id: doc.id,
-        ...doc.data()
-      });
-    });
-    
+    const [s1, s2] = await Promise.all([getDocs(byCode), getDocs(byUid)]);
+
+    const allUsers = new Map<string, any>();
+    s1.docs.forEach(d => allUsers.set(d.id, { id: d.id, ...d.data() }));
+    s2.docs.forEach(d => allUsers.set(d.id, { id: d.id, ...d.data() }));
+
     const result = Array.from(allUsers.values());
     console.log(`getReferralUsers: Found ${result.length} referrals for affiliate ${affiliateId}`, {
-      referrerCodeCount: referrerCodeSnapshot.size,
-      referredByCount: referredBySnapshot.size,
-      totalUnique: result.length,
-      affiliateReferralCode
+      byCodeCount: s1.size,
+      byUidCount: s2.size,
+      totalUnique: result.length
     });
-    
+
     return result;
   } catch (error) {
     console.error('Error getting referral users:', error);

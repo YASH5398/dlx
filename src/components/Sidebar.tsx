@@ -23,7 +23,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onLogout }) => {
     { name: approved ? "Affiliate Dashboard" : "Affiliate Program", icon: UsersIcon, path: approved ? "/affiliate-dashboard" : "/affiliate-program" },
     { name: "Rewards", icon: CurrencyDollarIcon, path: "/commission" },
     { name: "Referrals", icon: UserGroupIcon, path: "/referrals" },
-    { name: "Digital Products", icon: ChartBarIcon, path: "/dashboard/digital-products" },
     { name: "Data & Marketing", icon: ChartBarIcon, path: "/database-marketing", isSubmenu: true },
     { name: "DLX Listing", icon: RocketLaunchIcon, path: "/dlx-listing" },
     { name: "Work With Us", icon: UserGroupIcon, path: "/work-with-us" },

@@ -3,7 +3,7 @@
  * This file demonstrates how to use the new commission structure
  */
 
-import { trackReferralPurchase, calculate2LevelCommission } from './referralTracking';
+import { trackReferralPurchase, calculateLevel1Commission } from './referralTracking';
 import { getRankInfo } from './rankSystem';
 
 /**
@@ -44,20 +44,19 @@ export async function processPurchaseWithCommissions(
 export function demonstrateCommissionCalculation() {
   const purchaseAmount = 500; // $500 purchase
   
-  console.log('=== 2-Level Commission Structure Examples ===\n');
+  console.log('=== Level-1 Commission Structure Examples ===\n');
   
   const ranks = ['starter', 'dlx-associate', 'dlx-executive', 'dlx-director', 'dlx-president'];
   
   ranks.forEach(rank => {
     const rankInfo = getRankInfo(rank);
-    const commissionData = calculate2LevelCommission(purchaseAmount, rank, 'DLX');
+    const commissionData = calculateLevel1Commission(purchaseAmount, rank, 'DLX');
     
     console.log(`${rankInfo.name} (${rankInfo.commission}% Level 1):`);
     console.log(`  Purchase Amount: $${purchaseAmount}`);
     console.log(`  Level 1 Commission: $${commissionData.level1Commission.toFixed(2)} (${commissionData.level1Percentage}%)`);
-    console.log(`  Level 2 Commission: $${commissionData.level2Commission.toFixed(2)} (${commissionData.level2Percentage}% of Level 1)`);
-    console.log(`  Total Commission Paid: $${(commissionData.level1Commission + commissionData.level2Commission).toFixed(2)}`);
-    console.log(`  Net to Company: $${(purchaseAmount - commissionData.level1Commission - commissionData.level2Commission).toFixed(2)}\n`);
+    console.log(`  Total Commission Paid: $${(commissionData.level1Commission).toFixed(2)}`);
+    console.log(`  Net to Company: $${(purchaseAmount - commissionData.level1Commission).toFixed(2)}\n`);
   });
 }
 
@@ -74,17 +73,17 @@ export function demonstrateMultiCurrencyPayout() {
   const usdtAmount = purchaseAmount * 0.5; // $500 USDT
   const dlxAmount = purchaseAmount * 0.5;  // $500 DLX equivalent
   
-  const usdtCommission = calculate2LevelCommission(usdtAmount, rank, 'USDT');
-  const dlxCommission = calculate2LevelCommission(dlxAmount, rank, 'DLX');
+  const usdtCommission = calculateLevel1Commission(usdtAmount, rank, 'USDT');
+  const dlxCommission = calculateLevel1Commission(dlxAmount, rank, 'DLX');
   
   console.log(`Purchase: $${purchaseAmount} (50% USDT + 50% DLX)`);
   console.log(`\nUSDT Payouts:`);
   console.log(`  Level 1: $${usdtCommission.level1Commission.toFixed(2)} USDT`);
-  console.log(`  Level 2: $${usdtCommission.level2Commission.toFixed(2)} USDT`);
+  
   console.log(`\nDLX Payouts:`);
   console.log(`  Level 1: ${dlxCommission.level1Commission.toFixed(2)} DLX`);
-  console.log(`  Level 2: ${dlxCommission.level2Commission.toFixed(2)} DLX`);
-  console.log(`\nTotal Commission Value: $${(usdtCommission.level1Commission + usdtCommission.level2Commission + dlxCommission.level1Commission + dlxCommission.level2Commission).toFixed(2)}`);
+  
+  console.log(`\nTotal Commission Value: $${(usdtCommission.level1Commission + dlxCommission.level1Commission).toFixed(2)}`);
 }
 
 /**

@@ -16,7 +16,7 @@ export default function Header() {
   const navigate = useNavigate();
   const location = useLocation();
   const isHome = location.pathname === '/';
-  const { isAuthenticated, user, logout } = useUser();
+  const { isAuthenticated, user, logout, initialized } = useUser();
   const { approved } = useAffiliateApproval();
 
   const initials = (user?.name || 'User')
@@ -39,7 +39,6 @@ export default function Header() {
     { label: approved ? "Affiliate Dashboard" : "Affiliate Program", to: approved ? "/affiliate-dashboard" : "/affiliate-program" },
     { label: "Commission", to: "/commission" },
     { label: "Referrals", to: "/referrals" },
-    { label: "Digital Products", to: "/dashboard/digital-products" },
     { label: "Database & Marketing", to: "/database-marketing" },
     { label: "DLX Listing", to: "/dlx-listing" },
     { label: "Work With Us", to: "/work-with-us" },
@@ -133,13 +132,25 @@ export default function Header() {
             ) : (
               <>
                 <div className="hidden sm:flex items-center gap-3">
-                  <div className="text-right">
-                    <div className="text-sm font-semibold text-white">{user?.name || 'User'}</div>
-                    <div className="text-xs text-gray-300">{user?.email || ''}</div>
-                  </div>
-                  <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 border-2 border-white/20 flex items-center justify-center font-semibold shadow-lg hover:scale-110 transition-all duration-300">
-                    {initials}
-                  </div>
+                  {initialized ? (
+                    <>
+                      <div className="text-right">
+                        <div className="text-sm font-semibold text-white">{user?.name || 'User'}</div>
+                        <div className="text-xs text-gray-300">{user?.email || ''}</div>
+                      </div>
+                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 border-2 border-white/20 flex items-center justify-center font-semibold shadow-lg hover:scale-110 transition-all duration-300">
+                        {initials}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-right">
+                        <div className="h-4 w-28 rounded bg-white/20 animate-pulse mb-1" />
+                        <div className="h-3 w-20 rounded bg-white/10 animate-pulse" />
+                      </div>
+                      <div className="h-10 w-10 rounded-full bg-white/10 border-2 border-white/10 animate-pulse" />
+                    </>
+                  )}
                 </div>
                 <button
                   className="inline-flex items-center rounded-xl bg-gradient-to-r from-red-500/20 to-red-600/20 border border-red-400/30 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-red-500/25 hover:shadow-red-500/40 hover:scale-105 transition-all duration-300 backdrop-blur-sm"

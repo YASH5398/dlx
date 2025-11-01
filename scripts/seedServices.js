@@ -18,6 +18,14 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const firestore = getFirestore(app);
 
+// Safety: prevent accidental writes to production unless explicitly allowed
+const PROJECT_GUARD = process.env.FIREBASE_PROJECT_ID || firebaseConfig.projectId || '';
+const PROD_IDS = new Set(['digilinex-a80a9', 'digilinex-prod']);
+if (PROD_IDS.has(PROJECT_GUARD) && process.env.ALLOW_PROD_WRITE !== 'true') {
+  console.error(`\n❌ Refusing to run seedServices against production project: ${PROJECT_GUARD}. Set ALLOW_PROD_WRITE=true to override intentionally.\n`);
+  process.exit(1);
+}
+
 const services = [
   { id: 'token', title: 'Token Creation', description: 'Create crypto token', price: '$100', category: 'Crypto', icon: '🪙', isActive: true },
   { id: 'website', title: 'Website Development', description: 'Build website', price: '$200', category: 'Web', icon: '🌐', isActive: true },
@@ -42,6 +50,7 @@ const services = [
 
 async function seedServices() {
   console.log('🚀 Starting service seeding...');
+  console.log('Project:', PROJECT_GUARD || 'unknown');
   
   try {
     for (const service of services) {

@@ -88,7 +88,7 @@ export default function OrderInvoice() {
       ) : !order ? (
         <div className="rounded-2xl bg-white/5 border border-white/10 p-6">
           <p className="text-gray-300">Invoice not found.</p>
-          <button onClick={() => navigate('/dashboard/digital-products')} className="mt-3 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white">Browse Services</button>
+          <button onClick={() => navigate('/dashboard')} className="mt-3 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white">Browse Services</button>
         </div>
       ) : (
         <div className="rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 border border-white/10 p-6">

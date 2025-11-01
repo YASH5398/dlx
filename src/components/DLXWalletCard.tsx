@@ -41,7 +41,6 @@ const DLXWalletCard: React.FC<DLXWalletCardProps> = ({ className = '' }) => {
     loading: referralIncomeLoading,
     getTotalEarnings: getReferralTotalEarnings,
     getLevel1Earnings: getReferralLevel1Earnings,
-    getLevel2Earnings: getReferralLevel2Earnings,
     getJoinBonus,
     getActiveReferralsCount: getReferralCounts
   } = useReferralIncome();
@@ -301,10 +300,6 @@ const DLXWalletCard: React.FC<DLXWalletCardProps> = ({ className = '' }) => {
                   <div>
                     <div className="text-gray-400">Level 1 (+10 DLX each)</div>
                     <div className="text-white font-semibold">{getJoinBonus('level1').toFixed(0)} DLX</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-400">Level 2 (+5 DLX each)</div>
-                    <div className="text-white font-semibold">{getJoinBonus('level2').toFixed(0)} DLX</div>
                   </div>
                 </div>
               </div>

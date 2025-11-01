@@ -7,8 +7,8 @@ export interface DatabaseMarketingCategory {
   name: string;
   description: string;
   image?: string; // Full URL to thumbnail image
-  priceINR?: string;
-  priceUSD?: string;
+  priceINR?: string; // may be number or range or string with symbol
+  priceUSD?: string; // may be number or range or string with symbol
   priceRange?: string;
   contactCount?: number;
   category?: string; // slug or grouping key

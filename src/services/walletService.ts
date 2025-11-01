@@ -214,7 +214,7 @@ export class WalletService {
     userId: string,
     amount: number,
     currency: 'DLX' | 'USDT' | 'INR',
-    commissionType: 'level1' | 'level2',
+    commissionType: 'level1',
     orderId: string
   ): Promise<boolean> {
     try {
@@ -243,8 +243,8 @@ export class WalletService {
           // Create wallet document if it doesn't exist
           const newWalletData: any = {
             dlx: 0,
-            usdt: { mainUsdt: 0, purchaseUsdt: 0, referrallevel1: 0, referrallevel2: 0, total: 0 },
-            inr: { mainInr: 0, purchaseInr: 0, referrallevel1: 0, referrallevel2: 0, total: 0 },
+            usdt: { mainUsdt: 0, purchaseUsdt: 0, referrallevel1: 0, total: 0 },
+            inr: { mainInr: 0, purchaseInr: 0, referrallevel1: 0, total: 0 },
             walletUpdatedAt: serverTimestamp()
           };
           

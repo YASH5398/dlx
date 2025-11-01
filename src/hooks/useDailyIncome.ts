@@ -8,7 +8,6 @@ export interface DailyIncomeStats {
   last7Days: DailyIncomeCalculation[];
   totalReferralIncome: number;
   level1Referrals: number;
-  level2Referrals: number;
   loading: boolean;
   error: string | null;
 }
@@ -20,7 +19,6 @@ export function useDailyIncome() {
     last7Days: [],
     totalReferralIncome: 0,
     level1Referrals: 0,
-    level2Referrals: 0,
     loading: true,
     error: null
   });
@@ -91,8 +89,7 @@ export function useDailyIncome() {
   };
 
   const getLevel2Earnings = () => {
-    if (!stats.today) return 0;
-    return stats.today.referralIncome.level2Income;
+    return 0;
   };
 
   const getUserEarnings = () => {
@@ -108,8 +105,8 @@ export function useDailyIncome() {
   const getActiveReferralsCount = () => {
     return {
       level1: stats.level1Referrals,
-      level2: stats.level2Referrals,
-      total: stats.level1Referrals + stats.level2Referrals
+      level2: 0,
+      total: stats.level1Referrals
     };
   };
 

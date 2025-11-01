@@ -691,7 +691,7 @@ export default function DigitalProducts() {
                           onClick={() => {
                             try {
                               const base = typeof window !== 'undefined' ? window.location.origin : 'https://digilinex.com';
-                              const link = `${base}/dashboard/digital-products?ref=${user?.id ?? ''}`;
+                              const link = `${base}/dashboard?ref=${user?.id ?? ''}`;
                               navigator.clipboard.writeText(link)
                                 .then(() => setToast({ message: 'Referral link copied!', type: 'success' }))
                                 .catch(() => setToast({ message: 'Unable to copy. Share manually.', type: 'error' }));

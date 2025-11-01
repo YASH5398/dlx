@@ -61,7 +61,6 @@ const MobileDrawer: React.FC<MobileDrawerProps> = ({ isOpen, onClose }) => {
     { name: approved ? 'Affiliate Dashboard' : 'Affiliate Program', icon: UsersIcon, path: approved ? '/affiliate-dashboard' : '/affiliate-program', color: 'from-indigo-500 to-blue-500' },
     { name: 'Commission', icon: CurrencyDollarIcon, path: '/commission', color: 'from-yellow-500 to-orange-500' },
     { name: 'Referrals', icon: UserGroupIcon, path: '/referrals', color: 'from-teal-500 to-cyan-500' },
-    { name: 'Digital Products', icon: ChartBarIcon, path: '/dashboard/digital-products', color: 'from-pink-500 to-rose-500' },
     { name: 'Database & Marketing', icon: ChartBarIcon, path: '/database-marketing', color: 'from-violet-500 to-purple-500' },
     { name: 'DLX Listing', icon: RocketLaunchIcon, path: '/dlx-listing', color: 'from-amber-500 to-yellow-500' },
     { name: 'Work With Us', icon: UserGroupIcon, path: '/work-with-us', color: 'from-emerald-500 to-green-500' },

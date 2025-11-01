@@ -20,10 +20,8 @@ export interface UserActivityStatus {
 
 export interface ReferralIncome {
   level1Income: number;
-  level2Income: number;
   totalReferralIncome: number;
   level1Referrals: number;
-  level2Referrals: number;
 }
 
 export interface DailyIncomeCalculation {
@@ -56,10 +54,9 @@ export function calculateUserDailyEarnings(isActive: boolean): number {
  * Calculate referral commission based on level and referral's daily earnings
  */
 export function calculateReferralCommission(
-  referralDailyEarnings: number, 
-  level: 1 | 2
+  referralDailyEarnings: number
 ): number {
-  const commissionRate = level === 1 ? 0.20 : 0.10; // Level 1: 20%, Level 2: 10%
+  const commissionRate = 0.20; // Level 1: 20%
   return referralDailyEarnings * commissionRate;
 }
 
@@ -97,7 +94,6 @@ export async function getAllUsersActivityStatus(): Promise<UserActivityStatus[]>
  */
 export async function getUserReferralChain(userId: string): Promise<{
   level1Referrals: string[];
-  level2Referrals: string[];
 }> {
   try {
     // Get Level 1 referrals (direct referrals) - query both referrerCode and referredBy
@@ -122,46 +118,18 @@ export async function getUserReferralChain(userId: string): Promise<{
     
     const level1Referrals = Array.from(level1UserIds);
 
-    // Get Level 2 referrals (referrals of Level 1 referrals)
-    const level2Referrals: string[] = [];
-    if (level1Referrals.length > 0) {
-      // Query for level 2 referrals using both field names
-      const level2ReferrerCodeQuery = query(
-        collection(firestore, 'users'),
-        where('referrerCode', 'in', level1Referrals)
-      );
-      const level2ReferredByQuery = query(
-        collection(firestore, 'users'),
-        where('referredBy', 'in', level1Referrals)
-      );
-      
-      const [level2ReferrerCodeSnapshot, level2ReferredBySnapshot] = await Promise.all([
-        getDocs(level2ReferrerCodeQuery),
-        getDocs(level2ReferredByQuery)
-      ]);
-      
-      // Combine and deduplicate level 2 referrals
-      const level2UserIds = new Set<string>();
-      level2ReferrerCodeSnapshot.docs.forEach(doc => level2UserIds.add(doc.id));
-      level2ReferredBySnapshot.docs.forEach(doc => level2UserIds.add(doc.id));
-      
-      level2Referrals.push(...Array.from(level2UserIds));
-    }
-
     console.log(`getUserReferralChain: Referral chain for user ${userId}`, {
       level1ReferrerCode: level1ReferrerCodeSnapshot.size,
       level1ReferredBy: level1ReferredBySnapshot.size,
-      level1Total: level1Referrals.length,
-      level2Total: level2Referrals.length
+      level1Total: level1Referrals.length
     });
 
     return {
-      level1Referrals,
-      level2Referrals
+      level1Referrals
     };
   } catch (error) {
     console.error('Error fetching referral chain:', error);
-    return { level1Referrals: [], level2Referrals: [] };
+    return { level1Referrals: [] };
   }
 }
 
@@ -182,7 +150,7 @@ export async function calculateUserDailyIncome(userId: string): Promise<DailyInc
     const userDailyEarnings = calculateUserDailyEarnings(isUserActiveStatus);
 
     // Get referral chain
-    const { level1Referrals, level2Referrals } = await getUserReferralChain(userId);
+    const { level1Referrals } = await getUserReferralChain(userId);
 
     // Get activity status for all referrals
     const allUsers = await getAllUsersActivityStatus();
@@ -194,30 +162,16 @@ export async function calculateUserDailyIncome(userId: string): Promise<DailyInc
     for (const referralId of level1Referrals) {
       const referral = userMap.get(referralId);
       if (referral) {
-        const commission = calculateReferralCommission(referral.dailyEarnings, 1);
+        const commission = calculateReferralCommission(referral.dailyEarnings);
         level1Income += commission;
         if (referral.isActive) activeLevel1Referrals++;
       }
     }
 
-    // Calculate Level 2 referral income
-    let level2Income = 0;
-    let activeLevel2Referrals = 0;
-    for (const referralId of level2Referrals) {
-      const referral = userMap.get(referralId);
-      if (referral) {
-        const commission = calculateReferralCommission(referral.dailyEarnings, 2);
-        level2Income += commission;
-        if (referral.isActive) activeLevel2Referrals++;
-      }
-    }
-
     const referralIncome: ReferralIncome = {
       level1Income,
-      level2Income,
-      totalReferralIncome: level1Income + level2Income,
-      level1Referrals: level1Referrals.length,
-      level2Referrals: level2Referrals.length
+      totalReferralIncome: level1Income,
+      level1Referrals: level1Referrals.length
     };
 
     const totalDailyIncome = userDailyEarnings + referralIncome.totalReferralIncome;
@@ -266,8 +220,7 @@ export async function distributeDailyIncome(): Promise<void> {
             totalReferralDLX: increment(incomeCalculation.referralIncome.totalReferralIncome),
             lastReferralIncome: serverTimestamp(),
             lastReferralIncomeAmount: incomeCalculation.referralIncome.totalReferralIncome,
-            level1ReferralIncome: increment(incomeCalculation.referralIncome.level1Income),
-            level2ReferralIncome: increment(incomeCalculation.referralIncome.level2Income)
+            level1ReferralIncome: increment(incomeCalculation.referralIncome.level1Income)
           });
         }
 
@@ -277,12 +230,10 @@ export async function distributeDailyIncome(): Promise<void> {
           userId: user.userId,
           userDailyEarnings: incomeCalculation.userDailyEarnings,
           level1Income: incomeCalculation.referralIncome.level1Income,
-          level2Income: incomeCalculation.referralIncome.level2Income,
           totalReferralIncome: incomeCalculation.referralIncome.totalReferralIncome,
           totalDailyIncome: incomeCalculation.totalDailyIncome,
           isActive: user.isActive,
           level1Referrals: incomeCalculation.referralIncome.level1Referrals,
-          level2Referrals: incomeCalculation.referralIncome.level2Referrals,
           timestamp: serverTimestamp()
         });
 
@@ -319,7 +270,6 @@ export async function getUserDailyIncomeStats(userId: string): Promise<{
   last7Days: DailyIncomeCalculation[];
   totalReferralIncome: number;
   level1Referrals: number;
-  level2Referrals: number;
 }> {
   try {
     // Get today's income calculation
@@ -346,10 +296,8 @@ export async function getUserDailyIncomeStats(userId: string): Promise<{
           userDailyEarnings: data.userDailyEarnings || 0,
           referralIncome: {
             level1Income: data.level1Income || 0,
-            level2Income: data.level2Income || 0,
             totalReferralIncome: data.totalReferralIncome || 0,
-            level1Referrals: data.level1Referrals || 0,
-            level2Referrals: data.level2Referrals || 0
+            level1Referrals: data.level1Referrals || 0
           },
           totalDailyIncome: data.totalDailyIncome || 0,
           timestamp: logDate
@@ -363,14 +311,12 @@ export async function getUserDailyIncomeStats(userId: string): Promise<{
     // Calculate totals
     const totalReferralIncome = last7Days.reduce((sum, day) => sum + day.referralIncome.totalReferralIncome, 0);
     const level1Referrals = todayIncome.referralIncome.level1Referrals;
-    const level2Referrals = todayIncome.referralIncome.level2Referrals;
 
     return {
       today: todayIncome,
       last7Days,
       totalReferralIncome,
-      level1Referrals,
-      level2Referrals
+      level1Referrals
     };
   } catch (error) {
     console.error('Error getting user daily income stats:', error);
@@ -378,8 +324,7 @@ export async function getUserDailyIncomeStats(userId: string): Promise<{
       today: null,
       last7Days: [],
       totalReferralIncome: 0,
-      level1Referrals: 0,
-      level2Referrals: 0
+      level1Referrals: 0
     };
   }
 }

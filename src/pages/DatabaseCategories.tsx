@@ -89,7 +89,7 @@ export default function DatabaseCategories() {
     
     // Store in sessionStorage for checkout page
     sessionStorage.setItem('selectedDatabaseProduct', JSON.stringify(productData));
-    navigate('/dashboard/digital-products');
+    navigate('/dashboard');
   };
 
   return (

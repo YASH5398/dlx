@@ -14,7 +14,7 @@ interface MobileHeaderProps {
 }
 
 const MobileHeader: React.FC<MobileHeaderProps> = ({ onMenuToggle, isMenuOpen }) => {
-  const { user, logout } = useUser();
+  const { user, logout, initialized } = useUser();
   const navigate = useNavigate();
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
 
@@ -81,9 +81,13 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({ onMenuToggle, isMenuOpen })
               onClick={() => setShowProfileDropdown(!showProfileDropdown)}
               className="relative p-2 rounded-2xl bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-400/30 hover:from-blue-500/30 hover:to-purple-500/30 transition-all duration-300 hover:scale-110 group"
             >
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center shadow-lg">
-                <span className="text-white font-semibold text-sm">{initials}</span>
-              </div>
+              {initialized ? (
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center shadow-lg">
+                  <span className="text-white font-semibold text-sm">{initials}</span>
+                </div>
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-white/10 border border-white/10 animate-pulse" />
+              )}
               <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-blue-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             </button>
 
@@ -92,13 +96,25 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({ onMenuToggle, isMenuOpen })
               <div className="absolute right-0 mt-2 w-64 bg-gradient-to-b from-gray-900/95 to-gray-800/95 backdrop-blur-xl border border-white/20 rounded-2xl shadow-2xl z-50 overflow-hidden">
                 <div className="p-4 border-b border-white/10 bg-gradient-to-r from-blue-600/10 to-purple-600/10">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center shadow-lg">
-                      <span className="text-white font-bold text-lg">{initials}</span>
-                    </div>
-                    <div>
-                      <div className="text-lg font-semibold text-white">{user?.name || 'User'}</div>
-                      <div className="text-sm text-blue-300">{user?.email || ''}</div>
-                    </div>
+                    {initialized ? (
+                      <>
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center shadow-lg">
+                          <span className="text-white font-bold text-lg">{initials}</span>
+                        </div>
+                        <div>
+                          <div className="text-lg font-semibold text-white">{user?.name || 'User'}</div>
+                          <div className="text-sm text-blue-300">{user?.email || ''}</div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-12 h-12 rounded-full bg-white/10 border border-white/10 animate-pulse" />
+                        <div>
+                          <div className="h-5 w-40 rounded bg-white/20 animate-pulse mb-2" />
+                          <div className="h-3 w-28 rounded bg-white/10 animate-pulse" />
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="p-2 space-y-1">

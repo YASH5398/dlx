@@ -17,6 +17,14 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const firestore = getFirestore(app);
 
+// Safety guard: avoid accidental writes to production
+const PROJECT_GUARD = process.env.FIREBASE_PROJECT_ID || firebaseConfig.projectId || '';
+const PROD_IDS = new Set(['digilinex-a80a9', 'digilinex-prod']);
+if (PROD_IDS.has(PROJECT_GUARD) && process.env.ALLOW_PROD_WRITE !== 'true') {
+  console.error(`\n❌ Refusing to run forms sync against production project: ${PROJECT_GUARD}. Set ALLOW_PROD_WRITE=true to override.\n`);
+  process.exit(1);
+}
+
 // Comprehensive form templates based on service categories and types
 const getComprehensiveFormForService = (service) => {
   const category = service.category?.toLowerCase() || '';

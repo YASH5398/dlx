@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { firestore } from '../firebase';
-import { doc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { doc, updateDoc, onSnapshot, addDoc, collection, serverTimestamp, getDoc } from 'firebase/firestore';
 import { useUser } from '../context/UserContext';
 import { getRankInfo } from '../utils/rankSystem';
 
@@ -114,10 +114,20 @@ export function useAffiliateStatus() {
     if (!user?.id) return false;
 
     try {
+      // Create application document (manual user action only)
+      await addDoc(collection(firestore, 'affiliateApplications'), {
+        userId: user.id,
+        status: 'pending',
+        createdAt: serverTimestamp(),
+      });
+
+      // Mark user as under review; do NOT set partner yet
       await updateDoc(doc(firestore, 'users', user.id), {
-        affiliateJoinedAt: new Date(),
-        affiliateStatus: 'pending',
-        affiliatePartner: true
+        affiliatePartner: false,
+        affiliateStatus: 'under_review',
+        affiliateAppliedAt: serverTimestamp(),
+        affiliateProcessing: true,
+        affiliateProcessingStartedAt: serverTimestamp(),
       });
       return true;
     } catch (error) {
@@ -125,6 +135,36 @@ export function useAffiliateStatus() {
       return false;
     }
   };
+
+  // Auto-approve after 30 minutes if still under review
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!user?.id) return;
+        const userRef = doc(firestore, 'users', user.id);
+        const snap = await getDoc(userRef);
+        if (!snap.exists()) return;
+        const data = snap.data() as any;
+        const status: string = data.affiliateStatus || 'not_joined';
+        const startedAt = data.affiliateProcessingStartedAt?.toDate?.() || null;
+        if (!startedAt) return;
+        const thirtyMinMs = 30 * 60 * 1000;
+        const due = Date.now() - startedAt.getTime() >= thirtyMinMs;
+        if (due && (status === 'under_review' || status === 'pending')) {
+          await updateDoc(userRef, {
+            affiliateStatus: 'approved',
+            affiliateApproved: true,
+            affiliatePartner: true,
+            affiliateApprovedAt: serverTimestamp(),
+            affiliateProcessing: false,
+            affiliateProcessingCompletedAt: serverTimestamp(),
+          });
+        }
+      } catch (err) {
+        console.error('Auto-approve check failed:', err);
+      }
+    })();
+  }, [user?.id]);
 
   const getAffiliateBadgeText = () => {
     if (affiliateStatus.isApproved) return 'Affiliate Partner ✅';

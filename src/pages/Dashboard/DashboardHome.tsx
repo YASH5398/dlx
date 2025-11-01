@@ -13,14 +13,16 @@ import { useUserRank } from '../../hooks/useUserRank';
 import { useAffiliateStatus } from '../../hooks/useAffiliateStatus';
 import { useAffiliateBannerVisibility } from '../../hooks/useAffiliateBannerVisibility';
 import { useActiveServices } from '../../hooks/useServices';
+import { ServiceManager } from '../../utils/serviceManagement';
 import { useDigitalProducts } from '../../hooks/useDigitalProducts';
 import { useDatabaseMarketingCategories } from '../../hooks/useDatabaseMarketingCategories';
+import { useMarketingCategories } from '../../hooks/useMarketingCategories';
 import AffiliateJoinModal from '../../components/AffiliateJoinModal';
-import AffiliateCongratulationsModal from '../../components/AffiliateCongratulationsModal';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Star, Share2, Crown, Sparkles, CheckCircle, TrendingUp, Package, ShoppingCart, ArrowRight, X, AlertCircle, DollarSign, Download, ChevronLeft, ChevronRight, XCircle } from 'lucide-react';
 import ReviewSystem from '../../components/ReviewSystem';
+import ReviewerAvatars from '../../components/ReviewerAvatars';
 
 import type { ServiceItem } from '../../utils/services';
 import { restoreDefaultServiceForms } from '../../utils/services';
@@ -86,18 +88,20 @@ export default function DashboardHome() {
   const { shouldHideBanners } = useAffiliateBannerVisibility();
   const navigate = useNavigate();
   const [ordersCount, setOrdersCount] = useState(0);
+  const [showMiningCTA, setShowMiningCTA] = useState(true);
   const [progress, setProgress] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [modalOpen, setModalOpen] = useState(false);
   const [affiliateJoinModalOpen, setAffiliateJoinModalOpen] = useState(false);
-  const [affiliateCongratulationsModalOpen, setAffiliateCongratulationsModalOpen] = useState(false);
   const [selectedService, setSelectedService] = useState<string | null>(null);
   const { services: activeServices, loading: servicesLoading } = useActiveServices();
   const { products: digitalProducts, loading: productsLoading } = useDigitalProducts();
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [showAllServices, setShowAllServices] = useState(false);
+  const [viewAllLoading, setViewAllLoading] = useState(false);
   const [showAllProducts, setShowAllProducts] = useState(false);
+  const [showAllDigitalProducts, setShowAllDigitalProducts] = useState(false);
   const [showAllDbCategories, setShowAllDbCategories] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
@@ -105,7 +109,31 @@ export default function DashboardHome() {
   const [processing, setProcessing] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [purchaseOption, setPurchaseOption] = useState<'main_only' | 'split' | 'currency_choice'>('split');
-  const { categories: dbCategories, loading: dbCategoriesLoading, error: dbCategoriesError } = useDatabaseMarketingCategories();
+  const { categories: legacyDbCategories, loading: legacyLoading, error: legacyError } = useDatabaseMarketingCategories();
+  const { items: mkItems, loading: mkLoading, error: mkError } = useMarketingCategories();
+  const dbCategories = mkItems.length > 0 ? mkItems.map((i) => ({
+    id: i.id,
+    name: i.title,
+    description: i.description,
+    image: i.imageUrl,
+    priceINR: i.price,
+    priceUSD: '',
+    priceRange: i.price,
+    contactCount: undefined,
+    category: '',
+    createdAt: i.createdAt,
+  })) : legacyDbCategories;
+  const dbCategoriesLoading = mkItems.length > 0 ? mkLoading : legacyLoading;
+  const dbCategoriesError = mkItems.length > 0 ? mkError : legacyError;
+
+  function formatUnifiedPrice(cat: any): string {
+    const usd = typeof cat.priceUsd === 'number' ? cat.priceUsd : (typeof cat.priceUSD === 'number' ? cat.priceUSD : undefined);
+    const inr = typeof cat.priceInr === 'number' ? cat.priceInr : (typeof cat.priceINR === 'number' ? cat.priceINR : undefined);
+    if (usd && inr) return `$${usd} / ₹${Number(inr).toLocaleString('en-IN')}`;
+    if (usd) return `$${usd}`;
+    if (inr) return `₹${Number(inr).toLocaleString('en-IN')}`;
+    return cat.priceRange || cat.priceINR || cat.price || '—';
+  }
   try {
     console.log('[DashboardHome] dbCategories loading:', dbCategoriesLoading, 'error:', dbCategoriesError, 'count:', dbCategories?.length);
   } catch {}
@@ -121,12 +149,7 @@ export default function DashboardHome() {
 
   // All services now support reviews - no need for specific service filtering
 
-  const reviewerAvatars = [
-    '/assets/reviewers/avatar1.svg',
-    '/assets/reviewers/avatar2.svg',
-    '/assets/reviewers/avatar3.svg',
-    '/assets/reviewers/avatar4.svg',
-  ];
+  // Removed image avatars for reviews preview; we will show initial-only badges instead
 
   // Popups persist until user action (no auto-hide)
 
@@ -169,7 +192,7 @@ export default function DashboardHome() {
       image: "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2340&q=90",
       gradient: "from-purple-600 to-pink-600",
       overlayGradient: "from-slate-900/70 to-slate-800/70",
-      route: "/dashboard/digital-products"
+      route: "/dashboard"
     },
     {
       id: 3,
@@ -288,31 +311,12 @@ export default function DashboardHome() {
     }
   };
 
-  // Show affiliate join popup for first-time users who are not approved
+  // Affiliate auto-popup disabled after signup completion
   useEffect(() => {
-    if (user?.id && !affiliateLoading) {
-      // Only show popup if user is not approved and hasn't seen it before
-      if (!affiliateStatus.isApproved && !affiliateStatus.hasApplied) {
-        const hasSeenPopup = localStorage.getItem('affiliate-popup-shown');
-        if (!hasSeenPopup) {
-          setAffiliateJoinModalOpen(true);
-          localStorage.setItem('affiliate-popup-shown', 'true');
-        }
-      }
-    }
+    // Intentionally disabled to prevent automatic affiliate popup
+    // Keeping the effect for future feature flag re-enable without breaking deps
   }, [user?.id, affiliateStatus.isApproved, affiliateStatus.hasApplied, affiliateLoading]);
 
-  // Show congratulations modal when affiliate gets approved (only once)
-  useEffect(() => {
-    if (affiliateStatus.isApproved && affiliateStatus.isPartner) {
-      // Check if we've already shown the congratulations modal
-      const hasShownCongratulations = localStorage.getItem('affiliate-congratulations-shown');
-      if (!hasShownCongratulations) {
-        setAffiliateCongratulationsModalOpen(true);
-        localStorage.setItem('affiliate-congratulations-shown', 'true');
-      }
-    }
-  }, [affiliateStatus.isApproved, affiliateStatus.isPartner]);
 
   const handleJoinAffiliate = async () => {
     const success = await joinAffiliateProgram();
@@ -642,6 +646,44 @@ export default function DashboardHome() {
     load();
   }, [activeServices]);
 
+  // When user explicitly requests "View All Services", make sure we fetch all active services once (no client-side limits)
+  const fetchAllActiveServices = async () => {
+    try {
+      const all = await ServiceManager.getActiveServices();
+      if (Array.isArray(all) && all.length) {
+        const mapped: ServiceItem[] = all.map(service => ({
+          id: service.id,
+          name: service.title,
+          description: service.description,
+          startingPrice: service.price,
+          thumbnail: service.thumbnailUrl || '',
+          gradient: gradientForCategory(service.category),
+          features: service.features || getDefaultFeatures(service.id, service.category),
+          category: normalizeCategory(service.category),
+        }));
+        setServices(mapped);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch all active services:', e);
+    }
+  };
+
+  const handleToggleShowAllServices = async () => {
+    const next = !showAllServices;
+    setShowAllServices(next);
+    if (next) {
+      setViewAllLoading(true);
+      // Ensure we have the complete list from Firestore when expanding
+      await fetchAllActiveServices();
+      setViewAllLoading(false);
+      // Smooth-scroll to services section top so users see the expanded content
+      try {
+        const el = document.getElementById('services-section');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch {}
+    }
+  };
+
   // Fallback static list (used if backend is empty) - Updated with professional images and complete descriptions
   const DEFAULT_SERVICES_BASE: Omit<ServiceItem, 'gradient' | 'features'>[] = [
     // Web Development Services
@@ -925,12 +967,20 @@ export default function DashboardHome() {
   // Render Database Marketing Categories (horizontal swipe)
   const renderDatabaseMarketingCategories = () => {
     const carouselKey = 'db-marketing-categories';
-    const items = showAllDbCategories ? dbCategories : dbCategories.slice(0, 4);
+    const items = showAllDbCategories ? dbCategories : dbCategories.slice(0, 8);
     try {
       console.log('[DashboardHome] render DB Marketing Categories, items:', items?.length, items?.slice?.(0, 2));
     } catch {}
+    // Simple horizontal virtualization: compute visible range from scrollLeft
+    const left = categoryScrollPositions[carouselKey] || 0;
+    const ITEM_WIDTH = 288; // approximate card width including gap
+    const viewportCards = Math.max(2, Math.min(4, Math.ceil(window.innerWidth / ITEM_WIDTH)));
+    const start = Math.max(0, Math.floor(left / ITEM_WIDTH) - 2);
+    const end = Math.min(items.length, start + viewportCards + 6);
+    const visibleItems = items.slice(start, end);
     return (
       <div className="relative">
+        {/* Horizontal scroll (mobile + desktop) */}
         <button
           onClick={() => scrollCarousel(carouselKey, 'left')}
           className="hidden sm:flex absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-gradient-to-r from-blue-600/20 to-cyan-600/20 backdrop-blur-sm border border-white/10 items-center justify-center hover:from-blue-600/40 hover:to-cyan-600/40 transition-all duration-200"
@@ -953,10 +1003,10 @@ export default function DashboardHome() {
           className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 px-1 sm:px-12"
           style={{ scrollBehavior: 'smooth', scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}
         >
-          {items.map((cat) => (
+          {visibleItems.map((cat) => (
             <div
               key={cat.id}
-              className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-slate-700/50 hover:border-blue-500/50 hover:-translate-y-1 hover:scale-105 flex-shrink-0 w-64 sm:w-72 h-80 cursor-pointer"
+              className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-slate-700/50 hover:border-blue-500/50 hover:-translate-y-1 hover:scale-105 flex-shrink-0 w-64 sm:w-72 h-96 cursor-pointer"
               style={{ scrollSnapAlign: 'start' }}
             >
               {/* Thumbnail / Image */}
@@ -971,53 +1021,61 @@ export default function DashboardHome() {
                 
                 {/* Discount Badge */}
                 <div className="absolute top-3 left-3">
-                  <span className="px-2 py-1 bg-red-500 text-white text-xs font-bold rounded-full shadow-lg">
+                  <span className="px-3 py-1.5 bg-red-500 text-white text-sm font-bold rounded-full shadow-lg">
                     70% OFF
                   </span>
                 </div>
                 
                 {/* Star Rating */}
-                <div className="absolute top-3 right-3 flex items-center gap-1 bg-black/50 backdrop-blur-sm rounded-full px-2 py-1">
+                <div className="absolute top-3 right-3 flex items-center gap-1 bg-black/60 backdrop-blur-sm rounded-full px-3 py-1.5">
                   <div className="flex">
                     {[...Array(5)].map((_, i) => (
-                      <svg key={i} className="w-3 h-3 text-yellow-400 fill-current" viewBox="0 0 20 20">
+                      <svg key={i} className="w-3.5 h-3.5 text-yellow-400 fill-current" viewBox="0 0 20 20">
                         <path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/>
                       </svg>
                     ))}
                   </div>
-                  <span className="text-white text-xs font-semibold ml-1">{getServiceRating(cat.id).toFixed(1)}★</span>
+                  <span className="text-white text-sm font-bold ml-1">{getServiceRating(cat.id).toFixed(1)}★</span>
                 </div>
               </div>
 
               {/* Content */}
-              <div className="p-4 h-[calc(100%-10rem)] flex flex-col">
-                <h3 className="text-base sm:text-lg font-bold text-white mb-1 line-clamp-1">{cat.name}</h3>
-                <p className="text-slate-300 text-xs sm:text-sm mb-3 line-clamp-2">{(cat as any).description || ''}</p>
+              <div className="p-5 h-[calc(100%-10rem)] flex flex-col">
+                {/* Title - Made fully visible with better spacing */}
+                <h3 className="text-lg sm:text-xl font-bold text-white mb-3 leading-tight break-words hyphens-auto" style={{ 
+                  minHeight: '2.5rem', 
+                  display: 'block', 
+                  visibility: 'visible',
+                  wordWrap: 'break-word',
+                  overflowWrap: 'break-word'
+                }}>
+                  {cat.name}
+                </h3>
+                
+                {/* Description */}
+                <p className="text-slate-300 text-sm sm:text-base mb-4 line-clamp-2 leading-relaxed">{(cat as any).description || ''}</p>
 
-                <div className="mt-auto space-y-2">
-                  <div className="flex items-center justify-between text-xs sm:text-sm">
-                    <span className="text-slate-400">Contacts</span>
-                    <span className="text-white font-semibold">{typeof (cat as any).contactCount === 'number' ? (cat as any).contactCount.toLocaleString() : '—'}</span>
+                {/* Info Section with better spacing */}
+                <div className="mt-auto space-y-3">
+                  <div className="flex items-center justify-between text-sm sm:text-base">
+                    <span className="text-slate-400 font-medium">Contacts</span>
+                    <span className="text-white font-bold text-lg">{typeof (cat as any).contactCount === 'number' ? (cat as any).contactCount.toLocaleString() : '—'}</span>
                   </div>
-                  <div className="flex items-center justify-between text-xs sm:text-sm">
-                    <span className="text-slate-400">Price</span>
-                    <span className="text-green-400 font-semibold">
-                      <span className="line-through text-gray-500 text-xs mr-1">₹{(parseFloat((cat as any).priceINR?.replace(/[₹,]/g, '') || '0') * 1.7).toFixed(0)}</span>
-                      {((cat as any).priceINR || (cat as any).priceRange || '—')}
-                      {(cat as any).priceUSD ? ` · ${(cat as any).priceUSD}` : ''}
-                    </span>
+                  <div className="flex items-center justify-between text-sm sm:text-base">
+                    <span className="text-slate-400 font-medium">Price</span>
+                    <div className="text-right text-green-400 font-bold text-lg">{formatUnifiedPrice(cat as any)}</div>
                   </div>
                 </div>
-                
-                {/* Buy Button */}
+
+                {/* CTA Button */}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     handleDatabaseBuy(cat);
                   }}
-                  className="mt-3 w-full py-2 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold hover:from-green-700 hover:to-emerald-700 transition-all duration-300 shadow-lg hover:shadow-xl text-sm"
+                  className="mt-4 w-full py-3 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold hover:from-blue-700 hover:to-cyan-700 transition-all duration-300 shadow-lg hover:shadow-xl text-base hover:scale-105 active:scale-95"
                 >
-                  Buy Database
+                  Order Now
                 </button>
               </div>
 
@@ -1137,7 +1195,15 @@ export default function DashboardHome() {
                 } catch {}
               }}
             >
-              {categoryServices.map((service, index) => (
+              {(() => {
+                // Virtualize horizontally by scrollLeft
+                const left = categoryScrollPositions[categoryId] || 0;
+                const ITEM_WIDTH = 320; // approx one card + gap
+                const viewportCards = Math.max(2, Math.min(4, Math.ceil(window.innerWidth / ITEM_WIDTH)));
+                const start = Math.max(0, Math.floor(left / ITEM_WIDTH) - 2);
+                const end = Math.min(categoryServices.length, start + viewportCards + 6);
+                const visible = categoryServices.slice(start, end);
+                return visible.map((service, index) => (
                 <motion.div
                   key={service.id}
                   initial={{ opacity: 0, y: 20 }}
@@ -1203,21 +1269,11 @@ export default function DashboardHome() {
                         <span className="text-sm text-slate-400 ml-1">{getServiceRating(service.id).toFixed(1)}★</span>
                       </div>
 
-                      {/* Show review avatars for all services */}
-                      <button
+                      {/* Show 4 overlapping reviewer avatars */}
+                      <ReviewerAvatars
+                        serviceId={service.id}
                         onClick={() => { setOpenReviewServiceId(service.id); setOpenReviewServiceName(service.name); setShowReviews(true); }}
-                        className="flex -space-x-2 hover:space-x-1 transition-all"
-                        aria-label="View Reviews"
-                      >
-                        {reviewerAvatars.slice(0, 4).map((src, i) => (
-                          <img
-                            key={i}
-                            src={src}
-                            alt="Reviewer"
-                            className="w-6 h-6 rounded-full border border-slate-700"
-                          />
-                        ))}
-                      </button>
+                      />
                     </div>
 
                     {/* Buttons */}
@@ -1241,8 +1297,9 @@ export default function DashboardHome() {
 
                   {/* Bottom Accent Line */}
                   <div className={`h-1 bg-gradient-to-r ${service.gradient}`}></div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                ));
+              })()}
             </div>
           </div>
         </div>
@@ -1254,280 +1311,320 @@ export default function DashboardHome() {
   const renderDigitalProducts = () => {
     const categorizedProducts = categorizeProducts(testProducts);
     
+    // Define the 4 main sections to show initially
+    const mainSections = ['Bundles (3)', 'Bundles', 'Software', 'Software (2)'];
+    
     // If no products are categorized, show all products in a single "All Products" section
     if (categorizedProducts.length === 0 && testProducts.length > 0) {
+      // Limit to 4 products initially, show all when expanded
+      const productsToShow = showAllDigitalProducts ? testProducts : testProducts.slice(0, 4);
       const productChunks = [];
-      for (let i = 0; i < testProducts.length; i += 6) {
-        productChunks.push(testProducts.slice(i, i + 6));
+      for (let i = 0; i < productsToShow.length; i += 6) {
+        productChunks.push(productsToShow.slice(i, i + 6));
       }
       
-      return productChunks.map((sectionProducts, chunkIndex) => (
-        <div key={`all-products-${chunkIndex}`} className="relative">
-          <h3 className="text-lg font-semibold text-slate-300 mb-4 px-2">
-            {chunkIndex === 0 ? 'All Products' : `All Products (${chunkIndex + 1})`}
-          </h3>
-          {/* Render the same carousel structure */}
-          <div className="relative">
-            <button
-              onClick={() => scrollCarousel(`all-products-${chunkIndex}`, 'left')}
-              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-gradient-to-r from-purple-600/20 to-pink-600/20 backdrop-blur-sm border border-white/10 flex items-center justify-center hover:from-purple-600/40 hover:to-pink-600/40 transition-all duration-200"
-            >
-              <svg className="w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <button
-              onClick={() => scrollCarousel(`all-products-${chunkIndex}`, 'right')}
-              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-gradient-to-r from-purple-600/20 to-pink-600/20 backdrop-blur-sm border border-white/10 flex items-center justify-center hover:from-purple-600/40 hover:to-pink-600/40 transition-all duration-200"
-            >
-              <svg className="w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-            <div 
-              id={`carousel-all-products-${chunkIndex}`}
-              className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 px-12"
-              style={{
-                scrollBehavior: 'smooth',
-                scrollSnapType: 'x mandatory',
-                WebkitOverflowScrolling: 'touch'
-              }}
-            >
-              {sectionProducts.map((product, productIndex) => (
-                <div
-                  key={product.id}
-                  className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-visible border border-slate-700/50 hover:border-purple-500/50 hover:-translate-y-1 hover:scale-105 flex-shrink-0 w-64 sm:w-72 h-80 sm:h-96"
-                  style={{ scrollSnapAlign: 'start' }}
+      return (
+        <div className="space-y-6">
+          {productChunks.map((sectionProducts, chunkIndex) => (
+            <div key={`all-products-${chunkIndex}`} className="relative">
+              <h3 className="text-lg font-semibold text-slate-300 mb-4 px-2">
+                {chunkIndex === 0 ? 'All Products' : `All Products (${chunkIndex + 1})`}
+              </h3>
+              {/* Render the same carousel structure */}
+              <div className="relative">
+                <button
+                  onClick={() => scrollCarousel(`all-products-${chunkIndex}`, 'left')}
+                  className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-gradient-to-r from-purple-600/20 to-pink-600/20 backdrop-blur-sm border border-white/10 flex items-center justify-center hover:from-purple-600/40 hover:to-pink-600/40 transition-all duration-200"
                 >
-                  {/* Product Image */}
-                  <div className="relative h-40 sm:h-48 bg-gradient-to-br from-purple-500/20 to-pink-500/20 overflow-hidden">
-                    {product.thumbnailUrl ? (
-                      <img
-                        src={product.thumbnailUrl}
-                        alt={product.title}
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Package className="w-16 h-16 text-purple-400" />
-                      </div>
-                    )}
-                    
-                    {/* Commission Badge - Top Right */}
-                    {affiliateStatus.isApproved && (
-                      <div className="absolute top-3 right-3">
-                        <span className="px-2 py-1 text-xs font-bold bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-full shadow-lg">
-                          {userRankInfo.commissionPercentage}% Commission
-                        </span>
-                      </div>
-                    )}
-                    
-                    {/* Category Badge - Top Left */}
-                    <div className="absolute top-3 left-3">
-                      <span className="px-2 py-1 text-xs font-semibold bg-slate-700/60 backdrop-blur-sm text-slate-300 rounded-full border border-slate-600/50">
-                        {product.category || 'Digital'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="relative p-3 sm:p-4 h-40 sm:h-48 flex flex-col" style={{ minHeight: '10rem' }}>
-                    {/* Star Rating */}
-                    <div className="flex items-center mb-2">
-                      {[...Array(5)].map((_, i) => (
-                        <svg
-                          key={i}
-                          className={`w-4 h-4 ${i < Math.round(getProductRating(product.id)) ? 'text-yellow-400' : 'text-slate-600'}`}
-                          fill="currentColor"
-                          viewBox="0 0 20 20"
-                        >
-                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                        </svg>
-                      ))}
-                      <span className="text-xs text-slate-400 ml-1">({getProductRating(product.id).toFixed(1)})</span>
-                    </div>
-
-                    {/* Title */}
-                    <h3 className="text-lg font-bold text-slate-200 mb-2 leading-tight line-clamp-2" style={{ minHeight: '2.5rem', display: 'block', visibility: 'visible' }}>
-                      {product.title || 'Untitled Product'}
-                    </h3>
-
-                    {/* Description */}
-                    <p className="text-xs text-slate-400 mb-3 line-clamp-2 leading-relaxed flex-grow">
-                      {product.description}
-                    </p>
-
-                    {/* Bottom Section - Price and Buttons */}
-                    <div className="mt-auto">
-                      {/* Price and View Product Button */}
-                      <div className="flex items-center justify-between mb-3">
-                        <div>
-                          <p className="text-xs text-slate-500 mb-1">Price</p>
-                          <p className="text-lg font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-                            ${product.priceUsd.toFixed(2)}
-                          </p>
+                  <svg className="w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => scrollCarousel(`all-products-${chunkIndex}`, 'right')}
+                  className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-gradient-to-r from-purple-600/20 to-pink-600/20 backdrop-blur-sm border border-white/10 flex items-center justify-center hover:from-purple-600/40 hover:to-pink-600/40 transition-all duration-200"
+                >
+                  <svg className="w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+                <div 
+                  id={`carousel-all-products-${chunkIndex}`}
+                  className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 px-12"
+                  style={{
+                    scrollBehavior: 'smooth',
+                    scrollSnapType: 'x mandatory',
+                    WebkitOverflowScrolling: 'touch'
+                  }}
+                >
+                  {sectionProducts.map((product, productIndex) => (
+                    <div
+                      key={product.id}
+                      className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-visible border border-slate-700/50 hover:border-purple-500/50 hover:-translate-y-1 hover:scale-105 flex-shrink-0 w-64 sm:w-72 h-80 sm:h-96"
+                      style={{ scrollSnapAlign: 'start' }}
+                    >
+                      {/* Product Image */}
+                      <div className="relative h-40 sm:h-48 bg-gradient-to-br from-purple-500/20 to-pink-500/20 overflow-hidden">
+                        {product.thumbnailUrl ? (
+                          <img
+                            src={product.thumbnailUrl}
+                            alt={product.title}
+                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Package className="w-16 h-16 text-purple-400" />
+                          </div>
+                        )}
+                        
+                        {/* Commission Badge - Top Right */}
+                        {affiliateStatus.isApproved && (
+                          <div className="absolute top-3 right-3">
+                            <span className="px-2 py-1 text-xs font-bold bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-full shadow-lg">
+                              {userRankInfo.commissionPercentage}% Commission
+                            </span>
+                          </div>
+                        )}
+                        
+                        {/* Category Badge - Top Left */}
+                        <div className="absolute top-3 left-3">
+                          <span className="px-2 py-1 text-xs font-semibold bg-slate-700/60 backdrop-blur-sm text-slate-300 rounded-full border border-slate-600/50">
+                            {product.category || 'Digital'}
+                          </span>
                         </div>
-                        <button
-                          onClick={() => handleProductClick(product)}
-                          className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95 text-sm"
-                        >
-                          View Product
-                        </button>
                       </div>
 
-                      {/* Share & Earn removed */}
-                    </div>
-                  </div>
+                      <div className="relative p-3 sm:p-4 h-40 sm:h-48 flex flex-col" style={{ minHeight: '10rem' }}>
+                        {/* Star Rating */}
+                        <div className="flex items-center mb-2">
+                          {[...Array(5)].map((_, i) => (
+                            <svg
+                              key={i}
+                              className={`w-4 h-4 ${i < Math.round(getProductRating(product.id)) ? 'text-yellow-400' : 'text-slate-600'}`}
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
+                              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                            </svg>
+                          ))}
+                          <span className="text-xs text-slate-400 ml-1">({getProductRating(product.id).toFixed(1)})</span>
+                        </div>
 
-                  {/* Bottom Accent Line */}
-                  <div className="h-1 bg-gradient-to-r from-purple-500 to-pink-500"></div>
+                        {/* Title */}
+                        <h3 className="text-lg font-bold text-slate-200 mb-2 leading-tight line-clamp-2" style={{ minHeight: '2.5rem', display: 'block', visibility: 'visible' }}>
+                          {product.title || 'Untitled Product'}
+                        </h3>
+
+                        {/* Description */}
+                        <p className="text-xs text-slate-400 mb-3 line-clamp-2 leading-relaxed flex-grow">
+                          {product.description}
+                        </p>
+
+                        {/* Bottom Section - Price and Buttons */}
+                        <div className="mt-auto">
+                          {/* Price and View Product Button */}
+                          <div className="flex items-center justify-between mb-3">
+                            <div>
+                              <p className="text-xs text-slate-500 mb-1">Price</p>
+                              <p className="text-lg font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                                ${product.priceUsd.toFixed(2)}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => handleProductClick(product)}
+                              className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95 text-sm"
+                            >
+                              View Product
+                            </button>
+                          </div>
+
+                          {/* Share & Earn removed */}
+                        </div>
+                      </div>
+
+                      {/* Bottom Accent Line */}
+                      <div className="h-1 bg-gradient-to-r from-purple-500 to-pink-500"></div>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </div>
             </div>
-          </div>
+          ))}
+          
+          {/* View More Button */}
+          {!showAllDigitalProducts && testProducts.length > 4 && (
+            <div className="flex justify-center pt-4">
+              <button
+                onClick={() => setShowAllDigitalProducts(true)}
+                className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95"
+              >
+                View More Products ({testProducts.length - 4} more)
+              </button>
+            </div>
+          )}
         </div>
-      ));
+      );
     }
     
-    // Normal categorized display
-    return categorizedProducts.map(([categoryName, categoryProducts], sectionIndex) => {
-      // Templates: show only 3 by default; reveal all on "View All Products"
-      let categoryList = categoryProducts;
-      if (categoryName === 'Templates' && !showAllProducts) {
-        categoryList = categoryProducts.slice(0, 3);
-      }
-      // Split products into chunks of 6 for each section
-      const productChunks = [];
-      for (let i = 0; i < categoryList.length; i += 6) {
-        productChunks.push(categoryList.slice(i, i + 6));
-      }
+    // Normal categorized display - show only main sections initially
+    const sectionsToShow = showAllDigitalProducts 
+      ? categorizedProducts 
+      : categorizedProducts.filter(([categoryName]) => mainSections.includes(categoryName));
+    
+    return (
+      <div className="space-y-6">
+        {sectionsToShow.map(([categoryName, categoryProducts], sectionIndex) => {
+          // Split products into chunks of 6 for each section
+          const productChunks = [];
+          for (let i = 0; i < categoryProducts.length; i += 6) {
+            productChunks.push(categoryProducts.slice(i, i + 6));
+          }
 
-      return productChunks.map((sectionProducts, chunkIndex) => (
-        <div key={`${categoryName}-${chunkIndex}`} className="relative">
-          <h3 className="text-lg font-semibold text-slate-300 mb-4 px-2">
-            {chunkIndex === 0 ? categoryName : `${categoryName} (${chunkIndex + 1})`}
-          </h3>
-          
-          <div className="relative">
-            <button
-              onClick={() => scrollCarousel(`${categoryName}-${chunkIndex}`, 'left')}
-              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-gradient-to-r from-purple-600/20 to-pink-600/20 backdrop-blur-sm border border-white/10 flex items-center justify-center hover:from-purple-600/40 hover:to-pink-600/40 transition-all duration-200"
-            >
-              <svg className="w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <button
-              onClick={() => scrollCarousel(`${categoryName}-${chunkIndex}`, 'right')}
-              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-gradient-to-r from-purple-600/20 to-pink-600/20 backdrop-blur-sm border border-white/10 flex items-center justify-center hover:from-purple-600/40 hover:to-pink-600/40 transition-all duration-200"
-            >
-              <svg className="w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-            
-            <div 
-              id={`carousel-${categoryName}-${chunkIndex}`}
-              className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 px-12"
-              style={{
-                scrollBehavior: 'smooth',
-                scrollSnapType: 'x mandatory',
-                WebkitOverflowScrolling: 'touch'
-              }}
-            >
-              {sectionProducts.map((product, productIndex) => (
-                <div
-                  key={product.id}
-                  className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-visible border border-slate-700/50 hover:border-purple-500/50 hover:-translate-y-1 hover:scale-105 flex-shrink-0 w-64 sm:w-72 h-80 sm:h-96"
-                  style={{ scrollSnapAlign: 'start' }}
-                >
-                  {/* Product Image */}
-                  <div className="relative h-40 sm:h-48 bg-gradient-to-br from-purple-500/20 to-pink-500/20 overflow-hidden">
-                    {product.thumbnailUrl ? (
-                      <img
-                        src={product.thumbnailUrl}
-                        alt={product.title}
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Package className="w-16 h-16 text-purple-400" />
-                      </div>
-                    )}
+          return (
+            <div key={categoryName} className="space-y-6">
+              {productChunks.map((sectionProducts, chunkIndex) => (
+                <div key={`${categoryName}-${chunkIndex}`} className="relative">
+                  <h3 className="text-lg font-semibold text-slate-300 mb-4 px-2">
+                    {chunkIndex === 0 ? categoryName : `${categoryName} (${chunkIndex + 1})`}
+                  </h3>
+                  
+                  <div className="relative">
+                    <button
+                      onClick={() => scrollCarousel(`${categoryName}-${chunkIndex}`, 'left')}
+                      className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-gradient-to-r from-purple-600/20 to-pink-600/20 backdrop-blur-sm border border-white/10 flex items-center justify-center hover:from-purple-600/40 hover:to-pink-600/40 transition-all duration-200"
+                    >
+                      <svg className="w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => scrollCarousel(`${categoryName}-${chunkIndex}`, 'right')}
+                      className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-gradient-to-r from-purple-600/20 to-pink-600/20 backdrop-blur-sm border border-white/10 flex items-center justify-center hover:from-purple-600/40 hover:to-pink-600/40 transition-all duration-200"
+                    >
+                      <svg className="w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
                     
-                    {/* Commission Badge - Top Right */}
-                    {affiliateStatus.isApproved && (
-                      <div className="absolute top-3 right-3">
-                        <span className="px-2 py-1 text-xs font-bold bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-full shadow-lg">
-                          {userRankInfo.commissionPercentage}% Commission
-                        </span>
-                      </div>
-                    )}
-                    
-                    {/* Category Badge - Top Left */}
-                    <div className="absolute top-3 left-3">
-                      <span className="px-2 py-1 text-xs font-semibold bg-slate-700/60 backdrop-blur-sm text-slate-300 rounded-full border border-slate-600/50">
-                        {product.category || 'Digital'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="relative p-3 sm:p-4 h-40 sm:h-48 flex flex-col" style={{ minHeight: '10rem' }}>
-                    {/* Star Rating */}
-                    <div className="flex items-center mb-2">
-                      {[...Array(5)].map((_, i) => (
-                        <svg
-                          key={i}
-                          className={`w-4 h-4 ${i < Math.round(getProductRating(product.id)) ? 'text-yellow-400' : 'text-slate-600'}`}
-                          fill="currentColor"
-                          viewBox="0 0 20 20"
+                    <div 
+                      id={`carousel-${categoryName}-${chunkIndex}`}
+                      className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 px-12"
+                      style={{
+                        scrollBehavior: 'smooth',
+                        scrollSnapType: 'x mandatory',
+                        WebkitOverflowScrolling: 'touch'
+                      }}
+                    >
+                      {sectionProducts.map((product, productIndex) => (
+                        <div
+                          key={product.id}
+                          className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-visible border border-slate-700/50 hover:border-purple-500/50 hover:-translate-y-1 hover:scale-105 flex-shrink-0 w-64 sm:w-72 h-80 sm:h-96"
+                          style={{ scrollSnapAlign: 'start' }}
                         >
-                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                        </svg>
-                      ))}
-                      <span className="text-xs text-slate-400 ml-1">({getProductRating(product.id).toFixed(1)})</span>
-                    </div>
+                          {/* Product Image */}
+                          <div className="relative h-40 sm:h-48 bg-gradient-to-br from-purple-500/20 to-pink-500/20 overflow-hidden">
+                            {product.thumbnailUrl ? (
+                              <img
+                                src={product.thumbnailUrl}
+                                alt={product.title}
+                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <Package className="w-16 h-16 text-purple-400" />
+                              </div>
+                            )}
+                            
+                            {/* Commission Badge - Top Right */}
+                            {affiliateStatus.isApproved && (
+                              <div className="absolute top-3 right-3">
+                                <span className="px-2 py-1 text-xs font-bold bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-full shadow-lg">
+                                  {userRankInfo.commissionPercentage}% Commission
+                                </span>
+                              </div>
+                            )}
+                            
+                            {/* Category Badge - Top Left */}
+                            <div className="absolute top-3 left-3">
+                              <span className="px-2 py-1 text-xs font-semibold bg-slate-700/60 backdrop-blur-sm text-slate-300 rounded-full border border-slate-600/50">
+                                {product.category || 'Digital'}
+                              </span>
+                            </div>
+                          </div>
 
-                    {/* Title */}
-                    <h3 className="text-lg font-bold text-slate-200 mb-2 leading-tight line-clamp-2" style={{ minHeight: '2.5rem', display: 'block', visibility: 'visible' }}>
-                      {product.title || 'Untitled Product'}
-                    </h3>
+                          <div className="relative p-3 sm:p-4 h-40 sm:h-48 flex flex-col" style={{ minHeight: '10rem' }}>
+                            {/* Star Rating */}
+                            <div className="flex items-center mb-2">
+                              {[...Array(5)].map((_, i) => (
+                                <svg
+                                  key={i}
+                                  className={`w-4 h-4 ${i < Math.round(getProductRating(product.id)) ? 'text-yellow-400' : 'text-slate-600'}`}
+                                  fill="currentColor"
+                                  viewBox="0 0 20 20"
+                                >
+                                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                </svg>
+                              ))}
+                              <span className="text-xs text-slate-400 ml-1">({getProductRating(product.id).toFixed(1)})</span>
+                            </div>
 
-                    {/* Description */}
-                    <p className="text-xs text-slate-400 mb-3 line-clamp-2 leading-relaxed flex-grow">
-                      {product.description}
-                    </p>
+                            {/* Title */}
+                            <h3 className="text-lg font-bold text-slate-200 mb-2 leading-tight line-clamp-2" style={{ minHeight: '2.5rem', display: 'block', visibility: 'visible' }}>
+                              {product.title || 'Untitled Product'}
+                            </h3>
 
-                    {/* Bottom Section - Price and Buttons */}
-                    <div className="mt-auto">
-                      {/* Price and View Product Button */}
-                      <div className="flex items-center justify-between mb-3">
-                        <div>
-                          <p className="text-xs text-slate-500 mb-1">Price</p>
-                          <p className="text-lg font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-                            ${product.priceUsd.toFixed(2)}
-                          </p>
+                            {/* Description */}
+                            <p className="text-xs text-slate-400 mb-3 line-clamp-2 leading-relaxed flex-grow">
+                              {product.description}
+                            </p>
+
+                            {/* Bottom Section - Price and Buttons */}
+                            <div className="mt-auto">
+                              {/* Price and View Product Button */}
+                              <div className="flex items-center justify-between mb-3">
+                                <div>
+                                  <p className="text-xs text-slate-500 mb-1">Price</p>
+                                  <p className="text-lg font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                                    ${product.priceUsd.toFixed(2)}
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={() => handleProductClick(product)}
+                                  className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95 text-sm"
+                                >
+                                  View Product
+                                </button>
+                              </div>
+
+                              {/* Share & Earn removed */}
+                            </div>
+                          </div>
+
+                          {/* Bottom Accent Line */}
+                          <div className="h-1 bg-gradient-to-r from-purple-500 to-pink-500"></div>
                         </div>
-                        <button
-                          onClick={() => handleProductClick(product)}
-                          className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95 text-sm"
-                        >
-                          View Product
-                        </button>
-                      </div>
-
-                      {/* Share & Earn removed */}
+                      ))}
                     </div>
                   </div>
-
-                  {/* Bottom Accent Line */}
-                  <div className="h-1 bg-gradient-to-r from-purple-500 to-pink-500"></div>
                 </div>
               ))}
             </div>
+          );
+        })}
+        
+        {/* View More Button */}
+        {!showAllDigitalProducts && categorizedProducts.length > mainSections.length && (
+          <div className="flex justify-center pt-6">
+            <button
+              onClick={() => setShowAllDigitalProducts(true)}
+              className="px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95 transform"
+            >
+              View More Categories ({categorizedProducts.length - mainSections.length} more)
+            </button>
           </div>
-        </div>
-      ));
-    }).flat();
+        )}
+      </div>
+    );
   };
 
   // Categorize products by content
@@ -1974,6 +2071,43 @@ export default function DashboardHome() {
             </div>
           </div>
 
+        {/* Start Mining CTA - after banner, before Earnings */}
+        <div className="px-0 sm:px-6 lg:px-8 mb-6 sm:mb-8">
+          {showMiningCTA !== false && (
+            <div
+              onClick={() => navigate('/mining')}
+              role="button"
+              aria-label="Start Mining"
+              tabIndex={0}
+              className="w-full text-left group relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-600/20 via-teal-600/20 to-cyan-600/20 border border-emerald-400/30 hover:border-emerald-400/50 backdrop-blur-sm px-5 py-4 text-white shadow-xl hover:shadow-emerald-500/20 transition-all duration-300 cursor-pointer"
+            >
+              {/* Dismiss */}
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowMiningCTA(false); }}
+                className="absolute top-2 right-2 px-2 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-slate-200 text-xs border border-white/15 transition-colors"
+              >
+                Dismiss
+              </button>
+
+              <div className="relative z-10 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-lg">
+                    <span className="text-xl">⛏️</span>
+                  </div>
+                  <div>
+                    <p className="text-base sm:text-lg font-semibold">Start Mining</p>
+                    <p className="text-xs sm:text-sm text-slate-300/90">Earn daily DLX rewards. Tap to open Mining.</p>
+                  </div>
+                </div>
+                <div className="flex items-center">
+                  <span className="text-slate-300 group-hover:translate-x-1 transition-transform duration-200">→</span>
+                </div>
+              </div>
+              <span className="pointer-events-none absolute inset-0 bg-gradient-to-r from-white/10 via-transparent to-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            </div>
+          )}
+        </div>
+
           {/* Stats Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8 px-4 sm:px-0">
             
@@ -2328,11 +2462,14 @@ export default function DashboardHome() {
             {filteredServices.length > 0 && (
               <div className="text-center mt-8">
                 <button
-                  onClick={() => setShowAllServices(!showAllServices)}
-                  className="group inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
+                  onClick={handleToggleShowAllServices}
+                  className="group inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed"
+                  disabled={viewAllLoading}
                 >
-                  <span>{showAllServices ? 'Show Less' : 'View All Services'}</span>
-                  <ArrowRight className={`w-5 h-5 group-hover:translate-x-1 transition-transform ${showAllServices ? 'rotate-180' : ''}`} />
+                  <span>{viewAllLoading ? 'Loading…' : (showAllServices ? 'Show Less' : 'View All Services')}</span>
+                  {!viewAllLoading && (
+                    <ArrowRight className={`w-5 h-5 group-hover:translate-x-1 transition-transform ${showAllServices ? 'rotate-180' : ''}`} />
+                  )}
                 </button>
               </div>
             )}
@@ -2484,18 +2621,7 @@ export default function DashboardHome() {
       />
 
 
-      {/* Congratulations Modal */}
-      <AffiliateCongratulationsModal
-        isOpen={affiliateCongratulationsModalOpen}
-        onClose={() => {
-          setAffiliateCongratulationsModalOpen(false);
-          // Clear the flag so it can be shown again if status changes
-          localStorage.removeItem('affiliate-congratulations-shown');
-          // Also clear the affiliate popup flag since user is now approved
-          localStorage.removeItem('affiliate-popup-shown');
-        }}
-        commissionRate={userRankInfo.commissionPercentage}
-      />
+      {/* Congratulations Modal removed */}
 
       {/* Product Checkout Modal */}
       <AnimatePresence>

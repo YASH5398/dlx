@@ -73,7 +73,22 @@ const ReviewSystem: React.FC<ReviewSystemProps> = ({ serviceId, serviceName, isO
 
         {/* Reviews List */}
         <div className="overflow-y-auto max-h-[60vh] p-6 space-y-6">
-          {loading && <div className="text-slate-400">Loading reviews…</div>}
+          {loading && (
+            <div className="space-y-4">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="bg-slate-800/50 rounded-2xl p-6 border border-slate-700/50 animate-pulse">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-full bg-white/10" />
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <div className="h-4 w-40 rounded bg-white/20" />
+                      <div className="h-3 w-64 rounded bg-white/10" />
+                      <div className="h-3 w-52 rounded bg-white/10" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           {!loading && reviews.length === 0 && (
             <div className="text-slate-400">No reviews yet. Be the first to review.</div>
           )}
@@ -81,14 +96,22 @@ const ReviewSystem: React.FC<ReviewSystemProps> = ({ serviceId, serviceName, isO
           {!loading && reviews.map((review) => (
             <div key={review.id} className="bg-slate-800/50 rounded-2xl p-6 border border-slate-700/50">
               <div className="flex items-start gap-4">
-                {/* Avatar */}
-                <div className="flex-shrink-0">
-                  <img src={review.avatar} alt={review.name} className="w-12 h-12 rounded-full object-cover" />
-                </div>
+                {/* Avatar (hide if no name), fallback to initial if no image) */}
+                {review.name ? (
+                  <div className="flex-shrink-0">
+                    {review.avatar ? (
+                      <img src={review.avatar} alt={review.name} className="w-12 h-12 rounded-full object-cover" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 border border-white/10 flex items-center justify-center text-white font-semibold">
+                        {review.name.slice(0,1).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                ) : null}
                 {/* Review Content */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-2">
-                    <h4 className="font-semibold text-white text-lg">{review.name}</h4>
+                    {review.name ? <h4 className="font-semibold text-white text-lg">{review.name}</h4> : null}
                     <div className="flex items-center">
                       {[...Array(5)].map((_, i) => (
                         <Star key={i} className={`w-4 h-4 ${i < Math.round(review.rating) ? 'text-yellow-400' : 'text-slate-600'} fill-current`} />

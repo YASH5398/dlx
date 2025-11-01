@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { collection, onSnapshot, query, where, addDoc, serverTimestamp, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, addDoc, serverTimestamp, getDocs, orderBy, limit } from 'firebase/firestore';
 import { firestore } from '../firebase';
 import { useUser } from '../context/UserContext';
 
@@ -8,7 +8,7 @@ export interface Review {
   name: string;
   text: string;
   rating: number;
-  avatar: string;
+  avatar?: string; // optional URL
   createdAt?: string;
   userId?: string;
 }
@@ -125,17 +125,21 @@ export const useReviews = (serviceId: string | null, serviceName: string) => {
     if (!serviceId) return;
     setLoading(true);
     setError(null);
-    const q = collection(firestore, 'services', serviceId, 'reviews');
+    const q = query(
+      collection(firestore, 'services', serviceId, 'reviews'),
+      orderBy('createdAtServer', 'desc'),
+      limit(24)
+    );
     const unsub = onSnapshot(q, (snap) => {
       const list: Review[] = [];
       snap.forEach((doc) => {
         const d: any = doc.data();
         list.push({
           id: doc.id,
-          name: d?.userName || 'Anonymous',
+          name: d?.userName || '',
           text: d?.review || '',
           rating: Number(d?.rating || 0),
-          avatar: REVIEW_AVATARS[(doc.id.length + (d?.userId?.length || 0)) % REVIEW_AVATARS.length],
+          avatar: typeof d?.avatarUrl === 'string' && d.avatarUrl ? d.avatarUrl : undefined,
           createdAt: d?.createdAt,
           userId: d?.userId,
         });

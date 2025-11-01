@@ -622,7 +622,7 @@ export default function Orders() {
             <h3 className="text-xl font-semibold text-gray-300 mb-2">No orders found</h3>
             <p className="text-gray-500 mb-6">Start exploring our services and digital products</p>
             <button
-              onClick={() => navigate('/dashboard/digital-products')}
+              onClick={() => navigate('/dashboard')}
               className="px-6 py-3 bg-gradient-to-r from-cyan-500 to-purple-500 rounded-lg hover:shadow-lg hover:shadow-cyan-500/20 transition-all"
             >
               Browse Services

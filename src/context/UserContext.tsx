@@ -483,12 +483,23 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   };
 
   const refreshMfaStatus = async (uid: string) => {
-    const mfaRef = doc(firestore, 'users', uid, 'security', 'mfa');
-    const snap = await getDoc(mfaRef);
-    const val = snap.data();
-    const enabled = !!val?.enabled;
-    setMfaRequired(enabled);
-    setMfaVerified(false);
+    try {
+      if (!uid || typeof uid !== 'string' || uid.trim().length === 0) {
+        setMfaRequired(false);
+        setMfaVerified(false);
+        return;
+      }
+      const mfaRef = doc(firestore, 'users', uid, 'security', 'mfa');
+      const snap = await getDoc(mfaRef);
+      const val = snap.data();
+      const enabled = !!val?.enabled;
+      setMfaRequired(enabled);
+      setMfaVerified(false);
+    } catch (e) {
+      console.warn('refreshMfaStatus failed; defaulting to disabled MFA', e);
+      setMfaRequired(false);
+      setMfaVerified(false);
+    }
   };
 
   const setupTOTP = async () => {

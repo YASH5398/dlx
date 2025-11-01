@@ -35,7 +35,6 @@ import AdminReviews from './pages/SecretAdmin/AdminReviews';
 
 // Public pages
 // Removed public pages: Exchanges, Pricing, Tutorials, Docs, Blogs, Apply
-import DigitalProducts from './pages/DigitalProducts';
 import AboutUs from './pages/AboutUs';
 import TermsOfService from './pages/TermsOfService';
 import PrivacyPolicy from './pages/PrivacyPolicy';
@@ -135,7 +134,6 @@ function App() {
         <Route path="/support" element={<Support />} />
         <Route path="/settings" element={<SettingsFull />} />
         <Route path="/dashboard/profile" element={<Profile />} />
-        <Route path="/dashboard/digital-products" element={<DigitalProducts />} />
         <Route path="/database-marketing" element={<DatabaseMarketing />} />
         <Route path="/database-marketing/categories" element={<DatabaseCategories />} />
         <Route path="/database-marketing/buy-database" element={<BuyDatabase />} />

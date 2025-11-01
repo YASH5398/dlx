@@ -18,7 +18,7 @@ export interface DepositRequest {
   userId: string;
   amount: number;
   method: string;
-  status: 'pending' | 'approved' | 'rejected' | 'completed';
+  status: 'pending' | 'pending_manual' | 'done' | 'rejected';
   currency: string;
   fees: number;
   txnId?: string;
@@ -69,6 +69,13 @@ export interface WalletData {
   walletUpdatedAt: any;
 }
 
+// Generate a fallback transaction id when upstream does not provide one
+function generateFallbackTxnId(prefix: string): string {
+  const timePart = Date.now().toString(36).toUpperCase();
+  const randPart = Math.random().toString(36).slice(2, 10).toUpperCase();
+  return `${prefix}-${timePart}-${randPart}`;
+}
+
 // Atomic deposit request creation
 export async function createDepositRequest(data: {
   userId: string;
@@ -78,6 +85,8 @@ export async function createDepositRequest(data: {
   fees?: number;
   txnId?: string;
   notes?: string;
+  address?: string; // For USDT deposits
+  network?: string; // e.g., TRC20, BEP20
 }): Promise<{ requestId: string; transactionId: string }> {
   const { userId, amount, method, currency, fees = 0, txnId, notes } = data;
   
@@ -88,6 +97,11 @@ export async function createDepositRequest(data: {
   const description = method.includes('upi') 
     ? 'Deposit via UPI' 
     : `Deposit via ${method.toUpperCase()}`;
+
+  // Ensure txnId is always present. For INR (UPI) deposits, generate a readable fallback.
+  const ensuredTxnId = txnId && txnId.trim().length > 0
+    ? txnId
+    : generateFallbackTxnId(method.includes('upi') ? 'INR' : 'DEP');
 
   let requestId: string;
   let transactionId: string;
@@ -103,10 +117,13 @@ export async function createDepositRequest(data: {
         status: 'pending',
         currency,
         fees,
-        txnId,
+        txnId: ensuredTxnId,
         notes,
         createdAt: serverTimestamp()
       };
+      // Attach address and network if provided
+      if ((data as any).address) (requestData as any).address = (data as any).address;
+      if ((data as any).network) (requestData as any).network = (data as any).network;
       
       tx.set(requestRef, requestData);
       requestId = requestRef.id;
@@ -219,8 +236,8 @@ export async function approveDeposit(requestId: string, adminId: string, adminEm
 
       const requestData = requestSnap.data() as DepositRequest;
       
-      // 2. Validate status
-      if (requestData.status !== 'pending') {
+      // 2. Validate status (allow admin approval for pending and pending_manual)
+      if (requestData.status !== 'pending' && requestData.status !== 'pending_manual') {
         throw new Error(`Request already processed. Current status: ${requestData.status}`);
       }
 
@@ -242,9 +259,9 @@ export async function approveDeposit(requestId: string, adminId: string, adminEm
         walletUpdatedAt: serverTimestamp()
       });
 
-      // 5. Update request status
+      // 5. Update request status to 'done'
       tx.update(requestRef, {
-        status: 'approved',
+        status: 'done',
         approvedAt: serverTimestamp(),
         reviewedBy: adminId,
         approvedBy: adminEmail
@@ -388,7 +405,7 @@ export async function rejectDeposit(requestId: string, adminId: string, adminEma
 
       const requestData = requestSnap.data() as DepositRequest;
       
-      if (requestData.status !== 'pending') {
+      if (requestData.status !== 'pending' && requestData.status !== 'pending_manual') {
         throw new Error(`Request already processed. Current status: ${requestData.status}`);
       }
 

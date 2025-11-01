@@ -57,9 +57,16 @@ export default function Wallet() {
   const dlxUsdValue = useMemo(() => (wallet?.dlx ?? 0) * dlxUsdRate, [wallet?.dlx]);
   const swapUsdtValue = useMemo(() => (parseFloat(swapAmount) || 0) * dlxUsdRate, [swapAmount]);
 
-  const depositAddress = {
-    bep20: '0x85fdfd1a83c4bc9a8c11f3b1308ead5d397d41d3',
-    trc20: 'TH1s69X1MqxJJme6BVPU3XFXhk8QwSXa7M'
+  // Static deposit addresses and QR images for USDT deposits
+  const depositData: Record<Blockchain, { address: string; qr: string }> = {
+    bep20: {
+      address: '0x467946955e9045597a204954b42ac0495faec690',
+      qr: 'https://i.ibb.co/9k1YvKpc/bep20.png'
+    },
+    trc20: {
+      address: 'TPy1NHzmHvwtEXq6qzVyLT5eqqEtUUztRp',
+      qr: 'https://i.ibb.co/qLm1G2Gj/trc20.png'
+    }
   };
 
   // Stream wallet from canonical Firestore wallets collection
@@ -209,6 +216,40 @@ export default function Wallet() {
         notes
       });
       
+      // Show modern SweetAlert2 success popup (persistent until user clicks OK)
+      try {
+        const Swal = (await import('sweetalert2')).default;
+        await Swal.fire({
+          title: 'Deposit Submitted Successfully ✅',
+          html: '<div style="font-size:14px;color:#cbd5e1">Your deposit is being processed. It usually takes 1–2 hours to reflect in your wallet.</div>',
+          icon: undefined,
+          showConfirmButton: true,
+          confirmButtonText: 'OK',
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          background: 'linear-gradient(135deg, rgba(16,185,129,0.12), rgba(45,212,191,0.12))',
+          color: '#e5e7eb',
+          backdrop: 'rgba(0,0,0,0.4)',
+          customClass: {
+            popup: 'rounded-2xl',
+            confirmButton: ''
+          },
+          didOpen: (popup) => {
+            try {
+              const container = popup?.parentElement as HTMLElement | null;
+              if (container) {
+                container.style.backdropFilter = 'blur(6px)';
+                (container.style as any).webkitBackdropFilter = 'blur(6px)';
+              }
+              popup.animate([
+                { transform: 'scale(0.98)', opacity: 0 },
+                { transform: 'scale(1)', opacity: 1 }
+              ], { duration: 200, easing: 'ease-out' });
+            } catch {}
+          }
+        });
+      } catch {}
+
       try { 
         await addNotification({ 
           type: 'transaction', 
@@ -450,6 +491,20 @@ export default function Wallet() {
               <span className="text-slate-400">Available Balance</span>
               <span className="text-white font-semibold">${purchaseUsdt.toFixed(2)}</span>
             </div>
+          </div>
+          {/* Support Footer */}
+          <div className="mt-6 text-center">
+            <p className="text-xs text-slate-400">
+              If you face any issue, please contact support on WhatsApp: {' '}
+              <a
+                href="https://wa.me/919155604591"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-400 hover:text-blue-300 underline"
+              >
+                +91 9155604591
+              </a>
+            </p>
           </div>
         </div>
 
@@ -856,12 +911,12 @@ export default function Wallet() {
                     <div className="relative">
                       <input
                         type="text"
-                        value={depositAddress[blockchain]}
+                        value={depositData[blockchain].address}
                         readOnly
                         className="w-full pr-12 px-4 py-3 rounded-xl bg-slate-800 border-2 border-slate-700 text-white text-sm font-mono focus:outline-none"
                       />
                       <button
-                        onClick={() => copyToClipboard(depositAddress[blockchain])}
+                        onClick={() => copyToClipboard(depositData[blockchain].address)}
                         className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg bg-slate-700 hover:bg-slate-600 transition-all"
                       >
                         {copySuccess ? (
@@ -874,6 +929,14 @@ export default function Wallet() {
                           </svg>
                         )}
                       </button>
+                    </div>
+                  </div>
+
+                  {/* QR Image for the selected network */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Scan QR</label>
+                    <div className="w-full flex items-center justify-center p-4 bg-slate-800 border-2 border-slate-700 rounded-xl">
+                      <img src={depositData[blockchain].qr} alt={`${blockchain.toUpperCase()} QR`} className="w-40 h-40 object-contain" />
                     </div>
                   </div>
 

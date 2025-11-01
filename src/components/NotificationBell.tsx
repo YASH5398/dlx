@@ -20,6 +20,11 @@ function timeAgo(ts: number): string {
   return `${y}y ago`;
 }
 
+function normalizeMessage(message: string): string {
+  // Convert escaped newlines ("\\n") coming from storage into real newlines so they render
+  return (message ?? '').replace(/\\n/g, '\n');
+}
+
 function TypeIcon({ type }: { type: string }) {
   const common = 'h-5 w-5';
   switch (type) {
@@ -132,30 +137,31 @@ export default function NotificationBell() {
 
       {open && (
         <div className="absolute right-0 mt-3 w-80 max-h-96 overflow-y-auto bg-[#0a0e1f] border border-white/20 rounded-xl shadow-2xl z-50 animate-fade-in">
-          <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+          <div className="flex items-center justify-between px-4 sm:px-3 py-2 border-b border-white/10">
             <div className="text-sm font-semibold text-white">Notifications</div>
             <div className="text-xs text-gray-400">{notifications.length} total</div>
           </div>
           <ul className="divide-y divide-white/10">
             {notifications.length === 0 ? (
-              <li className="px-3 py-3 text-sm text-gray-400">No notifications yet</li>
+              <li className="px-4 sm:px-3 py-3 text-sm text-gray-400">No notifications yet</li>
             ) : (
               notifications.map((n) => (
-                <li key={n.id}>
-                  <div
-                    onClick={() => handleClickItem(n.id, n.route)}
-                    role="button"
-                    tabIndex={0}
-                    className={`w-full flex items-start gap-3 px-3 py-3 text-left transition-all duration-300 ${
-                      n.read ? 'hover:bg-white/5' : 'bg-white/[0.03] hover:bg-white/10'
-                    } ${closingIds.has(n.id) ? 'opacity-0 translate-y-1' : ''}`}
-                  >
+                <li
+                  key={n.id}
+                  onClick={() => handleClickItem(n.id, n.route)}
+                  role="button"
+                  tabIndex={0}
+                  className={`w-full px-4 sm:px-3 py-3 text-left transition-all duration-300 ${
+                    n.read ? 'hover:bg-white/5' : 'bg-white/[0.03] hover:bg-white/10'
+                  } ${closingIds.has(n.id) ? 'opacity-0 translate-y-1 h-0 py-0 m-0 overflow-hidden' : ''}`}
+                >
+                  <div className="w-full flex items-start gap-3">
                     <div className={`flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 ${n.read ? 'bg-white/5' : 'bg-white/10 ring-1 ring-purple-500/50'}`}>
                       <TypeIcon type={n.type} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className={`text-sm leading-snug break-words ${n.read ? 'text-gray-200' : 'text-white font-semibold'}`}>{n.message}</div>
-                      <div className="text-xs text-gray-400 mt-1">{timeAgo(n.createdAt)}</div>
+                      <div className={`text-sm leading-snug break-words whitespace-pre-line ${n.read ? 'text-gray-200' : 'text-white font-semibold'} text-center sm:text-left`}>{normalizeMessage(n.message)}</div>
+                      <div className="text-xs text-gray-400 mt-1 text-center sm:text-left">{timeAgo(n.createdAt)}</div>
                     </div>
                     <button
                       onClick={(e) => {

@@ -409,7 +409,7 @@ export default function Tasks() {
                         className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
                         onClick={() => {
                           setShowInactiveModal(false);
-                          window.location.href = '/digital-products';
+                          window.location.href = '/dashboard';
                         }}
                       >
                         Go to Products

@@ -84,14 +84,6 @@ const MobileNavigation: React.FC<MobileNavigationProps> = ({ isAuthenticated, ap
       show: isAuthenticated && (canJoinAffiliate() || canReapply() || affiliateStatus.isApproved || affiliateStatus.isPending)
     },
     {
-      name: 'Products',
-      href: '/dashboard/digital-products',
-      icon: ChartBarIcon,
-      activeIcon: ChartBarIconSolid,
-      color: 'from-pink-500 to-rose-500',
-      show: isAuthenticated
-    },
-    {
       name: 'DLX',
       href: '/dlx-listing',
       icon: RocketLaunchIcon,

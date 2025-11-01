@@ -10,15 +10,8 @@ export interface ReferralIncomeData {
     inr: number;
     total: number;
   };
-  level2Income: {
-    dlx: number;
-    usdt: number;
-    inr: number;
-    total: number;
-  };
   joinBonus: {
     level1: number;
-    level2: number;
     total: number;
   };
   totalIncome: {
@@ -28,7 +21,6 @@ export interface ReferralIncomeData {
     total: number;
   };
   level1Referrals: number;
-  level2Referrals: number;
   lastUpdated: Date | null;
 }
 
@@ -36,11 +28,9 @@ export function useReferralIncome() {
   const { user } = useUser();
   const [incomeData, setIncomeData] = useState<ReferralIncomeData>({
     level1Income: { dlx: 0, usdt: 0, inr: 0, total: 0 },
-    level2Income: { dlx: 0, usdt: 0, inr: 0, total: 0 },
-    joinBonus: { level1: 0, level2: 0, total: 0 },
+    joinBonus: { level1: 0, total: 0 },
     totalIncome: { dlx: 0, usdt: 0, inr: 0, total: 0 },
     level1Referrals: 0,
-    level2Referrals: 0,
     lastUpdated: null
   });
   const [loading, setLoading] = useState(true);
@@ -67,14 +57,9 @@ export function useReferralIncome() {
             ...prev.level1Income,
             dlx: referralIncome.level1 || 0
           },
-          level2Income: {
-            ...prev.level2Income,
-            dlx: referralIncome.level2 || 0
-          },
           joinBonus: {
             level1: joinBonus.level1 || 0,
-            level2: joinBonus.level2 || 0,
-            total: joinBonus.total || 0
+            total: (joinBonus.total || joinBonus.level1 || 0)
           },
           lastUpdated: referralIncome.lastUpdated?.toDate?.() || null
         }));
@@ -95,23 +80,23 @@ export function useReferralIncome() {
             ...prev.level1Income,
             usdt: usdt.referrallevel1 || 0,
             inr: inr.referrallevel1 || 0
-          },
-          level2Income: {
-            ...prev.level2Income,
-            usdt: usdt.referrallevel2 || 0,
-            inr: inr.referrallevel2 || 0
           }
         }));
       }
     });
 
-    // Get referral counts
+    // Get referral counts (Level 1 only)
     const getReferralCounts = async () => {
       try {
+        // Resolve user's referralCode for accurate Level-1 queries
+        const meSnap = await getDocs(query(collection(firestore, 'users'), where('__name__', '==', userId)));
+        const meData: any = meSnap.empty ? {} : (meSnap.docs[0].data() as any);
+        const myReferralCode = meData?.referralCode || userId;
+
         // Level 1 referrals (direct referrals) - query both referrerCode and referredBy
         const referrerCodeQuery = query(
           collection(firestore, 'users'),
-          where('referrerCode', '==', userId)
+          where('referrerCode', '==', myReferralCode)
         );
         const referredByQuery = query(
           collection(firestore, 'users'),
@@ -129,46 +114,17 @@ export function useReferralIncome() {
         referredBySnapshot.docs.forEach(doc => level1UserIds.add(doc.id));
         
         const level1Count = level1UserIds.size;
-        
-        // Level 2 referrals (referrals of referrals)
-        const level2UserIds: string[] = Array.from(level1UserIds);
-        
-        let level2Count = 0;
-        if (level2UserIds.length > 0) {
-          // Query for level 2 referrals using both field names
-          const level2ReferrerCodeQuery = query(
-            collection(firestore, 'users'),
-            where('referrerCode', 'in', level2UserIds)
-          );
-          const level2ReferredByQuery = query(
-            collection(firestore, 'users'),
-            where('referredBy', 'in', level2UserIds)
-          );
-          
-          const [level2ReferrerCodeSnapshot, level2ReferredBySnapshot] = await Promise.all([
-            getDocs(level2ReferrerCodeQuery),
-            getDocs(level2ReferredByQuery)
-          ]);
-          
-          // Combine and deduplicate level 2 referrals
-          const level2UserIdsSet = new Set<string>();
-          level2ReferrerCodeSnapshot.docs.forEach(doc => level2UserIdsSet.add(doc.id));
-          level2ReferredBySnapshot.docs.forEach(doc => level2UserIdsSet.add(doc.id));
-          
-          level2Count = level2UserIdsSet.size;
-        }
-        
+
         console.log(`useReferralIncome: Referral counts for user ${userId}`, {
           level1ReferrerCode: referrerCodeSnapshot.size,
           level1ReferredBy: referredBySnapshot.size,
-          level1Total: level1Count,
-          level2Total: level2Count
+          level1Total: level1Count
         });
-        
+
         setIncomeData(prev => ({
           ...prev,
           level1Referrals: level1Count,
-          level2Referrals: level2Count
+          
         }));
       } catch (error) {
         console.error('Error getting referral counts:', error);
@@ -188,9 +144,8 @@ export function useReferralIncome() {
   useEffect(() => {
     setIncomeData(prev => {
       const level1Total = prev.level1Income.dlx + prev.level1Income.usdt + prev.level1Income.inr;
-      const level2Total = prev.level2Income.dlx + prev.level2Income.usdt + prev.level2Income.inr;
-      const joinBonusTotal = prev.joinBonus.level1 + prev.joinBonus.level2;
-      const totalIncome = level1Total + level2Total + joinBonusTotal;
+      const joinBonusTotal = prev.joinBonus.level1;
+      const totalIncome = level1Total + joinBonusTotal;
       
       return {
         ...prev,
@@ -198,25 +153,20 @@ export function useReferralIncome() {
           ...prev.level1Income,
           total: level1Total
         },
-        level2Income: {
-          ...prev.level2Income,
-          total: level2Total
-        },
         joinBonus: {
           ...prev.joinBonus,
           total: joinBonusTotal
         },
         totalIncome: {
-          dlx: prev.level1Income.dlx + prev.level2Income.dlx + prev.joinBonus.total,
-          usdt: prev.level1Income.usdt + prev.level2Income.usdt,
-          inr: prev.level1Income.inr + prev.level2Income.inr,
+          dlx: prev.level1Income.dlx + prev.joinBonus.total,
+          usdt: prev.level1Income.usdt,
+          inr: prev.level1Income.inr,
           total: totalIncome
         }
       };
     });
-  }, [incomeData.level1Income.dlx, incomeData.level1Income.usdt, incomeData.level1Income.inr, 
-      incomeData.level2Income.dlx, incomeData.level2Income.usdt, incomeData.level2Income.inr,
-      incomeData.joinBonus.level1, incomeData.joinBonus.level2]);
+  }, [incomeData.level1Income.dlx, incomeData.level1Income.usdt, incomeData.level1Income.inr,
+      incomeData.joinBonus.level1]);
 
   const formatCurrency = (amount: number, currency: 'DLX' | 'USDT' | 'INR') => {
     const symbol = currency === 'DLX' ? 'DLX' : currency === 'USDT' ? '$' : '₹';
@@ -231,30 +181,24 @@ export function useReferralIncome() {
     return incomeData.level1Income[currency.toLowerCase() as keyof typeof incomeData.level1Income];
   };
 
-  const getLevel2Earnings = (currency: 'DLX' | 'USDT' | 'INR' = 'DLX') => {
-    return incomeData.level2Income[currency.toLowerCase() as keyof typeof incomeData.level2Income];
-  };
-
-  const getJoinBonus = (level: 'level1' | 'level2' | 'total' = 'total') => {
+  const getJoinBonus = (level: 'level1' | 'total' = 'total') => {
     return incomeData.joinBonus[level];
   };
 
   const getActiveReferralsCount = () => {
     return {
       level1: incomeData.level1Referrals,
-      level2: incomeData.level2Referrals,
-      total: incomeData.level1Referrals + incomeData.level2Referrals
+      total: incomeData.level1Referrals
     };
   };
 
-  return {
-    incomeData,
-    loading,
-    formatCurrency,
-    getTotalEarnings,
-    getLevel1Earnings,
-    getLevel2Earnings,
-    getJoinBonus,
-    getActiveReferralsCount
-  };
+    return {
+      incomeData,
+      loading,
+      formatCurrency,
+      getTotalEarnings,
+      getLevel1Earnings,
+      getJoinBonus,
+      getActiveReferralsCount
+    };
 }
