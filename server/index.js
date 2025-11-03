@@ -500,10 +500,12 @@ import adminRouter from './routes/admin.js';
 import transactionsRouter from './routes/transactions.js';
 import depositCheckRouter from './routes/depositCheck.js';
 import manualDepositsRouter from './routes/manualDeposits.js';
+import swapReconciliationRouter from './routes/swapReconciliation.js';
 app.use('/api/admin', adminRouter);
 app.use('/api/transactions', transactionsRouter);
 app.use('/api/deposit-check', depositCheckRouter);
 app.use('/api/manual-deposits', manualDepositsRouter);
+app.use('/api/swaps', swapReconciliationRouter);
 
 const PORT = process.env.PORT || 4000;
 console.log(`Attempting to start server on port ${PORT}...`);

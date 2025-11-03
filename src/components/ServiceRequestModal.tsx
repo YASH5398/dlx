@@ -152,13 +152,37 @@ export default function ServiceRequestModal({ open, onClose, serviceName }: Prop
     if (!validateCurrentStep() || !user) return;
     try {
       setSubmitting(true);
+      // Flatten answers object - merge __other fields into their parent fields
+      const flattenedAnswers: Record<string, any> = {};
+      Object.keys(answers).forEach(key => {
+        if (key.endsWith('__other')) {
+          // Handle "Other" option - merge into parent field
+          const parentKey = key.replace('__other', '');
+          if (answers[parentKey] === 'Other' && answers[key]) {
+            // Replace "Other" with the custom value
+            flattenedAnswers[parentKey] = answers[key];
+          }
+          // Skip the __other key itself (already merged)
+        } else {
+          // Regular field - use as is (unless parent is "Other" and we have __other)
+          const otherKey = `${key}__other`;
+          if (answers[key] === 'Other' && answers[otherKey]) {
+            // Use the custom value instead of "Other"
+            flattenedAnswers[key] = answers[otherKey];
+          } else {
+            flattenedAnswers[key] = answers[key];
+          }
+        }
+      });
+      
       const id = await createUserServiceRequest({
         userId: user.id,
         userName: user.name,
         userEmail: user.email,
         serviceId: serviceName,
         serviceTitle: serviceName,
-        requestDetails: JSON.stringify({ steps: uiSteps, answers }),
+        // Store flat answers object directly (each field becomes a top-level key)
+        requestDetails: flattenedAnswers,
         userWebsiteLink: '',
         userPassword: '',
         expectedCompletion: '',

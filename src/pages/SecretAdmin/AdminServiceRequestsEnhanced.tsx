@@ -389,6 +389,106 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
     toast.success('Copied to clipboard!');
   };
 
+  // Parse and format form details from requestDetails
+  const parseFormDetails = (request: ServiceRequest) => {
+    try {
+      let formData: any = null;
+      const requestData = request as any;
+      
+      // Try to get requestDetails (could be string or object)
+      if (requestData.requestDetails) {
+        const details = requestData.requestDetails;
+        if (typeof details === 'string') {
+          try {
+            formData = JSON.parse(details);
+          } catch {
+            // If it's not valid JSON, treat as plain text
+            return null;
+          }
+        } else if (typeof details === 'object' && details !== null) {
+          formData = details;
+        }
+      }
+      
+      // If serviceDescription exists and looks like JSON, try parsing it
+      if (!formData && requestData.serviceDescription) {
+        const desc = requestData.serviceDescription;
+        if (typeof desc === 'string' && desc.trim().startsWith('{')) {
+          try {
+            formData = JSON.parse(desc);
+          } catch {
+            return null;
+          }
+        }
+      }
+
+      if (!formData || typeof formData !== 'object') return null;
+
+      // Check if it's the new flat format (direct answers object)
+      // vs old nested format ({ answers: {...}, steps: [...] })
+      let answers: Record<string, any> = {};
+      let steps: any[] = [];
+      
+      if (formData.answers && typeof formData.answers === 'object') {
+        // Old nested format: { answers: {...}, steps: [...] }
+        answers = formData.answers || {};
+        steps = formData.steps || [];
+      } else {
+        // New flat format: { emailPlatform: "Mailchimp", campaignType: "Newsletter", ... }
+        // The entire formData IS the answers object
+        answers = formData;
+        steps = []; // No steps info available in flat format
+      }
+      
+      // Build field label mapping from steps (if available)
+      const fieldLabels: Record<string, string> = {};
+      if (Array.isArray(steps) && steps.length > 0) {
+        steps.forEach((step: any) => {
+          if (step && step.fields && Array.isArray(step.fields)) {
+            step.fields.forEach((field: any) => {
+              if (field && field.name) {
+                fieldLabels[field.name] = field.label || field.name;
+              }
+            });
+          }
+        });
+      }
+
+      // Format field names for display
+      const formatFieldName = (key: string): string => {
+        if (fieldLabels[key]) return fieldLabels[key];
+        // Convert camelCase or snake_case to readable format
+        return key
+          .replace(/([A-Z])/g, ' $1')
+          .replace(/^./, str => str.toUpperCase())
+          .replace(/([a-z])([A-Z])/g, '$1 $2')
+          .replace(/_/g, ' ')
+          .trim();
+      };
+
+      // Create formatted fields array, filtering out empty values
+      const formattedFields: Array<{ label: string; value: any; key: string }> = [];
+      
+      Object.keys(answers).forEach(key => {
+        const value = answers[key];
+        // Skip null, undefined, empty string, empty array, or nested objects/arrays that are empty
+        if (value !== null && 
+            value !== undefined && 
+            value !== '' && 
+            !(Array.isArray(value) && value.length === 0) &&
+            !(typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0)) {
+          const label = formatFieldName(key);
+          formattedFields.push({ label, value, key });
+        }
+      });
+
+      return formattedFields.length > 0 ? formattedFields : null;
+    } catch (error) {
+      console.error('Error parsing form details:', error);
+      return null;
+    }
+  };
+
   const filteredRequests = requests.filter(request => {
     const matchesStatus = statusFilter === 'all' || request.status === statusFilter;
     const matchesSearch = searchTerm === '' || 
@@ -910,69 +1010,154 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
                           </CardContent>
                         </Card>
 
-                        {/* Request Details */}
-                        <Card className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 rounded-xl">
-                          <CardHeader className="pb-4">
-                            <CardTitle className="text-gray-900 text-lg flex items-center gap-3">
-                              <div className="w-8 h-8 bg-gradient-to-r from-green-600 to-emerald-600 rounded-lg flex items-center justify-center">
-                                <FileText className="w-5 h-5 text-white" />
-                              </div>
-                              Request Details
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="space-y-4">
-                            {selectedRequest.requestDetails && (
-                              <div className="bg-white rounded-lg border border-gray-200 p-4">
-                                <button
-                                  className="w-full flex justify-between items-center text-left font-medium text-gray-900 mb-3"
-                                  onClick={() => setExpandedSection(expandedSection === 'details' ? null : 'details')}
-                                  aria-expanded={expandedSection === 'details'}
-                                >
-                                  <span className="flex items-center gap-2">
-                                    <FileText className="w-4 h-4 text-green-600" />
-                                    Request Description
-                                  </span>
-                                  {expandedSection === 'details' ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                                </button>
-                                <AnimatePresence>
-                                  {expandedSection === 'details' && (
-                                    <motion.div
-                                      initial={{ height: 0, opacity: 0 }}
-                                      animate={{ height: 'auto', opacity: 1 }}
-                                      exit={{ height: 0, opacity: 0 }}
-                                      transition={{ duration: 0.3 }}
-                                      className="text-sm text-gray-600"
-                                    >
-                                      <div className="bg-gray-50 rounded-lg p-3 mb-3">
-                                        <p className="whitespace-pre-wrap">{selectedRequest.requestDetails}</p>
-                                      </div>
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => copyToClipboard(selectedRequest.requestDetails)}
-                                        className="gap-2"
-                                      >
-                                        <Copy className="w-4 h-4" />
-                                        Copy Description
-                                      </Button>
-                                    </motion.div>
-                                  )}
-                                </AnimatePresence>
-                              </div>
-                            )}
+                        {/* Form Submission Details */}
+                        {(() => {
+                          const formFields = parseFormDetails(selectedRequest);
+                          return formFields && formFields.length > 0 ? (
+                            <Card className="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-blue-500/10 dark:via-indigo-500/10 dark:to-purple-500/10 border-blue-200 dark:border-blue-500/20 rounded-xl shadow-lg">
+                              <CardHeader className="pb-4">
+                                <CardTitle className="text-gray-900 dark:text-white text-lg sm:text-xl flex items-center gap-3">
+                                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+                                    <FileText className="w-5 h-5 text-white" />
+                                  </div>
+                                  <span>Form Submission Details</span>
+                                </CardTitle>
+                                <CardDescription className="text-gray-600 dark:text-gray-400 mt-1">
+                                  All information submitted by the user
+                                </CardDescription>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="space-y-4">
+                                  {/* Form Fields Table */}
+                                  <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
+                                    <div className="overflow-x-auto">
+                                      <table className="w-full">
+                                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                                          {formFields.map((field, idx) => (
+                                            <motion.tr
+                                              key={field.key}
+                                              initial={{ opacity: 0, x: -10 }}
+                                              animate={{ opacity: 1, x: 0 }}
+                                              transition={{ delay: idx * 0.05 }}
+                                              className="hover:bg-blue-50/50 dark:hover:bg-blue-500/5 transition-colors"
+                                            >
+                                              <td className="px-4 sm:px-6 py-3 sm:py-4 text-sm font-semibold text-gray-700 dark:text-gray-300 bg-gray-50/50 dark:bg-gray-900/50 w-1/3 sm:w-1/4 whitespace-nowrap">
+                                                {field.label}
+                                              </td>
+                                              <td className="px-4 sm:px-6 py-3 sm:py-4 text-sm text-gray-900 dark:text-white break-words">
+                                                {typeof field.value === 'object' ? (
+                                                  <pre className="whitespace-pre-wrap text-xs bg-gray-100 dark:bg-gray-900 p-2 rounded">
+                                                    {JSON.stringify(field.value, null, 2)}
+                                                  </pre>
+                                                ) : (
+                                                  <span className="whitespace-pre-wrap">{String(field.value)}</span>
+                                                )}
+                                              </td>
+                                              <td className="px-2 sm:px-4 py-3 sm:py-4 w-12">
+                                                <Button
+                                                  variant="ghost"
+                                                  size="sm"
+                                                  onClick={() => copyToClipboard(String(field.value))}
+                                                  className="p-1.5 h-8 w-8 hover:bg-blue-100 dark:hover:bg-blue-500/20"
+                                                >
+                                                  <Copy className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />
+                                                </Button>
+                                              </td>
+                                            </motion.tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
 
-                            {selectedRequest.serviceCategory && (
-                              <div className="bg-white rounded-lg border border-gray-200 p-4">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <Tag className="w-4 h-4 text-green-600" />
-                                  <span className="font-medium text-gray-900">Category</span>
+                                  {/* Grouped by Step (Optional Enhanced View) */}
+                                  {(() => {
+                                    const requestData = selectedRequest as any;
+                                    const formData = requestData.requestDetails 
+                                      ? (typeof requestData.requestDetails === 'string' 
+                                          ? JSON.parse(requestData.requestDetails) 
+                                          : requestData.requestDetails)
+                                      : null;
+                                    const steps = formData?.steps || [];
+                                    
+                                    if (steps.length > 0 && formData?.answers) {
+                                      return (
+                                        <div className="space-y-4">
+                                          {steps.map((step: any, stepIdx: number) => {
+                                            if (!step || !step.fields || step.fields.length === 0) return null;
+                                            
+                                            const stepAnswers = step.fields
+                                              .map((field: any) => ({
+                                                field,
+                                                value: formData.answers[field.name]
+                                              }))
+                                              .filter((item: any) => 
+                                                item.value !== null && 
+                                                item.value !== undefined && 
+                                                item.value !== ''
+                                              );
+                                            
+                                            if (stepAnswers.length === 0) return null;
+                                            
+                                            return (
+                                              <motion.div
+                                                key={stepIdx}
+                                                initial={{ opacity: 0, y: 10 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                transition={{ delay: stepIdx * 0.1 }}
+                                                className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-xl border border-blue-200/50 dark:border-blue-500/20 p-4 sm:p-6"
+                                              >
+                                                <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                                                  <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center text-white text-xs font-bold">
+                                                    {stepIdx + 1}
+                                                  </div>
+                                                  {step.title || `Step ${stepIdx + 1}`}
+                                                </h4>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                                                  {stepAnswers.map((item: any, fieldIdx: number) => (
+                                                    <div
+                                                      key={fieldIdx}
+                                                      className="bg-gray-50/80 dark:bg-gray-900/50 rounded-lg p-3 border border-gray-200 dark:border-gray-700"
+                                                    >
+                                                      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">
+                                                        {item.field.label || item.field.name}
+                                                      </p>
+                                                      <p className="text-sm text-gray-900 dark:text-white font-medium break-words">
+                                                        {typeof item.value === 'object' 
+                                                          ? JSON.stringify(item.value, null, 2)
+                                                          : String(item.value)}
+                                                      </p>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              </motion.div>
+                                            );
+                                          })}
+                                        </div>
+                                      );
+                                    }
+                                    return null;
+                                  })()}
                                 </div>
-                                <p className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3">{selectedRequest.serviceCategory}</p>
-                              </div>
-                            )}
+                              </CardContent>
+                            </Card>
+                          ) : null;
+                        })()}
 
-                            {selectedRequest.adminProposal && (
-                              <div className="bg-white rounded-lg border border-gray-200 p-4">
+                        {selectedRequest.serviceCategory && (
+                          <Card className="bg-white border-gray-200 rounded-xl">
+                            <CardContent className="p-4">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Tag className="w-4 h-4 text-green-600" />
+                                <span className="font-medium text-gray-900">Category</span>
+                              </div>
+                              <p className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3">{selectedRequest.serviceCategory}</p>
+                            </CardContent>
+                          </Card>
+                        )}
+
+                        {selectedRequest.adminProposal && (
+                          <div className="bg-white rounded-lg border border-gray-200 p-4">
                                 <button
                                   className="w-full flex justify-between items-center text-left font-medium text-gray-900 mb-3"
                                   onClick={() => setExpandedSection(expandedSection === 'proposal' ? null : 'proposal')}
@@ -1035,106 +1220,104 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
                               </div>
                             )}
 
-                            {selectedRequest.payment && (
-                              <div className="bg-white rounded-lg border border-gray-200 p-4">
-                                <button
-                                  className="w-full flex justify-between items-center text-left font-medium text-gray-900 mb-3"
-                                  onClick={() => setExpandedSection(expandedSection === 'payment' ? null : 'payment')}
-                                  aria-expanded={expandedSection === 'payment'}
+                        {selectedRequest.payment && (
+                          <div className="bg-white rounded-lg border border-gray-200 p-4">
+                            <button
+                              className="w-full flex justify-between items-center text-left font-medium text-gray-900 mb-3"
+                              onClick={() => setExpandedSection(expandedSection === 'payment' ? null : 'payment')}
+                              aria-expanded={expandedSection === 'payment'}
+                            >
+                              <span className="flex items-center gap-2">
+                                <CreditCard className="w-4 h-4 text-green-600" />
+                                Payment Information
+                              </span>
+                              {expandedSection === 'payment' ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                            </button>
+                            <AnimatePresence>
+                              {expandedSection === 'payment' && (
+                                <motion.div
+                                  initial={{ height: 0, opacity: 0 }}
+                                  animate={{ height: 'auto', opacity: 1 }}
+                                  exit={{ height: 0, opacity: 0 }}
+                                  transition={{ duration: 0.3 }}
+                                  className="text-sm text-gray-600 space-y-3"
                                 >
-                                  <span className="flex items-center gap-2">
-                                    <CreditCard className="w-4 h-4 text-green-600" />
-                                    Payment Information
-                                  </span>
-                                  {expandedSection === 'payment' ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                                </button>
-                                <AnimatePresence>
-                                  {expandedSection === 'payment' && (
-                                    <motion.div
-                                      initial={{ height: 0, opacity: 0 }}
-                                      animate={{ height: 'auto', opacity: 1 }}
-                                      exit={{ height: 0, opacity: 0 }}
-                                      transition={{ duration: 0.3 }}
-                                      className="text-sm text-gray-600 space-y-3"
-                                    >
-                                      <div className="bg-gray-50 rounded-lg p-3">
-                                        <div className="grid grid-cols-2 gap-4">
-                                          <div>
-                                            <span className="text-gray-500">Method:</span>
-                                            <p className="font-medium">{selectedRequest.payment.method}</p>
-                                          </div>
-                                          <div>
-                                            <span className="text-gray-500">Amount:</span>
-                                            <p className="font-medium">{selectedRequest.payment.currency} {selectedRequest.payment.amount}</p>
-                                          </div>
-                                        </div>
-                                        <div className="mt-3">
-                                          <span className="text-gray-500">Status:</span>
-                                          <Badge className={`ml-2 ${getStatusColor(selectedRequest.payment.status)}`}>
-                                            {selectedRequest.payment.status}
-                                          </Badge>
-                                        </div>
+                                  <div className="bg-gray-50 rounded-lg p-3">
+                                    <div className="grid grid-cols-2 gap-4">
+                                      <div>
+                                        <span className="text-gray-500">Method:</span>
+                                        <p className="font-medium">{selectedRequest.payment.method}</p>
                                       </div>
-                                      {selectedRequest.payment?.upiDetails && (
-                                        <div className="bg-gray-50 rounded-lg p-3">
-                                          <h4 className="font-medium text-gray-700 mb-2">UPI Details:</h4>
-                                          <div className="space-y-2">
-                                            <div className="flex items-center justify-between">
-                                              <span className="text-gray-500">UPI ID:</span>
-                                              <div className="flex items-center gap-2">
-                                                <span className="font-medium">{selectedRequest.payment.upiDetails.upiId}</span>
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => copyToClipboard(selectedRequest.payment?.upiDetails?.upiId || '')}
-                                            className="p-1 h-6 w-6"
-                                          >
-                                            <Copy className="w-3 h-3" />
-                                          </Button>
-                                              </div>
-                                            </div>
-                                            {selectedRequest.payment?.upiDetails?.transactionId && (
-                                              <div className="flex items-center justify-between">
-                                                <span className="text-gray-500">Transaction ID:</span>
-                                                <div className="flex items-center gap-2">
-                                                  <span className="font-medium">{selectedRequest.payment.upiDetails.transactionId}</span>
-                                                <Button
-                                                  variant="ghost"
-                                                  size="sm"
-                                                  onClick={() => copyToClipboard(selectedRequest.payment?.upiDetails?.transactionId || '')}
-                                                  className="p-1 h-6 w-6"
-                                                >
-                                                  <Copy className="w-3 h-3" />
-                                                </Button>
-                                                </div>
-                                              </div>
-                                            )}
-                                            {selectedRequest.payment?.upiDetails?.utr && (
-                                              <div className="flex items-center justify-between">
-                                                <span className="text-gray-500">UTR:</span>
-                                                <div className="flex items-center gap-2">
-                                                  <span className="font-medium">{selectedRequest.payment.upiDetails.utr}</span>
-                                                  <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => copyToClipboard(selectedRequest.payment?.upiDetails?.utr || '')}
-                                                    className="p-1 h-6 w-6"
-                                                  >
-                                                    <Copy className="w-3 h-3" />
-                                                  </Button>
-                                                </div>
-                                              </div>
-                                            )}
+                                      <div>
+                                        <span className="text-gray-500">Amount:</span>
+                                        <p className="font-medium">{selectedRequest.payment.currency} {selectedRequest.payment.amount}</p>
+                                      </div>
+                                    </div>
+                                    <div className="mt-3">
+                                      <span className="text-gray-500">Status:</span>
+                                      <Badge className={`ml-2 ${getStatusColor(selectedRequest.payment.status)}`}>
+                                        {selectedRequest.payment.status}
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                  {selectedRequest.payment?.upiDetails && (
+                                    <div className="bg-gray-50 rounded-lg p-3">
+                                      <h4 className="font-medium text-gray-700 mb-2">UPI Details:</h4>
+                                      <div className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-gray-500">UPI ID:</span>
+                                          <div className="flex items-center gap-2">
+                                            <span className="font-medium">{selectedRequest.payment.upiDetails.upiId}</span>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => copyToClipboard(selectedRequest.payment?.upiDetails?.upiId || '')}
+                                              className="p-1 h-6 w-6"
+                                            >
+                                              <Copy className="w-3 h-3" />
+                                            </Button>
                                           </div>
                                         </div>
-                                      )}
-                                    </motion.div>
+                                        {selectedRequest.payment?.upiDetails?.transactionId && (
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-gray-500">Transaction ID:</span>
+                                            <div className="flex items-center gap-2">
+                                              <span className="font-medium">{selectedRequest.payment.upiDetails.transactionId}</span>
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => copyToClipboard(selectedRequest.payment?.upiDetails?.transactionId || '')}
+                                                className="p-1 h-6 w-6"
+                                              >
+                                                <Copy className="w-3 h-3" />
+                                              </Button>
+                                            </div>
+                                          </div>
+                                        )}
+                                        {selectedRequest.payment?.upiDetails?.utr && (
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-gray-500">UTR:</span>
+                                            <div className="flex items-center gap-2">
+                                              <span className="font-medium">{selectedRequest.payment.upiDetails.utr}</span>
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => copyToClipboard(selectedRequest.payment?.upiDetails?.utr || '')}
+                                                className="p-1 h-6 w-6"
+                                              >
+                                                <Copy className="w-3 h-3" />
+                                              </Button>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
                                   )}
-                                </AnimatePresence>
-                              </div>
-                            )}
-                          </CardContent>
-                        </Card>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+                        )}
                       </motion.div>
                     )}
 
@@ -1807,7 +1990,7 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
                 Back
               </button>
               <div>
-                <div className="font-semibold">{selectedRequest.userName}</div>
+                <div className="font-semibold">{selectedRequest?.userName || 'User'}</div>
                 <div className="text-xs text-white/80">Online</div>
               </div>
             </div>
@@ -1853,4 +2036,4 @@ export default function AdminServiceRequestsEnhanced({}: AdminServiceRequestsEnh
       )}
     </div>
   );
-}
+} 

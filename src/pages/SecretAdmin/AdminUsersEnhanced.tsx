@@ -679,8 +679,8 @@ export default function AdminUsersEnhanced() {
         {/* User Details Modal */}
         <Dialog open={!!viewUid} onClose={() => setViewUid(null)} className="relative z-50">
           <div className="fixed inset-0 bg-black/40" aria-hidden="true" />
-          <div className="fixed inset-0 flex items-center justify-center p-4">
-            <Dialog.Panel className="mx-auto max-w-2xl rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 backdrop-blur-xl p-6">
+          <div className="fixed inset-0 flex items-center justify-center p-3 sm:p-4">
+            <Dialog.Panel className="mx-auto w-full max-w-[95vw] sm:max-w-2xl rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 backdrop-blur-xl p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
               {viewUid && (
                 <>
                   <Dialog.Title className="text-xl font-semibold text-slate-900 dark:text-white mb-4">User Profile</Dialog.Title>
@@ -742,11 +742,11 @@ export default function AdminUsersEnhanced() {
         {/* Edit User Modal */}
         <Dialog open={isEditing} onClose={cancelEdit} className="relative z-50">
           <div className="fixed inset-0 bg-black/40" aria-hidden="true" />
-          <div className="fixed inset-0 flex items-center justify-center p-4">
-            <Dialog.Panel className="mx-auto max-w-2xl rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 backdrop-blur-xl p-6">
+          <div className="fixed inset-0 flex items-center justify-center p-3 sm:p-4">
+            <Dialog.Panel className="mx-auto w-full max-w-[95vw] sm:max-w-2xl rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 backdrop-blur-xl p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
               <Dialog.Title className="text-xl font-semibold text-slate-900 dark:text-white mb-4">Edit User</Dialog.Title>
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 block">Name</label>
                     <Input

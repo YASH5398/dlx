@@ -186,7 +186,8 @@ export async function restoreDefaultServiceForms(defaults: Record<string, StepDe
 export async function getServiceFormConfig(serviceName: string): Promise<StepDef[] | null> {
   try {
     const { firestore } = await import('../firebase');
-    const { doc, getDoc } = await import('firebase/firestore');
+    const { doc, getDoc, collection, query, where, getDocs } = await import('firebase/firestore');
+    // First try by serviceName as document ID (backwards compatibility)
     const docRef = doc(firestore, 'serviceForms', serviceName);
     const docSnap = await getDoc(docRef);
     
@@ -194,6 +195,18 @@ export async function getServiceFormConfig(serviceName: string): Promise<StepDef
       const data = docSnap.data();
       return data.steps || null;
     }
+    
+    // If not found, try to find by serviceTitle
+    const formsRef = collection(firestore, 'serviceForms');
+    const q = query(formsRef, where('serviceTitle', '==', serviceName));
+    const querySnapshot = await getDocs(q);
+    
+    if (!querySnapshot.empty) {
+      const firstDoc = querySnapshot.docs[0];
+      const data = firstDoc.data();
+      return data.steps || null;
+    }
+    
     return null;
   } catch (error) {
     console.warn('Failed to fetch service form config from Firestore:', error);
@@ -215,11 +228,13 @@ export async function setServiceFormConfig(serviceName: string, steps: StepDef[]
 
 export function subscribeServiceFormConfig(serviceName: string, cb: (steps: StepDef[] | null) => void): () => void {
   let unsub: (() => void) | null = null;
+  let unsubQuery: (() => void) | null = null;
   
   const init = async () => {
     try {
       const { firestore } = await import('../firebase');
-      const { doc, onSnapshot } = await import('firebase/firestore');
+      const { doc, onSnapshot, collection, query, where } = await import('firebase/firestore');
+      // Try direct document ID first
       const docRef = doc(firestore, 'serviceForms', serviceName);
       
       unsub = onSnapshot(docRef, (docSnap) => {
@@ -227,8 +242,40 @@ export function subscribeServiceFormConfig(serviceName: string, cb: (steps: Step
           const data = docSnap.data();
           cb(data.steps || null);
         } else {
-          cb(null);
+          // If not found by ID, try query by serviceTitle
+          const formsRef = collection(firestore, 'serviceForms');
+          const q = query(formsRef, where('serviceTitle', '==', serviceName));
+          
+          unsubQuery = onSnapshot(q, (querySnapshot) => {
+            if (!querySnapshot.empty) {
+              const firstDoc = querySnapshot.docs[0];
+              const data = firstDoc.data();
+              cb(data.steps || null);
+            } else {
+              cb(null);
+            }
+          }, (error) => {
+            console.warn('Failed to subscribe to service form config query:', error);
+            cb(null);
+          });
         }
+      }, (error) => {
+        // If direct doc fails, try query
+        const formsRef = collection(firestore, 'serviceForms');
+        const q = query(formsRef, where('serviceTitle', '==', serviceName));
+        
+        unsubQuery = onSnapshot(q, (querySnapshot) => {
+          if (!querySnapshot.empty) {
+            const firstDoc = querySnapshot.docs[0];
+            const data = firstDoc.data();
+            cb(data.steps || null);
+          } else {
+            cb(null);
+          }
+        }, (queryError) => {
+          console.warn('Failed to subscribe to service form config:', queryError);
+          cb(null);
+        });
       });
     } catch (error) {
       console.warn('Failed to subscribe to service form config:', error);
@@ -241,6 +288,9 @@ export function subscribeServiceFormConfig(serviceName: string, cb: (steps: Step
   return () => {
     if (unsub) {
       try { unsub(); } catch {}
+    }
+    if (unsubQuery) {
+      try { unsubQuery(); } catch {}
     }
   };
 }

@@ -54,14 +54,31 @@ export default function AdminServiceManage() {
     title: '',
     description: '',
     price: '',
+    price_usd: '' as unknown as number,
+    price_inr: '' as unknown as number,
+    commission: '' as unknown as number,
+    rating: '' as unknown as number,
     category: '',
     isActive: true,
+    trending: false,
     thumbnailUrl: '',
     formUrl: '',
     features: [] as string[]
   });
 
-  const [formConfig, setFormConfig] = useState({
+  const [formConfig, setFormConfig] = useState<{
+    steps: Array<{
+      title: string;
+      fields: Array<{
+        name: string;
+        label: string;
+        type: string;
+        required?: boolean;
+        placeholder?: string;
+        options?: string[];
+      }>;
+    }>;
+  }>({
     steps: [{
       title: 'Service Information',
       fields: [{
@@ -78,8 +95,7 @@ export default function AdminServiceManage() {
     'Web Development',
     'Mobile Development', 
     'Blockchain',
-    'AI/ML',
-    'Automation',
+    'AI & Automation',
     'Marketing',
     'Design',
     'Security',
@@ -119,18 +135,42 @@ export default function AdminServiceManage() {
   };
 
   const handleAddService = async () => {
-    if (!formData.title || !formData.description || !formData.price) {
-      alert('Please fill in all required fields');
+    if (!formData.title || !formData.description || !formData.category) {
+      alert('Please fill in title, description, and category');
       return;
     }
 
     try {
       setIsSubmitting(true);
-      await ServiceManager.addService(formData);
+      // Build price string if numeric prices provided
+      let priceStr = formData.price;
+      const usd = Number(formData.price_usd);
+      const inr = Number(formData.price_inr);
+      if (!priceStr && Number.isFinite(usd) && Number.isFinite(inr) && usd > 0 && inr > 0) {
+        priceStr = `$${usd} / ₹${inr.toLocaleString('en-IN')}`;
+      }
+
+      const payload = {
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        category: formData.category,
+        commission: formData.commission ? Number(formData.commission) : 0,
+        price: priceStr,
+        price_usd: Number.isFinite(usd) && usd > 0 ? usd : undefined,
+        price_inr: Number.isFinite(inr) && inr > 0 ? inr : undefined,
+        rating: formData.rating ? Number(formData.rating) : undefined,
+        thumbnailUrl: formData.thumbnailUrl?.trim() || '',
+        features: formData.features,
+        formUrl: formData.formUrl?.trim() || '',
+        isActive: !!formData.isActive,
+        trending: !!formData.trending,
+      };
+
+      await ServiceManager.addService(payload);
       
       setIsAddModalOpen(false);
       resetForm();
-      alert('Service added successfully!');
+      alert('✅ Service added successfully and visible on dashboard.');
     } catch (error) {
       console.error('Error adding service:', error);
       alert('Failed to add service');
@@ -184,7 +224,17 @@ export default function AdminServiceManage() {
 
     try {
       setIsSubmitting(true);
-      await ServiceManager.updateServiceForm(selectedService.id, formConfig.steps);
+      // Use setDoc with merge to create if doesn't exist
+      const { firestore } = await import('../../firebase');
+      const { doc, setDoc, serverTimestamp } = await import('firebase/firestore');
+      await setDoc(doc(firestore, 'serviceForms', selectedService.id), {
+        serviceId: selectedService.id,
+        serviceTitle: selectedService.title,
+        serviceCategory: selectedService.category,
+        steps: formConfig.steps,
+        updatedAt: serverTimestamp(),
+        createdAt: serverTimestamp()
+      }, { merge: true });
       
       setIsFormModalOpen(false);
       alert('Service form updated successfully!');
@@ -201,8 +251,13 @@ export default function AdminServiceManage() {
       title: '',
       description: '',
       price: '',
+      price_usd: '' as unknown as number,
+      price_inr: '' as unknown as number,
+      commission: '' as unknown as number,
+      rating: '' as unknown as number,
       category: '',
       isActive: true,
+      trending: false,
       thumbnailUrl: '',
       formUrl: '',
       features: []
@@ -216,8 +271,13 @@ export default function AdminServiceManage() {
       title: service.title,
       description: service.description,
       price: service.price,
+      price_usd: (service as any).price_usd as number,
+      price_inr: (service as any).price_inr as number,
+      commission: (service as any).commission as number,
+      rating: (service as any).rating as number,
       category: service.category,
       isActive: service.isActive,
+      trending: (service as any).trending === true,
       thumbnailUrl: service.thumbnailUrl || '',
       formUrl: service.formUrl || '',
       features: service.features || []
@@ -230,22 +290,55 @@ export default function AdminServiceManage() {
     setIsDeleteModalOpen(true);
   };
 
-  const openFormModal = (service: Service) => {
+  const openFormModal = async (service: Service) => {
     setSelectedService(service);
-    const existingForm = serviceForms.find(f => f.serviceId === service.id);
-    if (existingForm) {
+    setIsFormModalOpen(true);
+    try {
+      // Load form from Firestore using service ID
+      const form = await ServiceManager.getServiceForm(service.id);
+      if (form && form.steps && form.steps.length > 0) {
+        setFormConfig({ 
+          steps: form.steps.map(step => ({
+            ...step,
+            fields: step.fields.map(field => ({
+              ...field,
+              required: field.required ?? false,
+              placeholder: field.placeholder ?? '',
+              options: field.options || []
+            }))
+          }))
+        });
+      } else {
+        // Load default form based on service
+        const defaultForm = ServiceManager.getDefaultFormForService(service.title, service.category);
+        setFormConfig({ 
+          steps: defaultForm.map(step => ({
+            ...step,
+            fields: step.fields.map(field => ({
+              ...field,
+              required: field.required ?? false,
+              placeholder: field.placeholder ?? '',
+              options: field.options || []
+            }))
+          }))
+        });
+      }
+    } catch (error) {
+      console.error('Error loading service form:', error);
+      // Set default form on error
+      const defaultForm = ServiceManager.getDefaultFormForService(service.title, service.category);
       setFormConfig({ 
-        steps: existingForm.steps.map(step => ({
+        steps: defaultForm.map(step => ({
           ...step,
           fields: step.fields.map(field => ({
             ...field,
             required: field.required ?? false,
-            placeholder: field.placeholder ?? ''
+            placeholder: field.placeholder ?? '',
+            options: field.options || []
           }))
         }))
       });
     }
-    setIsFormModalOpen(true);
   };
 
   const addFeature = () => {
@@ -291,11 +384,35 @@ export default function AdminServiceManage() {
                 label: 'New Field',
                 type: 'text',
                 required: false,
-                placeholder: 'Enter value'
+                placeholder: '',
+                options: []
               }]
             }
           : step
       )
+    }));
+  };
+
+  const removeFormField = (stepIndex: number, fieldIndex: number) => {
+    setFormConfig(prev => ({
+      steps: prev.steps.map((step, index) => 
+        index === stepIndex 
+          ? {
+              ...step,
+              fields: step.fields.filter((_, fIdx) => fIdx !== fieldIndex)
+            }
+          : step
+      )
+    }));
+  };
+
+  const removeFormStep = (stepIndex: number) => {
+    if (formConfig.steps.length <= 1) {
+      alert('Cannot remove the last step. At least one step is required.');
+      return;
+    }
+    setFormConfig(prev => ({
+      steps: prev.steps.filter((_, index) => index !== stepIndex)
     }));
   };
 
@@ -575,15 +692,6 @@ export default function AdminServiceManage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Price *</label>
-                <Input
-                  value={formData.price}
-                  onChange={(e) => setFormData(prev => ({ ...prev, price: e.target.value }))}
-                  placeholder="e.g., $299"
-                  className="bg-white/5 border-white/10 text-white placeholder:text-gray-400"
-                />
-              </div>
-              <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Category *</label>
                 <Select value={formData.category} onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}>
                   <SelectTrigger className="bg-white/5 border-white/10 text-white">
@@ -596,7 +704,6 @@ export default function AdminServiceManage() {
                   </SelectContent>
                 </Select>
               </div>
-              {/* Icon selection removed; use thumbnails only */}
             </div>
             
             <div>
@@ -610,7 +717,46 @@ export default function AdminServiceManage() {
               />
             </div>
 
+            {/* Pricing and meta */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Price (USD)</label>
+                  <Input
+                    type="number"
+                    value={(formData as any).price_usd as unknown as string}
+                    onChange={(e) => setFormData(prev => ({ ...prev, price_usd: Number(e.target.value) as any }))}
+                    placeholder="e.g., 599"
+                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Price (INR)</label>
+                  <Input
+                    type="number"
+                    value={(formData as any).price_inr as unknown as string}
+                    onChange={(e) => setFormData(prev => ({ ...prev, price_inr: Number(e.target.value) as any }))}
+                    placeholder="e.g., 49900"
+                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-400"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Auto Price String</label>
+                  <Input
+                    value={(() => {
+                      const usd = Number((formData as any).price_usd);
+                      const inr = Number((formData as any).price_inr);
+                      if (Number.isFinite(usd) && Number.isFinite(inr) && usd > 0 && inr > 0) {
+                        return `$${usd} / ₹${inr.toLocaleString('en-IN')}`;
+                      }
+                      return formData.price;
+                    })()}
+                    onChange={(e) => setFormData(prev => ({ ...prev, price: e.target.value }))}
+                    placeholder="$599 / ₹49,900"
+                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-400"
+                  />
+                </div>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Thumbnail Image URL</label>
                 <Input
@@ -619,7 +765,33 @@ export default function AdminServiceManage() {
                   placeholder="https://example.com/image.jpg"
                   className="bg-white/5 border-white/10 text-white placeholder:text-gray-400"
                 />
+                <div className="grid grid-cols-2 gap-4 mt-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Commission (%)</label>
+                    <Input
+                      type="number"
+                      value={(formData as any).commission as unknown as string}
+                      onChange={(e) => setFormData(prev => ({ ...prev, commission: Number(e.target.value) as any }))}
+                      placeholder="e.g., 20"
+                      className="bg-white/5 border-white/10 text-white placeholder:text-gray-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Rating (0-5)</label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      value={(formData as any).rating as unknown as string}
+                      onChange={(e) => setFormData(prev => ({ ...prev, rating: Number(e.target.value) as any }))}
+                      placeholder="e.g., 4.8"
+                      className="bg-white/5 border-white/10 text-white placeholder:text-gray-400"
+                    />
+                  </div>
+                </div>
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Form URL</label>
                 <Input
@@ -628,6 +800,18 @@ export default function AdminServiceManage() {
                   placeholder="https://example.com/form"
                   className="bg-white/5 border-white/10 text-white placeholder:text-gray-400"
                 />
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="trending"
+                  checked={(formData as any).trending as unknown as boolean}
+                  onChange={(e) => setFormData(prev => ({ ...prev, trending: e.target.checked as any }))}
+                  className="w-4 h-4 accent-cyan-500"
+                />
+                <label htmlFor="trending" className="text-sm text-gray-300">
+                  Mark as Trending (shows a tag on the card)
+                </label>
               </div>
             </div>
 
@@ -914,76 +1098,153 @@ export default function AdminServiceManage() {
               {formConfig.steps.map((step, stepIndex) => (
                 <div key={stepIndex} className="border border-gray-600 rounded-lg p-4">
                   <div className="flex items-center justify-between mb-4">
-                    <h4 className="font-medium text-white">Step {stepIndex + 1}: {step.title}</h4>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => addFormField(stepIndex)}
-                      className="bg-white/5 border-white/10 text-white hover:bg-white/10"
-                    >
-                      <Plus className="w-4 h-4 mr-1" />
-                      Add Field
-                    </Button>
+                    <div className="flex items-center gap-3 flex-1">
+                      <Input
+                        value={step.title}
+                        onChange={(e) => {
+                          const newSteps = [...formConfig.steps];
+                          newSteps[stepIndex].title = e.target.value;
+                          setFormConfig({ steps: newSteps });
+                        }}
+                        placeholder="Step title"
+                        className="bg-white/5 border-white/10 text-white placeholder:text-gray-400 max-w-xs"
+                      />
+                      <span className="text-sm text-gray-400">Step {stepIndex + 1}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => addFormField(stepIndex)}
+                        className="bg-white/5 border-white/10 text-white hover:bg-white/10"
+                      >
+                        <Plus className="w-4 h-4 mr-1" />
+                        Add Field
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => removeFormStep(stepIndex)}
+                        className="bg-red-600/20 border-red-500/30 text-red-400 hover:bg-red-600/30"
+                        disabled={formConfig.steps.length <= 1}
+                      >
+                        <X className="w-4 h-4 mr-1" />
+                        Remove Step
+                      </Button>
+                    </div>
                   </div>
                   
                   <div className="space-y-3">
                     {step.fields.map((field, fieldIndex) => (
-                      <div key={fieldIndex} className="grid grid-cols-1 md:grid-cols-4 gap-3 p-3 bg-gray-800/50 rounded-lg">
-                        <Input
-                          value={field.name}
-                          onChange={(e) => {
-                            const newSteps = [...formConfig.steps];
-                            newSteps[stepIndex].fields[fieldIndex].name = e.target.value;
-                            setFormConfig({ steps: newSteps });
-                          }}
-                          placeholder="Field name"
-                          className="bg-white/5 border-white/10 text-white placeholder:text-gray-400"
-                        />
-                        <Input
-                          value={field.label}
-                          onChange={(e) => {
-                            const newSteps = [...formConfig.steps];
-                            newSteps[stepIndex].fields[fieldIndex].label = e.target.value;
-                            setFormConfig({ steps: newSteps });
-                          }}
-                          placeholder="Field label"
-                          className="bg-white/5 border-white/10 text-white placeholder:text-gray-400"
-                        />
-                        <Select
-                          value={field.type}
-                          onValueChange={(value) => {
-                            const newSteps = [...formConfig.steps];
-                            newSteps[stepIndex].fields[fieldIndex].type = value;
-                            setFormConfig({ steps: newSteps });
-                          }}
-                        >
-                          <SelectTrigger className="bg-white/5 border-white/10 text-white">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="bg-gray-800 border-gray-700">
-                            <SelectItem value="text">Text</SelectItem>
-                            <SelectItem value="textarea">Textarea</SelectItem>
-                            <SelectItem value="select">Select</SelectItem>
-                            <SelectItem value="number">Number</SelectItem>
-                            <SelectItem value="email">Email</SelectItem>
-                            <SelectItem value="tel">Phone</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={field.required}
+                      <div key={fieldIndex} className="p-4 bg-gray-800/50 rounded-lg space-y-3">
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                          <Input
+                            value={field.name}
                             onChange={(e) => {
                               const newSteps = [...formConfig.steps];
-                              newSteps[stepIndex].fields[fieldIndex].required = e.target.checked;
+                              newSteps[stepIndex].fields[fieldIndex].name = e.target.value;
                               setFormConfig({ steps: newSteps });
                             }}
-                            className="w-4 h-4 accent-green-500"
+                            placeholder="Field name (e.g., projectType)"
+                            className="bg-white/5 border-white/10 text-white placeholder:text-gray-400"
                           />
-                          <span className="text-sm text-gray-300">Required</span>
+                          <Input
+                            value={field.label}
+                            onChange={(e) => {
+                              const newSteps = [...formConfig.steps];
+                              newSteps[stepIndex].fields[fieldIndex].label = e.target.value;
+                              setFormConfig({ steps: newSteps });
+                            }}
+                            placeholder="Field label (e.g., Project Type)"
+                            className="bg-white/5 border-white/10 text-white placeholder:text-gray-400"
+                          />
+                          <Select
+                            value={field.type}
+                            onValueChange={(value) => {
+                              const newSteps = [...formConfig.steps];
+                              newSteps[stepIndex].fields[fieldIndex].type = value;
+                              // Clear options if type doesn't need them
+                              if (!['select', 'checkbox', 'radio'].includes(value)) {
+                                newSteps[stepIndex].fields[fieldIndex].options = [];
+                              }
+                              setFormConfig({ steps: newSteps });
+                            }}
+                          >
+                            <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-gray-800 border-gray-700">
+                              <SelectItem value="text">Text</SelectItem>
+                              <SelectItem value="textarea">Textarea</SelectItem>
+                              <SelectItem value="select">Select</SelectItem>
+                              <SelectItem value="checkbox">Checkbox</SelectItem>
+                              <SelectItem value="radio">Radio</SelectItem>
+                              <SelectItem value="number">Number</SelectItem>
+                              <SelectItem value="email">Email</SelectItem>
+                              <SelectItem value="tel">Phone</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={field.required || false}
+                              onChange={(e) => {
+                                const newSteps = [...formConfig.steps];
+                                newSteps[stepIndex].fields[fieldIndex].required = e.target.checked;
+                                setFormConfig({ steps: newSteps });
+                              }}
+                              className="w-4 h-4 accent-green-500"
+                            />
+                            <span className="text-sm text-gray-300">Required</span>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => removeFormField(stepIndex, fieldIndex)}
+                            className="bg-red-600/20 border-red-500/30 text-red-400 hover:bg-red-600/30"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
                         </div>
+                        
+                        {(field.type === 'text' || field.type === 'textarea' || field.type === 'email' || field.type === 'tel') && (
+                          <Input
+                            value={field.placeholder || ''}
+                            onChange={(e) => {
+                              const newSteps = [...formConfig.steps];
+                              newSteps[stepIndex].fields[fieldIndex].placeholder = e.target.value;
+                              setFormConfig({ steps: newSteps });
+                            }}
+                            placeholder="Placeholder text (optional)"
+                            className="bg-white/5 border-white/10 text-white placeholder:text-gray-400"
+                          />
+                        )}
+                        
+                        {(field.type === 'select' || field.type === 'checkbox' || field.type === 'radio') && (
+                          <div className="space-y-2">
+                            <label className="text-sm text-gray-300">Options (one per line):</label>
+                            <Textarea
+                              value={(field.options || []).join('\n')}
+                              onChange={(e) => {
+                                const newSteps = [...formConfig.steps];
+                                const options = e.target.value.split('\n').filter(o => o.trim());
+                                newSteps[stepIndex].fields[fieldIndex].options = options;
+                                setFormConfig({ steps: newSteps });
+                              }}
+                              placeholder="Option 1&#10;Option 2&#10;Option 3"
+                              rows={3}
+                              className="bg-white/5 border-white/10 text-white placeholder:text-gray-400 font-mono text-sm"
+                            />
+                            <p className="text-xs text-gray-500">Enter each option on a new line</p>
+                          </div>
+                        )}
                       </div>
                     ))}
+                    {step.fields.length === 0 && (
+                      <div className="text-center py-4 text-gray-400 text-sm">
+                        No fields in this step. Click "Add Field" to add one.
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

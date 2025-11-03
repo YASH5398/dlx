@@ -248,6 +248,37 @@
 .glass-card:hover {
   @apply bg-white/10;
 }
+
+/* Responsive table wrapper for admin panels */
+.responsive-table-wrapper {
+  @apply overflow-x-auto -mx-3 sm:-mx-4 md:mx-0;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.responsive-table-wrapper > * {
+  @apply inline-block min-w-full align-middle px-3 sm:px-4 md:px-0;
+}
+
+/* Mobile-friendly modals */
+@media (max-width: 640px) {
+  .modal-content {
+    @apply max-w-[95vw] mx-2;
+  }
+  
+  .modal-body {
+    @apply p-4;
+  }
+  
+  /* Ensure tables don't break on mobile */
+  table {
+    @apply text-xs;
+  }
+  
+  table th, table td {
+    @apply px-2 py-1.5;
+  }
+}
 .brand-gradient {
   @apply bg-gradient-to-br from-[#0b1220] via-[#0f1a2e] to-[#0a0f1f];
 }

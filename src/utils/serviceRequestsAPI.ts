@@ -39,7 +39,7 @@ export interface ServiceRequest {
   serviceId: string;
   serviceTitle: string;
   serviceCategory: string;
-  requestDetails: string;
+  requestDetails: object | string; // Support both object (new) and string (legacy) for backward compatibility
   attachments?: string[]; // File URLs
   status: ServiceRequestStatus;
   
@@ -183,7 +183,16 @@ export async function createServiceRequest(data: {
       serviceId,
       serviceTitle,
       serviceCategory,
-      requestDetails: typeof requestDetails === 'string' ? requestDetails : JSON.stringify(requestDetails),
+      // Store as object directly (Firestore supports nested objects)
+      requestDetails: typeof requestDetails === 'string' ? (() => {
+        try {
+          // If it's already a string, try to parse it to object
+          return JSON.parse(requestDetails);
+        } catch {
+          // If parsing fails, keep as string for backward compatibility
+          return requestDetails;
+        }
+      })() : requestDetails,
       attachments,
       status: 'pending',
       chatId,

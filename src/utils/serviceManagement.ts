@@ -16,6 +16,7 @@ import {
 export interface Service {
   id: string;
   title: string;
+  slug?: string;
   description: string;
   price: string;
   price_usd?: number;
@@ -24,6 +25,7 @@ export interface Service {
   rating?: number;
   category: string;
   isActive: boolean;
+  trending?: boolean;
   createdAt: any;
   updatedAt?: any;
   thumbnailUrl?: string;
@@ -52,84 +54,209 @@ export class ServiceManager {
   // Get all services
   static async getServices(): Promise<Service[]> {
     try {
-      const servicesSnapshot = await getDocs(collection(firestore, 'services'));
+      // Use simple query without any filters or limits to get ALL services
+      // NO orderBy, NO where, NO limit - fetch everything
+      const servicesRef = collection(firestore, 'services');
+      const servicesSnapshot = await getDocs(servicesRef);
       const services: Service[] = [];
       
+      console.log(`[ServiceManager] getServices: Found ${servicesSnapshot.size} documents in Firestore`);
+      if (servicesSnapshot.size === 0) {
+        console.warn('[ServiceManager] ⚠️ WARNING: No documents found in services collection!');
+      }
+      
+      let processedCount = 0;
+      let skippedCount = 0;
+      const skippedIds: string[] = [];
+      
       servicesSnapshot.forEach((doc) => {
-        const data = doc.data();
-        services.push({
-          id: doc.id,
-          title: data.title || '',
-          description: data.description || '',
-          price: data.price || '',
-          price_usd: data.price_usd,
-          price_inr: data.price_inr,
-          commission: data.commission,
-          rating: data.rating,
-          category: data.category || '',
-          isActive: data.isActive !== undefined ? data.isActive : true,
-          createdAt: data.createdAt,
-          updatedAt: data.updatedAt,
-          thumbnailUrl: data.thumbnailUrl || '',
-          formUrl: data.formUrl || '',
-          features: data.features || []
-        });
+        try {
+          const data = doc.data();
+          
+          // Validate required fields
+          if (!data) {
+            console.warn(`[ServiceManager] ⚠️ Document ${doc.id} has no data, skipping`);
+            skippedCount++;
+            skippedIds.push(doc.id);
+            return;
+          }
+          
+          const service = {
+            id: doc.id,
+            title: data.title || '',
+            slug: data.slug || doc.id,
+            description: data.description || '',
+            price: data.price || '',
+            price_usd: data.price_usd,
+            price_inr: data.price_inr,
+            commission: data.commission,
+            rating: data.rating,
+            category: data.category || '',
+            isActive: data.isActive !== undefined ? data.isActive : true,
+            trending: data.trending === true,
+            createdAt: data.createdAt,
+            updatedAt: data.updatedAt,
+            thumbnailUrl: data.thumbnailUrl || '',
+            formUrl: data.formUrl || '',
+            features: data.features || []
+          };
+          
+          services.push(service);
+          processedCount++;
+        } catch (error) {
+          console.error(`[ServiceManager] ⚠️ Error processing document ${doc.id}:`, error);
+          skippedCount++;
+          skippedIds.push(doc.id);
+        }
       });
       
+      console.log(`[ServiceManager] getServices: Processed ${processedCount} services, Skipped ${skippedCount}`);
+      if (skippedCount > 0) {
+        console.warn(`[ServiceManager] ⚠️ Skipped document IDs:`, skippedIds);
+      }
+      
+      // Verify count matches
+      if (servicesSnapshot.size !== services.length) {
+        console.error(`[ServiceManager] ⚠️ MISMATCH: Snapshot size (${servicesSnapshot.size}) != Services array length (${services.length})`);
+      }
+      
+      console.log(`[ServiceManager] Total services fetched: ${services.length}`);
       return services;
     } catch (error) {
-      console.error('Error fetching services:', error);
+      console.error('[ServiceManager] Error fetching services:', error);
       throw error;
     }
   }
 
   // Subscribe to services changes
   static subscribeToServices(callback: (services: Service[]) => void): () => void {
-    const q = query(collection(firestore, 'services'), orderBy('createdAt', 'desc'));
+    // Fetch all services without orderBy to avoid index requirements
+    // Sort client-side instead
+    const q = query(collection(firestore, 'services'));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const services: Service[] = [];
+      console.log(`[ServiceManager] subscribeToServices: Received ${snapshot.size} documents`);
+      
+      let processedCount = 0;
+      let skippedCount = 0;
+      const skippedIds: string[] = [];
+      
       snapshot.forEach((doc) => {
-        const data = doc.data();
-        services.push({
-          id: doc.id,
-          title: data.title || '',
-          description: data.description || '',
-          price: data.price || '',
-          price_usd: data.price_usd,
-          price_inr: data.price_inr,
-          commission: data.commission,
-          rating: data.rating,
-          category: data.category || '',
-          isActive: data.isActive !== undefined ? data.isActive : true,
-          createdAt: data.createdAt,
-          updatedAt: data.updatedAt,
-          thumbnailUrl: data.thumbnailUrl || '',
-          formUrl: data.formUrl || '',
-          features: data.features || []
-        });
+        try {
+          const data = doc.data();
+          
+          // Validate required fields
+          if (!data) {
+            console.warn(`[ServiceManager] ⚠️ Document ${doc.id} has no data in subscription, skipping`);
+            skippedCount++;
+            skippedIds.push(doc.id);
+            return;
+          }
+          
+          services.push({
+            id: doc.id,
+            title: data.title || '',
+            slug: data.slug || doc.id,
+            description: data.description || '',
+            price: data.price || '',
+            price_usd: data.price_usd,
+            price_inr: data.price_inr,
+            commission: data.commission,
+            rating: data.rating,
+            category: data.category || '',
+            isActive: data.isActive !== undefined ? data.isActive : true,
+            trending: data.trending === true,
+            createdAt: data.createdAt,
+            updatedAt: data.updatedAt,
+            thumbnailUrl: data.thumbnailUrl || '',
+            formUrl: data.formUrl || '',
+            features: data.features || []
+          });
+          processedCount++;
+        } catch (error) {
+          console.error(`[ServiceManager] ⚠️ Error processing document ${doc.id} in subscription:`, error);
+          skippedCount++;
+          skippedIds.push(doc.id);
+        }
       });
+      
+      console.log(`[ServiceManager] subscribeToServices: Processed ${processedCount} services, Skipped ${skippedCount}`);
+      if (skippedCount > 0) {
+        console.warn(`[ServiceManager] ⚠️ Skipped document IDs in subscription:`, skippedIds);
+      }
+      
+      // Verify count matches
+      if (snapshot.size !== services.length) {
+        console.error(`[ServiceManager] ⚠️ MISMATCH in subscription: Snapshot size (${snapshot.size}) != Services array length (${services.length})`);
+      }
+      
+      // Sort by createdAt client-side (descending)
+      services.sort((a, b) => {
+        const aTime = a.createdAt?.toMillis?.() || a.createdAt || 0;
+        const bTime = b.createdAt?.toMillis?.() || b.createdAt || 0;
+        return bTime - aTime;
+      });
+      
       callback(services);
     }, (error) => {
-      console.error('Error subscribing to services:', error);
+      console.error('[ServiceManager] Error subscribing to services:', error);
+      // On error, try to fetch once without subscription
+      this.getServices().then(callback).catch(err => {
+        console.error('[ServiceManager] Failed to fetch services as fallback:', err);
+        callback([]);
+      });
     });
 
     return unsubscribe;
   }
 
   // Add new service
-  static async addService(serviceData: Omit<Service, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+  static async addService(serviceData: any): Promise<string> {
     try {
-      const docRef = await addDoc(collection(firestore, 'services'), {
-        ...serviceData,
+      // Generate slug if not provided
+      const makeSlug = (title: string) =>
+        (title || '')
+          .toString()
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9\s-]/g, '')
+          .replace(/\s+/g, '-')
+          .replace(/-+/g, '-')
+          .slice(0, 80);
+
+      const slug = serviceData.slug || makeSlug(serviceData.title || '');
+      const payload = {
+        title: serviceData.title || '',
+        slug,
+        description: serviceData.description || '',
+        category: serviceData.category || 'Other',
+        commission: typeof serviceData.commission === 'number' ? serviceData.commission : Number(serviceData.commission) || 0,
+        price: serviceData.price || '',
+        price_usd: typeof serviceData.price_usd === 'number' ? serviceData.price_usd : Number(serviceData.price_usd) || undefined,
+        price_inr: typeof serviceData.price_inr === 'number' ? serviceData.price_inr : Number(serviceData.price_inr) || undefined,
+        rating: typeof serviceData.rating === 'number' ? serviceData.rating : (serviceData.rating ? Number(serviceData.rating) : undefined),
+        thumbnailUrl: serviceData.thumbnailUrl || '',
+        features: Array.isArray(serviceData.features) ? serviceData.features : [],
+        formUrl: serviceData.formUrl || '',
+        isActive: serviceData.isActive !== false,
+        trending: serviceData.trending === true,
         createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
+        updatedAt: serverTimestamp(),
+      };
+
+      // If price string is not provided but numeric prices are provided, auto-generate
+      if (!payload.price && payload.price_usd && payload.price_inr) {
+        payload.price = `$${payload.price_usd} / ₹${(payload.price_inr as number).toLocaleString('en-IN')}`;
+      }
+
+      // Write using slug as document ID so frontend URLs are consistent
+      await setDoc(doc(firestore, 'services', slug), payload);
 
       // Auto-create corresponding serviceForm document
-      await this.createDefaultServiceForm(docRef.id, serviceData.title, serviceData.category);
+      await this.createDefaultServiceForm(slug, payload.title, payload.category);
 
-      return docRef.id;
+      return slug;
     } catch (error) {
       console.error('Error adding service:', error);
       throw error;

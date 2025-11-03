@@ -16,7 +16,8 @@
     "test:wallet-balance-fix": "node scripts/testWalletBalanceFix.js",
     "cleanup:admin": "node scripts/cleanupAdminFiles.js",
     "verify:admin": "node scripts/verifyAdminPanel.js",
-    "seed:services": "node server/scripts/seed-services.js"
+    "seed:services": "node server/scripts/seed-services.js",
+    "migrate:requestDetails": "node scripts/migrateRequestDetails.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

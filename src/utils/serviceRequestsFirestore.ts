@@ -28,7 +28,7 @@ export interface ServiceRequestDoc {
   userEmail: string;
   serviceId: string;
   serviceTitle: string;
-  requestDetails: string;
+  requestDetails: object | string; // Support both object (new) and string (legacy) for backward compatibility
   adminNotes: string;
   price: number;
   status: ServiceRequestStatus;

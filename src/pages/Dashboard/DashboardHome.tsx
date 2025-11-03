@@ -594,22 +594,112 @@ export default function DashboardHome() {
   useEffect(() => {
     const load = async () => {
       try {
-        // Use the new service management system for real-time updates
-        if (activeServices.length > 0) {
-          const rawItems: ServiceItem[] = activeServices.map(service => ({
-            id: service.id,
-            name: service.title,
-            description: service.description,
-            startingPrice: service.price,
-            thumbnail: service.thumbnailUrl || '',
-            gradient: gradientForCategory(service.category),
-            features: service.features || getDefaultFeatures(service.id, service.category),
-            category: normalizeCategory(service.category),
-          }));
+        // Always fetch ALL services directly to ensure we get the complete list
+        // The subscription hook might be incomplete or slow to update
+        console.log('[Services Load] Fetching all services directly...');
+        const allServices = await ServiceManager.getServices();
+        console.log(`[ServiceManager] Total services fetched: ${allServices.length}`);
+      console.log(`[Services Load] Fetched ${allServices.length} total services from Firestore`);
+        
+        const activeServicesList = allServices.filter(s => {
+          const isActive = s.isActive !== false;
+          if (!isActive) {
+            console.log(`[Services Load] ⚠️ Service "${s.title}" (${s.id}) is inactive, filtering out`);
+          }
+          return isActive;
+        });
+        console.log(`[Services Load] ${activeServicesList.length} services are active (out of ${allServices.length} total)`);
+        console.log(`[Dashboard] Active services count: ${activeServicesList.length}`);
+        
+        // Log ALL services (active and inactive) with their status
+        console.log(`[Services Load] Full service list (${allServices.length} total):`);
+        allServices.forEach((s, idx) => {
+          console.log(`  ${idx + 1}. [${s.isActive ? 'ACTIVE' : 'INACTIVE'}] ${s.id}: "${s.title}" - Category: "${s.category}"`);
+        });
+        
+        // Log category breakdown before normalization
+        const categoryBreakdown: Record<string, number> = {};
+        allServices.forEach(s => {
+          const cat = s.category || 'Unknown';
+          categoryBreakdown[cat] = (categoryBreakdown[cat] || 0) + 1;
+        });
+        console.log('[Services Load] Category breakdown (all services):', categoryBreakdown);
+        
+        // Log active services breakdown
+        const activeCategoryBreakdown: Record<string, number> = {};
+        activeServicesList.forEach(s => {
+          const cat = s.category || 'Unknown';
+          activeCategoryBreakdown[cat] = (activeCategoryBreakdown[cat] || 0) + 1;
+        });
+        console.log('[Services Load] Active category breakdown:', activeCategoryBreakdown);
+        
+        if (activeServicesList.length > 0) {
+          const rawItems: ServiceItem[] = [];
+          let mappingErrors = 0;
+          
+          activeServicesList.forEach((service, idx) => {
+            try {
+              const item: ServiceItem = {
+                id: service.id,
+                name: service.title,
+                description: service.description,
+                startingPrice: service.price,
+                thumbnail: service.thumbnailUrl || '',
+                gradient: gradientForCategory(service.category),
+                features: service.features || getDefaultFeatures(service.id, service.category),
+                category: normalizeCategory(service.category),
+                // pass through trending so badge can be shown
+                ...(service as any).trending ? { trending: true as any } : {}
+              };
+              rawItems.push(item);
+            } catch (error) {
+              console.error(`[Services Load] ⚠️ Error mapping service ${service.id} (${idx + 1}):`, error);
+              mappingErrors++;
+            }
+          });
+          
+          if (mappingErrors > 0) {
+            console.warn(`[Services Load] ⚠️ ${mappingErrors} services failed to map`);
+          }
+          
+          console.log(`[Services Load] Successfully mapped ${rawItems.length} services to ServiceItem[]`);
+          
+          // Log after normalization
+          const normalizedCategoryBreakdown: Record<string, number> = {};
+          rawItems.forEach(item => {
+            normalizedCategoryBreakdown[item.category] = (normalizedCategoryBreakdown[item.category] || 0) + 1;
+          });
+          console.log('[Services Load] Normalized category breakdown:', normalizedCategoryBreakdown);
+          
+          // Verify no services were lost during mapping
+          if (rawItems.length !== activeServicesList.length) {
+            console.error(`[Services Load] ⚠️ MISMATCH: Active services (${activeServicesList.length}) != Mapped items (${rawItems.length})`);
+          }
+          
           setServices(rawItems);
+          console.log(`[Services Load] Set ${rawItems.length} services to display`);
+          console.log(`[Dashboard] Displaying ${rawItems.length} services`);
         } else {
-          // No services available from Firestore
-          setServices([]);
+          // Fallback: use hook data if direct fetch returned nothing
+          console.warn('[Services Load] No active services from direct fetch, using hook data');
+          if (activeServices.length > 0) {
+            const rawItems: ServiceItem[] = activeServices.map(service => ({
+              id: service.id,
+              name: service.title,
+              description: service.description,
+              startingPrice: service.price,
+              thumbnail: service.thumbnailUrl || '',
+              gradient: gradientForCategory(service.category),
+              features: service.features || getDefaultFeatures(service.id, service.category),
+              category: normalizeCategory(service.category),
+              ...(service as any).trending ? { trending: true as any } : {}
+            }));
+            setServices(rawItems);
+            console.log(`[Services Load] Used hook data: ${rawItems.length} services`);
+          } else {
+            setServices([]);
+            console.warn('[Services Load] No services available from either source');
+          }
         }
 
         // Restore missing service form configs (idempotent)
@@ -638,20 +728,44 @@ export default function DashboardHome() {
 
         // Do not delete or mutate Firestore services; always trust live data
       } catch (e) {
-        console.warn('Failed to load services from Firestore', e);
-        // In case of error, still show static fallback
-        setServices(staticServices);
+        console.error('[Services Load] Failed to load services from Firestore', e);
+        // Fallback: try using hook data
+        if (activeServices.length > 0) {
+          const rawItems: ServiceItem[] = activeServices.map(service => ({
+            id: service.id,
+            name: service.title,
+            description: service.description,
+            startingPrice: service.price,
+            thumbnail: service.thumbnailUrl || '',
+            gradient: gradientForCategory(service.category),
+            features: service.features || getDefaultFeatures(service.id, service.category),
+              category: normalizeCategory(service.category),
+              ...(service as any).trending ? { trending: true as any } : {}
+          }));
+          setServices(rawItems);
+          console.log(`[Services Load] Fallback: Used hook data: ${rawItems.length} services`);
+        } else {
+          // Last resort: static fallback
+          console.warn('[Services Load] Using static fallback services');
+          setServices(staticServices);
+        }
       }
     };
     load();
-  }, [activeServices]);
+  }, []); // Run once on mount, don't depend on activeServices hook
 
   // When user explicitly requests "View All Services", make sure we fetch all active services once (no client-side limits)
   const fetchAllActiveServices = async () => {
     try {
-      const all = await ServiceManager.getActiveServices();
-      if (Array.isArray(all) && all.length) {
-        const mapped: ServiceItem[] = all.map(service => ({
+      // Fetch ALL services first (both active and inactive to ensure we get complete list)
+      const allServices = await ServiceManager.getServices();
+      // Then filter to only active ones
+      const activeServices = allServices.filter(s => s.isActive);
+      
+      console.log(`[Services] Total services fetched: ${allServices.length}, Active: ${activeServices.length}`);
+      
+      if (Array.isArray(activeServices) && activeServices.length) {
+        const mapped: ServiceItem[] = activeServices.map(service => ({
           id: service.id,
           name: service.title,
           description: service.description,
@@ -661,26 +775,35 @@ export default function DashboardHome() {
           features: service.features || getDefaultFeatures(service.id, service.category),
           category: normalizeCategory(service.category),
         }));
-        setServices(mapped);
+          setServices(mapped);
+          console.log(`[Services] Mapped ${mapped.length} services to display`);
+          console.log(`[Dashboard] Displaying ${mapped.length} services`);
+      } else {
+        console.warn('[Services] No active services found after filtering');
       }
     } catch (e) {
-      console.warn('Failed to fetch all active services:', e);
+      console.error('Failed to fetch all active services:', e);
     }
   };
 
   const handleToggleShowAllServices = async () => {
     const next = !showAllServices;
+    console.log(`[View All Services] Toggling showAllServices from ${showAllServices} to ${next}`);
     setShowAllServices(next);
     if (next) {
       setViewAllLoading(true);
       // Ensure we have the complete list from Firestore when expanding
+      console.log('[View All Services] Fetching all active services...');
       await fetchAllActiveServices();
+      console.log('[View All Services] Fetch complete. Services state updated.');
       setViewAllLoading(false);
       // Smooth-scroll to services section top so users see the expanded content
       try {
         const el = document.getElementById('services-section');
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
       } catch {}
+    } else {
+      console.log('[View All Services] Collapsing view. showAllServices set to false.');
     }
   };
 
@@ -737,17 +860,69 @@ export default function DashboardHome() {
   // Categorize services for horizontal scroll sections
   const categorizeServices = (services: ServiceItem[]) => {
     const categories: { [key: string]: ServiceItem[] } = {};
-    services.forEach(service => {
-      const category = service.category || 'General';
-      if (!categories[category]) {
-        categories[category] = [];
+    let categorizedCount = 0;
+    
+    services.forEach((service, idx) => {
+      try {
+        const category = service.category || 'General';
+        if (!categories[category]) {
+          categories[category] = [];
+        }
+        categories[category].push(service);
+        categorizedCount++;
+      } catch (error) {
+        console.error(`[categorizeServices] ⚠️ Error categorizing service ${service.id} (index ${idx}):`, error);
       }
-      categories[category].push(service);
     });
+    
+    if (categorizedCount !== services.length) {
+      console.warn(`[categorizeServices] ⚠️ Only categorized ${categorizedCount} out of ${services.length} services`);
+    }
+    
     return Object.entries(categories);
   };
 
   const categorizedServices = categorizeServices(filteredServices);
+  
+  // Log categorization for debugging
+  useEffect(() => {
+    console.log(`[Services State] ==================== SERVICES PIPELINE ====================`);
+    console.log(`[Services State] 1. Total services in state: ${services.length}`);
+    console.log(`[Services State] 2. After search/category filter: ${filteredServices.length}`);
+    if (searchTerm) {
+      console.log(`[Services State]    Search term active: "${searchTerm}"`);
+    }
+    if (selectedCategory !== 'All') {
+      console.log(`[Services State]    Category filter active: "${selectedCategory}"`);
+    }
+    console.log(`[Services State] 3. Categories created: ${categorizedServices.length}`);
+    const totalInCategories = categorizedServices.reduce((sum, [, catServices]) => sum + catServices.length, 0);
+    console.log(`[Services State] 4. Total services in categories: ${totalInCategories}`);
+    
+    // Detailed category breakdown
+    categorizedServices.forEach(([catName, catServices]) => {
+      console.log(`[Services State]    - "${catName}": ${catServices.length} services`);
+    });
+    
+    if (totalInCategories !== filteredServices.length) {
+      console.error(`[Services State] ⚠️ MISMATCH: ${totalInCategories} in categories vs ${filteredServices.length} filtered`);
+      console.error(`[Services State] ⚠️ Missing ${filteredServices.length - totalInCategories} services in categorization!`);
+      
+      // Find missing services
+      const categorizedServiceIds = new Set<string>();
+      categorizedServices.forEach(([, catServices]) => {
+        catServices.forEach(s => categorizedServiceIds.add(s.id));
+      });
+      const missingServices = filteredServices.filter(s => !categorizedServiceIds.has(s.id));
+      if (missingServices.length > 0) {
+        console.error(`[Services State] ⚠️ Missing service IDs:`, missingServices.map(s => `${s.id} (${s.name})`));
+        console.error(`[Services State] ⚠️ Missing services:`, missingServices);
+      }
+    } else {
+      console.log(`[Services State] ✅ All filtered services are categorized correctly`);
+    }
+    console.log(`[Services State] ========================================================`);
+  }, [services, filteredServices, categorizedServices, searchTerm, selectedCategory]);
   
   // Initialize scroll positions for all categories
   useEffect(() => {
@@ -1143,10 +1318,22 @@ export default function DashboardHome() {
 
   // Render services by category sections
   const renderServicesByCategory = () => {
+    // Log total services for debugging
+    console.log(`[renderServicesByCategory] Total services in state: ${services.length}`);
+    console.log(`[renderServicesByCategory] Filtered services: ${filteredServices.length}`);
+    console.log(`[renderServicesByCategory] Categorized services: ${categorizedServices.length} categories`);
+    categorizedServices.forEach(([catName, catServices]) => {
+      console.log(`[renderServicesByCategory] Category "${catName}": ${catServices.length} services`);
+    });
+    
+    // Show all categories when "View All Services" is clicked, otherwise show initial set
     const allowedInitially = new Set<string>(['MLM & Mobile', 'AI & Automation', 'Marketing', 'Web Development']);
+    // When showAllServices is true, show ALL categories and ALL services
     const source = showAllServices
       ? categorizedServices
       : categorizedServices.filter(([categoryName]) => allowedInitially.has(categoryName));
+    
+    console.log(`[renderServicesByCategory] showAllServices: ${showAllServices}, Showing ${source.length} categories`);
 
     return source.map(([categoryName, categoryServices], sectionIndex) => {
       const categoryId = categoryName.toLowerCase().replace(/\s+/g, '-');
@@ -1196,14 +1383,11 @@ export default function DashboardHome() {
               }}
             >
               {(() => {
-                // Virtualize horizontally by scrollLeft
-                const left = categoryScrollPositions[categoryId] || 0;
-                const ITEM_WIDTH = 320; // approx one card + gap
-                const viewportCards = Math.max(2, Math.min(4, Math.ceil(window.innerWidth / ITEM_WIDTH)));
-                const start = Math.max(0, Math.floor(left / ITEM_WIDTH) - 2);
-                const end = Math.min(categoryServices.length, start + viewportCards + 6);
-                const visible = categoryServices.slice(start, end);
-                return visible.map((service, index) => (
+                // When "View All Services" is clicked, show ALL services (no virtualization)
+                // Otherwise, use virtualization for performance
+                if (showAllServices) {
+                  // Render ALL services in this category without any slicing
+                  return categoryServices.map((service, index) => (
                 <motion.div
                   key={service.id}
                   initial={{ opacity: 0, y: 20 }}
@@ -1229,11 +1413,17 @@ export default function DashboardHome() {
                     />
                     <div className={`w-full h-full bg-gradient-to-br ${service.gradient} hidden`} />
                     
-                    {/* Commission Badge */}
-                    <div className="absolute top-3 right-3">
+                    {/* Commission / Trending Badges */}
+                    <div className="absolute top-3 right-3 flex items-center gap-2">
                       <span className="px-3 py-1 text-xs font-bold bg-green-500/90 backdrop-blur-sm text-white rounded-full border border-green-400/50">
                         Your Commission 20%
                       </span>
+                      {/* Trending badge */}
+                      {(service as any).trending && (
+                        <span className="px-2.5 py-1 text-xs font-bold bg-pink-600/90 backdrop-blur-sm text-white rounded-full border border-pink-400/50">
+                          Trending
+                        </span>
+                      )}
                     </div>
                   </div>
                   
@@ -1298,7 +1488,94 @@ export default function DashboardHome() {
                   {/* Bottom Accent Line */}
                   <div className={`h-1 bg-gradient-to-r ${service.gradient}`}></div>
                   </motion.div>
-                ));
+                  ));
+                } else {
+                  // Use virtualization for performance when not showing all
+                  const left = categoryScrollPositions[categoryId] || 0;
+                  const ITEM_WIDTH = 320; // approx one card + gap
+                  const viewportCards = Math.max(2, Math.min(4, Math.ceil(window.innerWidth / ITEM_WIDTH)));
+                  const start = Math.max(0, Math.floor(left / ITEM_WIDTH) - 2);
+                  const end = Math.min(categoryServices.length, start + viewportCards + 6);
+                  const visible = categoryServices.slice(start, end);
+                  return visible.map((service, index) => (
+                    <motion.div
+                      key={service.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: index * 0.05 }}
+                      className="group relative bg-slate-800/40 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-slate-700/50 hover:border-cyan-500/50 hover:-translate-y-1 flex-shrink-0 w-80"
+                    >
+                      {/* Service Image */}
+                      <div className="relative h-48 overflow-hidden">
+                        <img
+                          src={service.thumbnail}
+                          alt={service.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          loading="lazy"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                            const nextElement = e.currentTarget.nextElementSibling as HTMLElement;
+                            if (nextElement) {
+                              nextElement.style.display = 'flex';
+                            }
+                          }}
+                        />
+                        <div className={`w-full h-full bg-gradient-to-br ${service.gradient} hidden`} />
+                        
+                        {/* Commission Badge */}
+                        <div className="absolute top-3 right-3">
+                          <span className="px-3 py-1 text-xs font-bold bg-green-500/90 backdrop-blur-sm text-white rounded-full border border-green-400/50">
+                            Your Commission 20%
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Service Content */}
+                      <div className="p-6 flex flex-col justify-between h-[calc(100%-12rem)]">
+                        <div>
+                          <h4 className="text-xl font-bold text-white mb-2 line-clamp-1">{service.name}</h4>
+                          <p className="text-slate-300 text-sm mb-4 line-clamp-2">{service.description}</p>
+                          <div className="flex items-center justify-between mb-4">
+                            <span className="text-lg font-bold text-cyan-400">{service.startingPrice}</span>
+                            <div className="flex items-center gap-1">
+                              {[...Array(5)].map((_, i) => (
+                                <Star
+                                  key={i}
+                                  className={`w-4 h-4 ${i < Math.floor(getServiceRating(service.id)) ? 'fill-yellow-400 text-yellow-400' : 'text-slate-600'}`}
+                                />
+                              ))}
+                              <span className="text-sm text-slate-400 ml-1">{getServiceRating(service.id).toFixed(1)}★</span>
+                            </div>
+                            <ReviewerAvatars
+                              serviceId={service.id}
+                              onClick={() => { setOpenReviewServiceId(service.id); setOpenReviewServiceName(service.name); setShowReviews(true); }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Buttons */}
+                        <div className="flex gap-3">
+                          <button
+                            onClick={() => handleGetService(service.id)}
+                            className={`flex-1 py-3 rounded-xl bg-gradient-to-r ${service.gradient} text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95 text-sm`}
+                          >
+                            View Service
+                          </button>
+                          <button
+                            onClick={() => { setOpenReviewServiceId(service.id); setOpenReviewServiceName(service.name); setShowReviews(true); }}
+                            className="px-4 py-3 rounded-xl bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 hover:text-white transition-all duration-300 border border-slate-600/50 hover:border-slate-500/50"
+                            title="View Reviews"
+                          >
+                            <Star className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Bottom Accent Line */}
+                      <div className={`h-1 bg-gradient-to-r ${service.gradient}`}></div>
+                    </motion.div>
+                  ));
+                }
               })()}
             </div>
           </div>

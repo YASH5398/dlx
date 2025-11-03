@@ -46,7 +46,7 @@ export default function DashboardLayout() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0A0E1A] to-[#101830] text-[#F1F5FF]">
       {/* Compact Cyber Header */}
-      <header className="fixed top-0 left-0 right-0 h-16 bg-gradient-to-r from-[#0A0E1A] to-[#101830] backdrop-blur-xl border-b border-[#00E5FF]/10 z-30 lg:left-72 shadow-2xl">
+      <header className="fixed top-0 left-0 right-0 h-16 bg-gradient-to-r from-[#0A0E1A] to-[#101830] backdrop-blur-xl border-b border-[#00E5FF]/10 z-30 lg:left-[272px] shadow-2xl">
         <div className="h-full flex items-center justify-between px-4">
           <div className="flex items-center gap-3">
             <button 
@@ -97,7 +97,7 @@ export default function DashboardLayout() {
       />
 
       {/* Main Content */}
-      <main className="pt-16 lg:ml-72">
+      <main className="pt-16 lg:ml-[272px]">
         <div className="w-full h-full">
           <Outlet />
         </div>

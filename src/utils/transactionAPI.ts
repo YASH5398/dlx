@@ -10,7 +10,45 @@ import {
   where,
   getDocs
 } from 'firebase/firestore';
+import { FirebaseError } from 'firebase/app';
 import { firestore } from '../firebase';
+
+// Retry utility with exponential backoff for rate limit errors
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  initialDelay: number = 1000
+): Promise<T> {
+  let lastError: any;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      lastError = error;
+      
+      // Check if it's a rate limit error (429 or quota exceeded)
+      const isRateLimitError = 
+        error?.code === 'resource-exhausted' ||
+        error?.code === 8 ||
+        error?.message?.includes('429') ||
+        error?.message?.toLowerCase().includes('quota') ||
+        error?.message?.toLowerCase().includes('too many requests');
+      
+      // Only retry on rate limit errors
+      if (!isRateLimitError || attempt === maxRetries - 1) {
+        throw error;
+      }
+      
+      // Exponential backoff: 1s, 2s, 4s
+      const delay = initialDelay * Math.pow(2, attempt);
+      console.warn(`Rate limit hit. Retrying in ${delay}ms... (attempt ${attempt + 1}/${maxRetries})`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  
+  throw lastError;
+}
 
 // Types
 export interface DepositRequest {
@@ -50,12 +88,27 @@ export interface WithdrawalRequest {
 
 export interface Transaction {
   id?: string;
-  type: 'deposit' | 'withdraw';
+  type: 'deposit' | 'withdraw' | 'swap';
   amount: number;
   currency: string;
   status: 'pending' | 'success' | 'failed' | 'rejected';
   description: string;
   requestId?: string; // Link to request document
+  swapRequestId?: string; // Link to swap request document
+  dlxAmount?: number; // DLX amount swapped (for swaps)
+  createdAt: any;
+  updatedAt?: any;
+}
+
+export interface SwapRequest {
+  id?: string;
+  userId: string;
+  dlxAmount: number;
+  usdtAmount: number;
+  status: 'pending' | 'success' | 'failed' | 'rejected';
+  exchangeRate: number;
+  transactionId?: string; // Link to transaction document
+  verifiedAt?: any;
   createdAt: any;
   updatedAt?: any;
 }
@@ -103,10 +156,10 @@ export async function createDepositRequest(data: {
     ? txnId
     : generateFallbackTxnId(method.includes('upi') ? 'INR' : 'DEP');
 
-  let requestId: string;
-  let transactionId: string;
+  return retryWithBackoff(async () => {
+    let requestId: string;
+    let transactionId: string;
 
-  try {
     await runTransaction(firestore, async (tx) => {
       // 1. Create deposit request
       const requestRef = doc(collection(firestore, 'depositRequests'));
@@ -148,10 +201,10 @@ export async function createDepositRequest(data: {
     });
 
     return { requestId: requestId!, transactionId: transactionId! };
-  } catch (error) {
-    console.error('Failed to create deposit request:', error);
+  }, 3, 1000).catch((error) => {
+    console.error('Failed to create deposit request after retries:', error);
     throw new Error('Failed to create deposit request. Please try again.');
-  }
+  });
 }
 
 // Atomic withdrawal request creation
@@ -174,10 +227,10 @@ export async function createWithdrawalRequest(data: {
     ? 'Withdrawal to UPI' 
     : `Withdrawal to ${method.toUpperCase()}`;
 
-  let requestId: string;
-  let transactionId: string;
+  return retryWithBackoff(async () => {
+    let requestId: string;
+    let transactionId: string;
 
-  try {
     await runTransaction(firestore, async (tx) => {
       // 1. Create withdrawal request
       const requestRef = doc(collection(firestore, 'withdrawalRequests'));
@@ -216,15 +269,15 @@ export async function createWithdrawalRequest(data: {
     });
 
     return { requestId: requestId!, transactionId: transactionId! };
-  } catch (error) {
-    console.error('Failed to create withdrawal request:', error);
+  }, 3, 1000).catch((error) => {
+    console.error('Failed to create withdrawal request after retries:', error);
     throw new Error('Failed to create withdrawal request. Please try again.');
-  }
+  });
 }
 
 // Atomic deposit approval
 export async function approveDeposit(requestId: string, adminId: string, adminEmail: string): Promise<void> {
-  try {
+  return retryWithBackoff(async () => {
     await runTransaction(firestore, async (tx) => {
       // 1. Get deposit request
       const requestRef = doc(firestore, 'depositRequests', requestId);
@@ -296,15 +349,15 @@ export async function approveDeposit(requestId: string, adminId: string, adminEm
         created_at: serverTimestamp()
       });
     });
-  } catch (error) {
-    console.error('Failed to approve deposit:', error);
+  }, 3, 1000).catch((error) => {
+    console.error('Failed to approve deposit after retries:', error);
     throw error;
-  }
+  });
 }
 
 // Atomic withdrawal approval
 export async function approveWithdrawal(requestId: string, adminId: string, adminEmail: string): Promise<void> {
-  try {
+  return retryWithBackoff(async () => {
     await runTransaction(firestore, async (tx) => {
       // 1. Get withdrawal request
       const requestRef = doc(firestore, 'withdrawalRequests', requestId);
@@ -386,15 +439,15 @@ export async function approveWithdrawal(requestId: string, adminId: string, admi
         created_at: serverTimestamp()
       });
     });
-  } catch (error) {
-    console.error('Failed to approve withdrawal:', error);
+  }, 3, 1000).catch((error) => {
+    console.error('Failed to approve withdrawal after retries:', error);
     throw error;
-  }
+  });
 }
 
 // Reject deposit
 export async function rejectDeposit(requestId: string, adminId: string, adminEmail: string, reason?: string): Promise<void> {
-  try {
+  return retryWithBackoff(async () => {
     await runTransaction(firestore, async (tx) => {
       const requestRef = doc(firestore, 'depositRequests', requestId);
       const requestSnap = await tx.get(requestRef);
@@ -445,15 +498,15 @@ export async function rejectDeposit(requestId: string, adminId: string, adminEma
         created_at: serverTimestamp()
       });
     });
-  } catch (error) {
-    console.error('Failed to reject deposit:', error);
+  }, 3, 1000).catch((error) => {
+    console.error('Failed to reject deposit after retries:', error);
     throw error;
-  }
+  });
 }
 
 // Reject withdrawal
 export async function rejectWithdrawal(requestId: string, adminId: string, adminEmail: string, reason?: string): Promise<void> {
-  try {
+  return retryWithBackoff(async () => {
     await runTransaction(firestore, async (tx) => {
       const requestRef = doc(firestore, 'withdrawalRequests', requestId);
       const requestSnap = await tx.get(requestRef);
@@ -505,10 +558,10 @@ export async function rejectWithdrawal(requestId: string, adminId: string, admin
         created_at: serverTimestamp()
       });
     });
-  } catch (error) {
-    console.error('Failed to reject withdrawal:', error);
+  }, 3, 1000).catch((error) => {
+    console.error('Failed to reject withdrawal after retries:', error);
     throw error;
-  }
+  });
 }
 
 // Get user's deposit requests
@@ -537,4 +590,115 @@ export async function getUserWithdrawalRequests(userId: string): Promise<Withdra
     id: doc.id,
     ...doc.data()
   } as WithdrawalRequest));
+}
+
+// Atomic DLX to USDT swap - processes immediately and credits purchase wallet
+export async function processSwap(data: {
+  userId: string;
+  dlxAmount: number;
+  exchangeRate?: number; // Default 0.1 if not provided
+}): Promise<{ swapRequestId: string; transactionId: string }> {
+  const { userId, dlxAmount, exchangeRate = 0.1 } = data;
+  
+  if (!userId || !dlxAmount || dlxAmount < 50) {
+    throw new Error('Invalid swap request. Minimum 50 DLX required.');
+  }
+
+  const usdtAmount = Number((dlxAmount * exchangeRate).toFixed(2));
+
+  return retryWithBackoff(async () => {
+    let swapRequestId: string;
+    let transactionId: string;
+
+    await runTransaction(firestore, async (tx) => {
+      // 1. Get user document for DLX balance
+      const userRef = doc(firestore, 'users', userId);
+      const userSnap = await tx.get(userRef);
+      
+      if (!userSnap.exists()) {
+        throw new Error('User not found');
+      }
+
+      const userData = userSnap.data() as any;
+      const currentDlx = Number(userData?.wallet?.miningBalance || 0);
+
+      // 2. Check sufficient DLX balance
+      if (currentDlx < dlxAmount) {
+        throw new Error(`Insufficient DLX balance. Available: ${currentDlx.toFixed(2)} DLX, Required: ${dlxAmount.toFixed(2)} DLX`);
+      }
+
+      // 3. Get wallet document for USDT balance
+      const walletRef = doc(firestore, 'wallets', userId);
+      const walletSnap = await tx.get(walletRef);
+      
+      if (!walletSnap.exists()) {
+        // Create wallet if it doesn't exist
+        tx.set(walletRef, {
+          usdt: { mainUsdt: 0, purchaseUsdt: 0 },
+          inr: { mainInr: 0, purchaseInr: 0 },
+          dlx: 0,
+          walletUpdatedAt: serverTimestamp()
+        });
+      }
+
+      const walletData = walletSnap.data() as any;
+      const currentPurchaseUsdt = Number(walletData?.usdt?.purchaseUsdt || 0);
+      const newPurchaseUsdt = Number((currentPurchaseUsdt + usdtAmount).toFixed(2));
+      const newDlx = Number((currentDlx - dlxAmount).toFixed(2));
+
+      // 4. Update DLX balance in user document
+      tx.update(userRef, {
+        'wallet.miningBalance': newDlx,
+        'wallet.updatedAt': serverTimestamp()
+      });
+
+      // 5. Credit USDT to purchase wallet
+      tx.update(walletRef, {
+        'usdt.purchaseUsdt': newPurchaseUsdt,
+        walletUpdatedAt: serverTimestamp()
+      });
+
+      // 6. Create swap request document
+      const swapRequestRef = doc(collection(firestore, 'swapRequests'));
+      const swapRequestData: SwapRequest = {
+        userId,
+        dlxAmount,
+        usdtAmount,
+        status: 'success', // Mark as success immediately since we processed it atomically
+        exchangeRate,
+        createdAt: serverTimestamp()
+      };
+      
+      tx.set(swapRequestRef, swapRequestData);
+      swapRequestId = swapRequestRef.id;
+
+      // 7. Create transaction document with success status
+      const transactionRef = doc(collection(firestore, 'wallets', userId, 'transactions'));
+      const transactionData: Transaction = {
+        type: 'swap',
+        amount: usdtAmount,
+        currency: 'USDT',
+        status: 'success',
+        description: `Swapped ${dlxAmount.toFixed(2)} DLX to ${usdtAmount.toFixed(2)} USDT (Credited to Purchase Wallet)`,
+        swapRequestId: swapRequestRef.id,
+        dlxAmount,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+      
+      tx.set(transactionRef, transactionData);
+      transactionId = transactionRef.id;
+
+      // 8. Update swap request with transaction ID
+      tx.update(swapRequestRef, { 
+        transactionId: transactionRef.id,
+        updatedAt: serverTimestamp()
+      });
+    });
+
+    return { swapRequestId: swapRequestId!, transactionId: transactionId! };
+  }, 3, 1000).catch((error: any) => {
+    console.error('Failed to process swap after retries:', error);
+    throw new Error(error?.message || 'Failed to process swap. Please try again.');
+  });
 }

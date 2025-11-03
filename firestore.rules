@@ -1,162 +1,70 @@
 rules_version = '2';
 service cloud.firestore {
-  match /databases/{database}/documents {
-    function signedIn() {
+  match /databases/{db}/documents {
+
+    function isSignedIn() {
       return request.auth != null;
     }
 
     function isAdmin() {
-      return signedIn() && (
-        request.auth.token.admin == true ||
-        request.auth.token.role == 'admin' ||
-        exists(/databases/$(database)/documents/admin_users/$(request.auth.uid))
-      );
+      return isSignedIn() && request.auth.token.email == "sourav23065398@gmail.com";
     }
 
-    // Global admin override: admins have unrestricted access everywhere
-    match /{path=**} {
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // 🔒 Admin full access
+    match /{document=**} {
       allow read, write: if isAdmin();
     }
 
-    // Users can read and write their own user document
-    match /users/{userId} {
-      allow read, write: if signedIn() && request.auth.uid == userId;
+    // USERS
+    match /users/{uid} {
+      allow read, update, delete: if isOwner(uid) || isAdmin();
+      allow create: if isSignedIn();
     }
 
-    // Wallets and nested transactions
-    match /wallets/{userId} {
-      allow read, write: if signedIn() && request.auth.uid == userId;
-
-      match /transactions/{transactionId} {
-        allow read, write: if signedIn() && request.auth.uid == userId;
+    // WALLETS
+    match /wallets/{uid} {
+      allow read, write: if isOwner(uid) || isAdmin();
+      match /transactions/{txnId} {
+        allow read, write: if isOwner(uid) || isAdmin();
       }
     }
 
-    // Flat transactions collections
-    match /wallet_transactions/{transactionId} {
-      allow create: if signedIn() && request.auth.uid == request.resource.data.userId;
-      allow read: if signedIn() && request.auth.uid == resource.data.userId;
-      allow update, delete: if false; // only admin via override
+    // DEPOSIT REQUESTS
+    match /depositRequests/{docId} {
+      allow read, create, update, delete: if isSignedIn() || isAdmin();
     }
 
-    match /referralTransactions/{transactionId} {
-      allow create: if signedIn() && request.auth.uid == request.resource.data.userId;
-      allow read: if signedIn() && request.auth.uid == resource.data.userId;
-      allow update, delete: if false;
+    // WITHDRAWAL REQUESTS
+    match /withdrawalRequests/{docId} {
+      allow read, create, update, delete: if isSignedIn() || isAdmin();
     }
 
-    // Deposits and withdrawals owned by user; admins can manage via override
-    match /depositRequests/{requestId} {
-      allow create: if signedIn() && request.auth.uid == request.resource.data.userId;
-      allow read: if signedIn() && request.auth.uid == resource.data.userId;
-      // Allow the owner to submit manual verification details (e.g., txId) only
-      allow update: if signedIn()
-                   && request.auth.uid == resource.data.userId
-                   // Owner cannot mark as done; only move to pending_manual and attach txId/notes
-                   && request.resource.data.status in ['pending', 'pending_manual']
-                   && resource.data.status in ['pending', 'pending_manual']
-                   // Only permit safe fields to be changed by users
-                   && request.resource.data.diff(resource.data).changedKeys().hasOnly(['status','txId','notes','updatedAt']);
-      allow delete: if false;
+    // ✅ REVIEWS (Global)
+    match /reviews/{docId} {
+      allow read: if true; // Public read
+      allow create, update, delete: if isAdmin(); // Only admin manage
     }
 
-    match /withdrawalRequests/{requestId} {
-      allow create: if signedIn() && request.auth.uid == request.resource.data.userId;
-      allow read: if signedIn() && request.auth.uid == resource.data.userId;
-      allow update, delete: if false;
-    }
-
-    // Orders - users can create/read their own; admin updates allowed via override
-    match /orders/{orderId} {
-      allow create: if signedIn() && request.auth.uid == request.resource.data.userId;
-      allow read: if signedIn() && request.auth.uid == resource.data.userId;
-      allow update, delete: if false;
-    }
-
-    // Service Requests flow
-    match /serviceRequests/{requestId} {
-      allow create: if signedIn() && request.auth.uid == request.resource.data.userId;
-      allow read: if signedIn() && request.auth.uid == resource.data.userId;
-      allow update, delete: if false; // admin via override
-    }
-
-    // Chat messages tied to a request; readable by the request owner
-    match /chatMessages/{messageId} {
-      allow create: if signedIn() && request.auth.uid == request.resource.data.senderId;
-      allow read: if signedIn() && get(/databases/$(database)/documents/serviceRequests/$(resource.data.requestId)).data.userId == request.auth.uid;
-      allow update, delete: if false;
-    }
-
-    // General inquiries when not tied to serviceRequests
-    match /inquiries/{inquiryId} {
-      allow create: if signedIn() && request.auth.uid == request.resource.data.userId;
-      allow read: if signedIn() && request.auth.uid == resource.data.userId;
-      allow update, delete: if false;
-    }
-
-    // Referrals - per-user document
-    match /referrals/{userId} {
-      allow read, write: if signedIn() && request.auth.uid == userId;
-    }
-
-    // Affiliates - per-user document
-    match /affiliates/{userId} {
-      allow read, write: if signedIn() && request.auth.uid == userId;
-    }
-
-    // Public collections: services, listings, marketing
+    // ✅ SERVICES + SUBCOLLECTION REVIEWS
     match /services/{serviceId} {
       allow read: if true;
-      allow write: if false; // admin via override
+      allow write: if isAdmin();
+
+      // Subcollection: reviews under each service
+      match /reviews/{reviewId} {
+        allow read: if true; // anyone can see service reviews
+        allow create, update, delete: if isAdmin(); // only admin manage reviews
+      }
     }
 
-    match /digitalProducts/{productId} {
-      allow read: if true;
-      allow write: if false;
-    }
-
-    match /databaseMarketingCategories/{docId} {
-      allow read: if true;
-      allow write: if false;
-    }
-
-    match /databases/{docId} {
-      allow read: if true;
-      allow write: if false;
-    }
-
-    match /marketing_software/{docId} {
-      allow read: if true;
-      allow write: if false;
-    }
-
-    // Admin-only config and internal collections
-    match /adminUsers/{adminId} {
-      allow read, write: if isAdmin();
-    }
-
-    match /adminInvites/{inviteId} {
-      allow read, write: if isAdmin();
-    }
-
-    match /audit_logs/{logId} {
-      allow read, write: if isAdmin();
-    }
-
-    match /error_logs/{logId} {
-      allow read, write: if isAdmin();
-    }
-
-    // Notifications stored in Firestore (most are in RTDB, but guard if used)
-    match /notifications/{notificationId} {
-      allow create: if signedIn() && request.auth.uid == request.resource.data.userId;
-      allow read: if signedIn() && request.auth.uid == resource.data.userId;
-      allow update, delete: if false;
-    }
-
-    // Catch-all: deny by default (admin still allowed via global override)
-    match /{document=**} {
-      allow read, write: if false;
+    // ORDERS, MINING, REFERRALS, REWARDS
+    match /{collName}/{docId} {
+      allow read: if isSignedIn() || isAdmin();
+      allow write: if isSignedIn() || isAdmin();
     }
   }
 }

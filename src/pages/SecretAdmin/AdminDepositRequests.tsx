@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { firestore } from '../../firebase';
-import { collection, onSnapshot, query, orderBy, where, doc, getDoc } from 'firebase/firestore';
+import { collection, query, orderBy, where, doc, getDoc, getDocs } from 'firebase/firestore';
 import { 
   approveDeposit, 
   rejectDeposit, 
   type DepositRequest 
 } from '../../utils/transactionAPI';
 import { useUser } from '../../context/UserContext';
+import { userCache } from '../../utils/userCache';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card';
@@ -54,49 +55,88 @@ export default function AdminDepositRequests() {
 
   useEffect(() => {
     loadRequests();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadRequests = async () => {
     try {
       setLoading(true);
       
+      // One-time fetch instead of continuous listener
       const q = query(
         collection(firestore, 'depositRequests'),
         orderBy('createdAt', 'desc')
       );
       
-      const unsubscribe = onSnapshot(q, async (snapshot) => {
-        const requestsData: DepositRequestWithUser[] = [];
+      const snapshot = await getDocs(q);
+      const requestsData: DepositRequestWithUser[] = [];
+      const requestsMap = new Map<string, DepositRequestWithUser>();
+      
+      // Step 1: Extract all unique user IDs
+      const uniqueUserIds = new Set<string>();
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data() as DepositRequest;
+        uniqueUserIds.add(data.userId);
         
-        for (const docSnap of snapshot.docs) {
-          const data = docSnap.data() as DepositRequest;
-          const requestWithUser: DepositRequestWithUser = {
-            id: docSnap.id,
-            ...data
-          };
-          
-          // Fetch user data
-          try {
-            const userDoc = await getDoc(doc(firestore, 'users', data.userId));
-            if (userDoc.exists()) {
-              const userData = userDoc.data();
-              requestWithUser.user = {
-                name: userData.name || userData.displayName || 'Unknown User',
-                email: userData.email || 'No Email'
-              };
-            }
-          } catch (error) {
-            console.error('Failed to fetch user data:', error);
-          }
-          
-          requestsData.push(requestWithUser);
-        }
-        
-        setRequests(requestsData);
-        setLoading(false);
+        // Initialize request with basic data
+        requestsMap.set(docSnap.id, {
+          id: docSnap.id,
+          ...data
+        } as DepositRequestWithUser);
       });
       
-      return () => unsubscribe();
+      // Step 2: Batch fetch all user documents in parallel with cache support
+      const userDataMap = new Map<string, { name: string; email: string }>();
+      const userIdArray = Array.from(uniqueUserIds);
+      
+      // Separate cached and uncached users
+      const uncachedUserIds: string[] = [];
+      userIdArray.forEach(userId => {
+        const cached = userCache.get(userId);
+        if (cached) {
+          userDataMap.set(userId, cached);
+        } else {
+          uncachedUserIds.push(userId);
+        }
+      });
+      
+      // Fetch only uncached users in parallel
+      if (uncachedUserIds.length > 0) {
+        const userPromises = uncachedUserIds.map(userId => 
+          getDoc(doc(firestore, 'users', userId)).catch(err => {
+            console.error(`Failed to fetch user ${userId}:`, err);
+            return null;
+          })
+        );
+        
+        const userDocs = await Promise.all(userPromises);
+        userDocs.forEach((userDoc, index) => {
+          if (userDoc?.exists()) {
+            const userData = userDoc.data();
+            const name = userData.name || userData.displayName || 'Unknown User';
+            const email = userData.email || 'No Email';
+            const userId = uncachedUserIds[index];
+            
+            // Store in cache and map
+            userCache.set(userId, name, email);
+            userDataMap.set(userId, { name, email });
+          }
+        });
+      }
+      
+      // Step 3: Populate user data from cache/map
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data() as DepositRequest;
+        const requestWithUser = requestsMap.get(docSnap.id)!;
+        requestWithUser.user = userDataMap.get(data.userId) || {
+          name: 'Unknown User',
+          email: 'No Email'
+        };
+        requestsData.push(requestWithUser);
+      });
+      
+      setRequests(requestsData);
+      setLoading(false);
     } catch (error) {
       console.error('Failed to load deposit requests:', error);
       setLoading(false);
@@ -110,9 +150,16 @@ export default function AdminDepositRequests() {
       setIsProcessing(true);
       await approveDeposit(requestId, user.id, user.email);
       setSelectedRequest(null);
-    } catch (error) {
+      // Refresh data after approval (one-time fetch)
+      await loadRequests();
+    } catch (error: any) {
       console.error('Failed to approve deposit:', error);
-      alert('Failed to approve deposit. Please try again.');
+      const errorMessage = error?.message?.toLowerCase().includes('quota') || 
+                          error?.message?.includes('429') ||
+                          error?.code === 'resource-exhausted'
+        ? 'Rate limit exceeded. The request is being retried automatically. Please wait a moment and try again if it still fails.'
+        : 'Failed to approve deposit. Please try again.';
+      alert(errorMessage);
     } finally {
       setIsProcessing(false);
     }
@@ -127,6 +174,8 @@ export default function AdminDepositRequests() {
       setSelectedRequest(null);
       setShowRejectDialog(false);
       setRejectReason('');
+      // Refresh data after rejection (one-time fetch)
+      await loadRequests();
     } catch (error) {
       console.error('Failed to reject deposit:', error);
       alert('Failed to reject deposit. Please try again.');
@@ -325,8 +374,8 @@ export default function AdminDepositRequests() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
+            <div className="responsive-table-wrapper">
+              <Table className="min-w-full">
                 <TableHeader>
                   <TableRow className="border-gray-700">
                     <TableHead className="text-gray-300">User</TableHead>

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useWallet } from '../../hooks/useWallet';
 import { firestore } from '../../firebase';
-import { doc, collection, onSnapshot, addDoc, query, orderBy, serverTimestamp } from 'firebase/firestore';
+import { doc, collection, onSnapshot, addDoc, query, orderBy, serverTimestamp, getDocs } from 'firebase/firestore';
 import { useUser } from '../../context/UserContext';
 import { useNotifications } from '../../context/NotificationContext';
 import DLXWalletCard from '../../components/DLXWalletCard';
@@ -60,12 +60,12 @@ export default function Wallet() {
   // Static deposit addresses and QR images for USDT deposits
   const depositData: Record<Blockchain, { address: string; qr: string }> = {
     bep20: {
-      address: '0x467946955e9045597a204954b42ac0495faec690',
+      address: '0x85fdfd1a83c4bc9a8c11f3b1308ead5d397d41d3',
       qr: 'https://i.ibb.co/9k1YvKpc/bep20.png'
     },
     trc20: {
-      address: 'TPy1NHzmHvwtEXq6qzVyLT5eqqEtUUztRp',
-      qr: 'https://i.ibb.co/qLm1G2Gj/trc20.png'
+      address: 'TH1s69X1MqxJJme6BVPU3XFXhk8QwSXa7M',
+      qr: 'https://i.ibb.co/3R7B2sf/trc20.png'
     }
   };
 
@@ -137,11 +137,12 @@ export default function Wallet() {
     return () => { try { unsub(); } catch {} };
   }, [uid]);
 
-  // Stream recent transactions from Firestore
-  useEffect(() => {
+  // Load transactions once (instead of continuous listener to reduce reads)
+  const loadTransactions = async () => {
     if (!uid) return;
+    try {
     const txQ = query(collection(firestore, 'wallets', uid, 'transactions'), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(txQ, (snap) => {
+      const snap = await getDocs(txQ);
       const rows: Transaction[] = [];
       snap.forEach((docSnap) => {
         const t = docSnap.data() as any;
@@ -159,8 +160,15 @@ export default function Wallet() {
       });
       rows.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
       setTransactions(rows);
-    });
-    return () => { try { unsub(); } catch {} };
+    } catch (error) {
+      console.error('Failed to load transactions:', error);
+    }
+  };
+
+  // Load transactions on mount
+  useEffect(() => {
+    loadTransactions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid]);
 
   const handleFlowChange = (flow: FlowType) => {
@@ -258,6 +266,8 @@ export default function Wallet() {
       } catch {}
       
       handleFlowChange(null);
+      // Refresh transactions after deposit (one-time fetch)
+      await loadTransactions();
     } catch (e: any) {
       try { 
         await addNotification({ 
@@ -309,6 +319,8 @@ export default function Wallet() {
       } catch {}
       
       handleFlowChange(null);
+      // Refresh transactions after withdrawal request (one-time fetch)
+      await loadTransactions();
     } catch (e: any) {
       try { 
         await addNotification({ 
@@ -326,33 +338,71 @@ export default function Wallet() {
     if (!uid || !dlxAmount || dlxAmount < 50 || dlxAmount > wallet.dlx) return;
     
     setIsProcessing(true);
-    const now = Date.now();
     const usdtAmount = dlxAmount * dlxUsdRate;
 
     try {
-      const txCol = collection(firestore, 'wallets', uid, 'transactions');
-      await addDoc(txCol, {
-        type: 'swap',
-        amount: Number(usdtAmount.toFixed(2)),
-        currency: 'USDT',
-        status: 'pending',
-        description: `Swapped ${dlxAmount.toFixed(2)} DLX to ${usdtAmount.toFixed(2)} USDT (Admin Verification Pending)`,
-        createdAt: now,
+      // Use atomic swap API for instant processing
+      const { processSwap } = await import('../../utils/transactionAPI');
+      
+      await processSwap({
+        userId: uid,
+        dlxAmount,
+        exchangeRate: dlxUsdRate
       });
       
+      // Show success notification
       try { 
         await addNotification({ 
           type: 'transaction', 
-          message: `Swap submitted: ${dlxAmount.toFixed(2)} DLX to ${usdtAmount.toFixed(2)} USDT (Awaiting verification)` 
+          message: `Swap completed: ${dlxAmount.toFixed(2)} DLX swapped to ${usdtAmount.toFixed(2)} USDT. Credited to Purchase Wallet.` 
         }, true); 
       } catch {}
       
+      // Show modern SweetAlert2 success popup
+      try {
+        const Swal = (await import('sweetalert2')).default;
+        await Swal.fire({
+          title: 'Swap Completed Successfully ✅',
+          html: `<div style="font-size:14px;color:#cbd5e1">
+            <p>You swapped <strong>${dlxAmount.toFixed(2)} DLX</strong> for <strong>${usdtAmount.toFixed(2)} USDT</strong></p>
+            <p style="margin-top:12px">The USDT has been credited to your Purchase Wallet.</p>
+          </div>`,
+          icon: undefined,
+          showConfirmButton: true,
+          confirmButtonText: 'OK',
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          background: 'linear-gradient(135deg, rgba(139,92,246,0.12), rgba(236,72,153,0.12))',
+          color: '#e5e7eb',
+          backdrop: 'rgba(0,0,0,0.4)',
+          customClass: {
+            popup: 'rounded-2xl',
+            confirmButton: ''
+          },
+          didOpen: (popup) => {
+            try {
+              const container = popup?.parentElement as HTMLElement | null;
+              if (container) {
+                container.style.backdropFilter = 'blur(6px)';
+                (container.style as any).webkitBackdropFilter = 'blur(6px)';
+              }
+              popup.animate([
+                { transform: 'scale(0.98)', opacity: 0 },
+                { transform: 'scale(1)', opacity: 1 }
+              ], { duration: 200, easing: 'ease-out' });
+            } catch {}
+          }
+        });
+      } catch {}
+      
       handleFlowChange(null);
+      // Refresh transactions after swap (one-time fetch)
+      await loadTransactions();
     } catch (e: any) {
       try { 
         await addNotification({ 
           type: 'error', 
-          message: e?.message || 'Swap failed.' 
+          message: e?.message || 'Swap failed. Please try again.' 
         }, false); 
       } catch {}
     } finally {
@@ -936,7 +986,20 @@ export default function Wallet() {
                   <div>
                     <label className="block text-sm font-medium text-slate-300 mb-2">Scan QR</label>
                     <div className="w-full flex items-center justify-center p-4 bg-slate-800 border-2 border-slate-700 rounded-xl">
-                      <img src={depositData[blockchain].qr} alt={`${blockchain.toUpperCase()} QR`} className="w-40 h-40 object-contain" />
+                      <img
+                        src={depositData[blockchain].qr}
+                        alt={`${blockchain.toUpperCase()} QR`}
+                        className="w-40 h-40 object-contain"
+                        referrerPolicy="no-referrer"
+                        crossOrigin="anonymous"
+                        onError={(e) => {
+                          const img = e.currentTarget as HTMLImageElement;
+                          if ((img as any).dataset.fallback !== '1') {
+                            (img as any).dataset.fallback = '1';
+                            img.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(depositData[blockchain].address)}`;
+                          }
+                        }}
+                      />
                     </div>
                   </div>
 
@@ -1539,7 +1602,7 @@ export default function Wallet() {
                     </svg>
                     <div className="text-sm text-blue-200">
                       <p className="font-semibold mb-1">About DLX Swap</p>
-                      <p className="text-xs">DLX tokens will be converted to USDT and credited to your Purchase Wallet. Admin verification required (24-48 hours).</p>
+                      <p className="text-xs">DLX tokens will be converted to USDT instantly and credited to your Purchase Wallet. The swap is processed immediately upon confirmation.</p>
                     </div>
                   </div>
                 </div>
@@ -1592,7 +1655,7 @@ export default function Wallet() {
                     </svg>
                     <div className="text-sm text-amber-200">
                       <p className="font-semibold mb-1">Important Notice</p>
-                      <p className="text-xs">This transaction requires admin verification and will be processed within 24-48 hours. Once confirmed, this action cannot be reversed.</p>
+                      <p className="text-xs">This transaction is processed instantly and cannot be reversed. The USDT will be credited to your Purchase Wallet immediately upon confirmation.</p>
                     </div>
                   </div>
                 </div>

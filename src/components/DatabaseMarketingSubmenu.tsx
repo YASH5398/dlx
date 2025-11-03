@@ -100,58 +100,58 @@ export default function DatabaseMarketingSubmenu({ isActive, onClick }: Database
 
   return (
     <div className="relative" ref={dropdownRef}>
-      {/* Main Menu Item - Compact Cyber Theme */}
+      {/* Main Menu Item - Professional */}
       <button
         onClick={handleMainClick}
-        className={`group relative flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#00E5FF]/30 w-full ${
+        className={`group relative flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-[#00E5FF]/30 w-full ${
           isActive || isSubmenuActive
-            ? "bg-[#00E5FF]/10 text-[#00E5FF] font-semibold border-b-2 border-[#0096FF] shadow-lg shadow-cyan-500/10"
-            : "text-[#F1F5FF] hover:bg-[#00E5FF]/5 hover:text-[#00E5FF] border-b-2 border-transparent hover:border-[#00E5FF]/20"
+            ? "bg-gradient-to-r from-[#00E5FF]/12 via-[#0096FF]/8 to-transparent text-[#00E5FF] font-semibold border-l-[3px] border-[#00E5FF] shadow-[0_2px_8px_rgba(0,229,255,0.15)]"
+            : "text-[#C9D1D9] hover:bg-[#00E5FF]/6 hover:text-[#00E5FF] border-l-[3px] border-transparent hover:border-[#00E5FF]/25"
         }`}
       >
         <div className={`p-1.5 rounded-md transition-all duration-200 ${
           isActive || isSubmenuActive
-            ? "bg-[#00E5FF]/20 text-[#00E5FF] shadow-md"
-            : "text-[#F1F5FF]/60 group-hover:text-[#00E5FF] group-hover:bg-[#00E5FF]/10 group-hover:shadow-sm"
+            ? "bg-[#00E5FF]/15 text-[#00E5FF] shadow-[0_2px_4px_rgba(0,229,255,0.2)]"
+            : "text-[#8B949E] group-hover:text-[#00E5FF] group-hover:bg-[#00E5FF]/10"
         }`}>
-          <ChartBarIcon className="h-4 w-4" />
+          <ChartBarIcon className="h-4 w-4" strokeWidth={isActive || isSubmenuActive ? 2.5 : 2} />
         </div>
         
         <div className="flex-1 text-left">
-          <span className="text-sm font-medium">Data & Marketing</span>
-          <div className="text-xs text-[#F1F5FF]/50 mt-0.5 group-hover:text-[#F1F5FF]/70 transition-colors duration-200">
-            Professional Tools & Services
+          <span className="text-sm font-medium leading-tight">Data & Marketing</span>
+          <div className="text-[10px] text-[#8B949E] mt-0.5 group-hover:text-[#8B949E]/80 transition-colors duration-200 font-normal">
+            Tools & Services
           </div>
         </div>
         
-        <div className={`transition-transform duration-200 ${
+        <div className={`transition-transform duration-200 ease-out ${
           isOpen ? 'rotate-90' : ''
         }`}>
-          <ChevronRightIcon className="h-3 w-3 text-[#F1F5FF]/60 group-hover:text-[#00E5FF] transition-colors duration-200" />
+          <ChevronRightIcon className="h-3.5 w-3.5 text-[#8B949E] group-hover:text-[#00E5FF] transition-colors duration-200" />
         </div>
       </button>
 
-      {/* Cyber Theme Submenu Dropdown - Smooth Fade/Slide */}
+      {/* Professional Submenu Dropdown */}
       {isOpen && (
-        <div className="absolute left-0 top-full mt-2 w-72 bg-[rgba(20,28,50,0.95)] border border-[#00E5FF]/10 rounded-xl shadow-2xl z-50 overflow-hidden backdrop-blur-xl animate-in fade-in-0 slide-in-from-top-1 duration-200">
+        <div className="absolute left-0 top-full mt-1.5 w-[272px] bg-[rgba(13,17,23,0.98)] border border-[#00E5FF]/12 rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.6)] z-50 overflow-hidden backdrop-blur-xl animate-in fade-in-0 slide-in-from-top-1 duration-200">
           {/* Subtle glow effect */}
-          <div className="absolute inset-0 bg-gradient-to-r from-[#00E5FF]/5 via-transparent to-[#00E5FF]/5 rounded-xl" />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#00E5FF]/3 via-transparent to-[#00E5FF]/3 rounded-lg" />
           
           {/* Header */}
-          <div className="relative px-4 py-3 border-b border-[#00E5FF]/10 bg-gradient-to-r from-[#0A0E1A] to-[#101830]">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-[#00E5FF]/20 border border-[#00E5FF]/30">
-                <ChartBarIcon className="h-4 w-4 text-[#00E5FF]" />
+          <div className="relative px-3.5 py-2.5 border-b border-[#00E5FF]/8 bg-gradient-to-r from-[#0A0E1A]/95 to-[#0D1117]/95">
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded-md bg-[#00E5FF]/15 border border-[#00E5FF]/25">
+                <ChartBarIcon className="h-3.5 w-3.5 text-[#00E5FF]" strokeWidth={2.5} />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-[#F1F5FF]">Data & Marketing</h3>
-                <p className="text-xs text-[#F1F5FF]/60 mt-0.5">Professional tools for business growth</p>
+                <h3 className="text-sm font-semibold text-[#C9D1D9]">Data & Marketing</h3>
+                <p className="text-[10px] text-[#8B949E] mt-0.5 font-normal">Business tools</p>
               </div>
             </div>
           </div>
           
           {/* Menu Items */}
-          <div className="relative py-2">
+          <div className="relative py-1">
             {submenuItems.map((item, index) => {
               const Icon = item.icon;
               const isItemActive = location.pathname.startsWith(item.path);
@@ -160,43 +160,43 @@ export default function DatabaseMarketingSubmenu({ isActive, onClick }: Database
                 <button
                   key={item.id}
                   onClick={() => handleSubmenuClick(item.path)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all duration-200 group ${
+                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-left transition-all duration-200 ease-out group ${
                     isItemActive
-                      ? 'bg-[#00E5FF]/10 text-[#00E5FF] border-b-2 border-[#0096FF] shadow-lg shadow-cyan-500/10'
-                      : 'text-[#F1F5FF] hover:bg-[#00E5FF]/5 hover:text-[#00E5FF] border-b-2 border-transparent hover:border-[#00E5FF]/20'
+                      ? 'bg-gradient-to-r from-[#00E5FF]/12 via-[#0096FF]/8 to-transparent text-[#00E5FF] border-l-[3px] border-[#00E5FF] shadow-[0_2px_8px_rgba(0,229,255,0.15)]'
+                      : 'text-[#C9D1D9] hover:bg-[#00E5FF]/6 hover:text-[#00E5FF] border-l-[3px] border-transparent hover:border-[#00E5FF]/25'
                   }`}
                 >
                   <div className={`p-1.5 rounded-md transition-all duration-200 ${
                     isItemActive 
-                      ? 'bg-[#00E5FF]/20 text-[#00E5FF] shadow-md' 
-                      : 'text-[#F1F5FF]/60 group-hover:text-[#00E5FF] group-hover:bg-[#00E5FF]/10 group-hover:shadow-sm'
+                      ? 'bg-[#00E5FF]/15 text-[#00E5FF] shadow-[0_2px_4px_rgba(0,229,255,0.2)]' 
+                      : 'text-[#8B949E] group-hover:text-[#00E5FF] group-hover:bg-[#00E5FF]/10'
                   }`}>
-                    <Icon className="h-4 w-4" />
+                    <Icon className="h-3.5 w-3.5" strokeWidth={isItemActive ? 2.5 : 2} />
                   </div>
                   
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium truncate">{item.name}</span>
+                      <span className="text-sm font-medium truncate leading-tight">{item.name}</span>
                       {item.badge && (
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                          item.color === 'blue' ? 'bg-[#00E5FF]/20 text-[#00E5FF] border border-[#00E5FF]/30' :
-                          item.color === 'purple' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' :
-                          'bg-green-500/20 text-green-300 border border-green-500/30'
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                          item.color === 'blue' ? 'bg-[#00E5FF]/15 text-[#00E5FF] border border-[#00E5FF]/25' :
+                          item.color === 'purple' ? 'bg-purple-500/15 text-purple-300 border border-purple-500/25' :
+                          'bg-green-500/15 text-green-300 border border-green-500/25'
                         }`}>
                           {item.badge}
                         </span>
                       )}
                     </div>
-                    <div className="text-xs text-[#F1F5FF]/50 mt-0.5 line-clamp-2 group-hover:text-[#F1F5FF]/70 transition-colors duration-200">
+                    <div className="text-[10px] text-[#8B949E] mt-0.5 line-clamp-1 group-hover:text-[#8B949E]/80 transition-colors duration-200 font-normal">
                       {item.description}
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     {isItemActive && (
-                      <div className="w-1.5 h-1.5 bg-[#00E5FF] rounded-full shadow-lg shadow-cyan-500/50" />
+                      <div className="w-1.5 h-1.5 bg-[#00E5FF] rounded-full shadow-[0_0_6px_rgba(0,229,255,0.8)]" />
                     )}
-                    <ArrowRightIcon className="h-3 w-3 text-[#F1F5FF]/60 group-hover:text-[#00E5FF] transition-colors duration-200" />
+                    <ArrowRightIcon className="h-3 w-3 text-[#8B949E] group-hover:text-[#00E5FF] transition-colors duration-200" />
                   </div>
                 </button>
               );
@@ -204,10 +204,10 @@ export default function DatabaseMarketingSubmenu({ isActive, onClick }: Database
           </div>
           
           {/* Footer */}
-          <div className="relative px-4 py-3 border-t border-[#00E5FF]/10 bg-gradient-to-r from-[#0A0E1A] to-[#101830]">
+          <div className="relative px-3.5 py-2.5 border-t border-[#00E5FF]/8 bg-gradient-to-r from-[#0A0E1A]/95 to-[#0D1117]/95">
             <button
               onClick={() => handleSubmenuClick('/database-marketing')}
-              className="w-full text-center text-xs text-[#00E5FF] hover:text-[#F1F5FF] transition-colors font-medium py-2 px-3 rounded-lg hover:bg-[#00E5FF]/10 border border-[#00E5FF]/20 hover:border-[#00E5FF]/40"
+              className="w-full text-center text-[10px] text-[#00E5FF] hover:text-[#00E5FF]/80 transition-colors font-medium py-1.5 px-3 rounded-md hover:bg-[#00E5FF]/8 border border-[#00E5FF]/20 hover:border-[#00E5FF]/30"
             >
               View All Features →
             </button>

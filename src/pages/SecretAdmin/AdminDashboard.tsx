@@ -284,29 +284,29 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 text-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <header className="mb-8 pt-6">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-            <div className="flex-1">
-              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight bg-gradient-to-r from-white via-blue-100 to-purple-200 bg-clip-text text-transparent">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8">
+        <header className="mb-4 sm:mb-6 md:mb-8 pt-4 sm:pt-6">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 sm:gap-6">
+            <div className="flex-1 min-w-0">
+              <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight bg-gradient-to-r from-white via-blue-100 to-purple-200 bg-clip-text text-transparent break-words">
                 Admin Dashboard
               </h1>
-              <p className="text-gray-400 mt-2 text-sm sm:text-base">Real-time overview of platform metrics and activity</p>
-              <div className="flex items-center gap-2 mt-3">
+              <p className="text-gray-400 mt-1 sm:mt-2 text-xs sm:text-sm md:text-base">Real-time overview of platform metrics and activity</p>
+              <div className="flex items-center gap-2 mt-2 sm:mt-3">
                 <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                <span className="text-sm text-gray-400">Live data</span>
+                <span className="text-xs sm:text-sm text-gray-400">Live data</span>
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <div className="flex items-center gap-3">
-                <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-gray-800/50 rounded-lg border border-gray-700/50">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 flex-shrink-0">
+              <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                <div className="hidden sm:flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 bg-gray-800/50 rounded-lg border border-gray-700/50">
                   <BellIcon className="w-4 h-4 text-blue-400" />
-                  <span className="text-sm text-gray-300">3 alerts</span>
+                  <span className="text-xs sm:text-sm text-gray-300">3 alerts</span>
                 </div>
-                <div className="flex items-center gap-2 px-3 py-2 bg-gray-800/50 rounded-lg border border-gray-700/50">
+                <div className="flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 bg-gray-800/50 rounded-lg border border-gray-700/50">
                   <EyeIcon className="w-4 h-4 text-green-400" />
-                  <span className="text-sm text-gray-300">Online</span>
+                  <span className="text-xs sm:text-sm text-gray-300">Online</span>
                 </div>
               </div>
             </div>
